@@ -75,4 +75,80 @@ except RuntimeError:
     pass
 _, progress = call(lib.osm_framework_slice_progress,b'{"Complete":false,"ElemsTotal":4,"ElemsProg":1}')
 assert progress == {'complete':False,'fraction':0.25,'size_bytes':None,'timestamp':None}
-print('Rust mobile C ABI import/open/get/query/error/free/slice checks passed')
+
+# Basemap extract: drive plan -> assembler over the committed PMTiles fixture,
+# the way an adapter does (it plays the HTTP server by slicing the file).
+u64 = c.c_uint64
+lib.osm_framework_basemap_plan_new.argtypes = [string,c.c_int32,c.c_int32,c.c_double,c.POINTER(ptr),c.POINTER(ptr)]
+lib.osm_framework_basemap_plan_first_request.argtypes = [ptr,c.POINTER(ptr),c.POINTER(ptr)]
+lib.osm_framework_basemap_plan_feed.argtypes = [ptr,u64,c.c_char_p,c.c_size_t,c.POINTER(ptr),c.POINTER(ptr)]
+lib.osm_framework_basemap_plan_outstanding.argtypes = [ptr,c.POINTER(ptr),c.POINTER(ptr)]
+lib.osm_framework_basemap_plan_into_assembler.argtypes = [ptr,string,c.POINTER(ptr),c.POINTER(ptr)]
+lib.osm_framework_basemap_plan_free.argtypes = [ptr,c.POINTER(ptr)]
+lib.osm_framework_basemap_asm_write_range.argtypes = [ptr,u64,c.c_char_p,c.c_size_t,c.POINTER(ptr)]
+lib.osm_framework_basemap_asm_write_range_file.argtypes = [ptr,u64,string,c.POINTER(ptr)]
+lib.osm_framework_basemap_asm_remaining.argtypes = [ptr,c.POINTER(ptr),c.POINTER(ptr)]
+lib.osm_framework_basemap_asm_progress.argtypes = [ptr,c.POINTER(ptr),c.POINTER(ptr)]
+lib.osm_framework_basemap_asm_finish.argtypes = [ptr,string,c.POINTER(ptr)]
+lib.osm_framework_basemap_asm_free.argtypes = [ptr,c.POINTER(ptr)]
+lib.osm_framework_basemap_info.argtypes = [string,c.POINTER(ptr),c.POINTER(ptr)]
+
+def status_call(function, *args):
+    """For calls without a JSON result: raise on -1, always free the error."""
+    error = ptr()
+    code = function(*args,c.byref(error))
+    try:
+        if code == -1:
+            raise RuntimeError(c.string_at(error).decode() if error.value else 'native failure')
+    finally:
+        lib.osm_framework_free(error)
+
+source = (pathlib.Path(__file__).resolve().parent.parent/'tests/fixtures/basemap/slc-nw-z12-15.pmtiles').read_bytes()
+serve = lambda r: source[r['offset']:r['offset']+r['length']]
+plan, error = ptr(), ptr()
+assert lib.osm_framework_basemap_plan_new(b'{"west":-112.09,"south":40.83,"east":-112.06,"north":40.845}',
+                                          -1,-1,0.05,c.byref(plan),c.byref(error)) == 0
+lib.osm_framework_free(error)
+_, first = call(lib.osm_framework_basemap_plan_first_request,plan)
+assert first == {'id':0,'offset':0,'length':16384}
+try:
+    call(lib.osm_framework_basemap_plan_feed,plan,99,b'x',1)
+    raise AssertionError('expected unknown-id error')
+except RuntimeError:
+    pass
+queue, tiles = [first], None
+while queue:
+    r = queue.pop()
+    body = serve(r)
+    _, step = call(lib.osm_framework_basemap_plan_feed,plan,r['id'],body,len(body))
+    if step == 'wait':
+        continue
+    if 'fetch' in step:
+        queue += step['fetch']
+    else:
+        tiles = step['tiles_ready']
+assert tiles and tiles['addressed_tiles'] == 22
+assert call(lib.osm_framework_basemap_plan_outstanding,plan)[1] == []
+with tempfile.TemporaryDirectory() as directory:
+    d = pathlib.Path(directory)
+    asm = ptr()
+    assert lib.osm_framework_basemap_plan_into_assembler(plan,str(d/'out.part').encode(),c.byref(asm),c.byref(error)) == 0
+    lib.osm_framework_free(error)
+    _, remaining = call(lib.osm_framework_basemap_asm_remaining,asm)
+    assert [r['id'] for r in remaining] == [r['id'] for r in tiles['requests']]
+    for i, r in enumerate(remaining):
+        if i % 2:
+            (d/'range').write_bytes(serve(r))
+            status_call(lib.osm_framework_basemap_asm_write_range_file,asm,r['id'],str(d/'range').encode())
+        else:
+            status_call(lib.osm_framework_basemap_asm_write_range,asm,r['id'],serve(r),r['length'])
+    _, progress = call(lib.osm_framework_basemap_asm_progress,asm)
+    assert progress['ranges_done'] == progress['ranges_total'] == len(remaining)
+    status_call(lib.osm_framework_basemap_asm_finish,asm,str(d/'out.pmtiles').encode())
+    status_call(lib.osm_framework_basemap_asm_free,asm)
+    assert not (d/'out.part').exists()
+    _, info = call(lib.osm_framework_basemap_info,str(d/'out.pmtiles').encode())
+    assert info['addressed_tiles'] == 22 and info['spec_version'] == 3
+    assert info['file_bytes'] == (d/'out.pmtiles').stat().st_size == tiles['archive_bytes']
+status_call(lib.osm_framework_basemap_plan_free,None)
+print('Rust mobile C ABI import/open/get/query/error/free/slice/basemap checks passed')

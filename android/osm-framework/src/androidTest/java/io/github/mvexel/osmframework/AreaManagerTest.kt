@@ -16,6 +16,7 @@ import mockwebserver3.RecordedRequest
 import okio.Buffer
 import org.json.JSONObject
 import org.junit.After
+import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
@@ -25,7 +26,10 @@ import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
 import java.io.File
+import java.time.LocalDate
 import java.util.Collections
+import java.util.UUID
+import java.util.concurrent.CountDownLatch
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
@@ -44,6 +48,8 @@ class AreaManagerTest {
     private val instrumentation = InstrumentationRegistry.getInstrumentation()
     private val target = instrumentation.targetContext
     private val pbf = instrumentation.context.assets.open("snapshot.osm.pbf").use { it.readBytes() }
+    /** 22 tiles z12–15 of NW Salt Lake City, cut from a Protomaps build (tests/fixtures/basemap). */
+    private val pmtiles = instrumentation.context.assets.open("basemap/slc-nw-z12-15.pmtiles").use { it.readBytes() }
     private lateinit var server: MockWebServer
     private lateinit var slice: FakeSlice
     private val areaId = "test-${System.nanoTime()}"
@@ -51,7 +57,7 @@ class AreaManagerTest {
 
     @Before
     fun startServer() {
-        slice = FakeSlice(pbf)
+        slice = FakeSlice(pbf, pmtiles)
         server = MockWebServer().apply {
             dispatcher = slice
             start(0)
@@ -59,7 +65,11 @@ class AreaManagerTest {
     }
 
     @After
-    fun stopServer() = server.close()
+    fun stopServer() {
+        AreaTestHooks.afterImport = null
+        AreaTestHooks.afterCommitPoint = null
+        server.close()
+    }
 
     private fun manager() = AreaManager(
         target,
@@ -93,6 +103,12 @@ class AreaManagerTest {
         val published = manager.publishedArea(areaId)!!
         assertEquals(ready.area, published)
         assertEquals(bbox, published.metadata!!.bbox)
+        // BasemapSource.None (the default): no basemap, no basemap traffic.
+        assertEquals(null, published.basemapFile)
+        assertEquals(null, published.pmtilesUrl)
+        assertEquals(null, published.metadata!!.basemap)
+        assertFalse(File(target.filesDir, "osm-areas/$areaId.pmtiles").exists())
+        assertEquals(0, slice.basemapRequests.get())
         assertNoStagingLeft()
         states.close()
     }
@@ -116,7 +132,7 @@ class AreaManagerTest {
 
     @Test
     fun cancelDuringDownloadKeepsPreviousArea() {
-        publishOldArea()
+        val before = publishOldArea()
         slice.throttle = true // ~14 s for the fixture
         val manager = manager()
         val states = Recorder(manager, areaId)
@@ -125,7 +141,7 @@ class AreaManagerTest {
         manager.cancel(areaId)
         states.await { it == AreaState.Cancelled }
 
-        assertEquals(listOf("Old Café"), cafeNames(manager.areaFile(areaId)!!))
+        assertOldAreaIntact(manager, before)
         assertFalse(AreaState.Importing in states.seen)
         assertNoStagingLeft()
         states.close()
@@ -133,7 +149,7 @@ class AreaManagerTest {
 
     @Test
     fun corruptPbfFailsWithoutRetryAndKeepsPreviousArea() {
-        publishOldArea()
+        val before = publishOldArea()
         slice.file = ByteArray(1024) { 0x5a }
         val manager = manager()
         val states = Recorder(manager, areaId)
@@ -143,8 +159,8 @@ class AreaManagerTest {
         assertTrue(failed.message, failed.message.startsWith("import failed"))
         assertEquals(1, slice.downloads.get())
         assertEquals(listOf("Old Café"), cafeNames(manager.areaFile(areaId)!!))
-        // The old area's file and metadata are still what was published before.
-        assertEquals(null, manager.publishedArea(areaId)!!.metadata)
+        // The old area's files and metadata are still what was published before.
+        assertOldAreaIntact(manager, before)
         assertNoStagingLeft()
         states.close()
     }
@@ -191,23 +207,320 @@ class AreaManagerTest {
         states.close()
     }
 
+
+    // --- Basemap ----------------------------------------------------------------
+
+    @Test
+    fun urlBasemapIsValidatedAndPublishedWithTheData() {
+        val manager = manager()
+        val states = Recorder(manager, areaId)
+        val url = server.url("/basemap.pmtiles").toString()
+        manager.download(areaId, bbox, basemap = BasemapSource.Url(url))
+        val ready = states.await { it is AreaState.Ready } as AreaState.Ready
+
+        val area = ready.area
+        assertEquals(listOf("Café Test"), cafeNames(area.file))
+        assertEquals(File(target.filesDir, "osm-areas/$areaId.pmtiles"), area.basemapFile)
+        assertArrayEquals(pmtiles, area.basemapFile!!.readBytes())
+        assertEquals("pmtiles://file://${area.basemapFile!!.absolutePath}", area.pmtilesUrl)
+        assertTrue(area.pmtilesUrl!!.startsWith("pmtiles://file:///"))
+        val basemap = area.metadata!!.basemap!!
+        assertEquals("url", basemap.kind)
+        assertEquals(url, basemap.sourceUrl)
+        assertEquals(pmtiles.size.toLong(), basemap.bytes)
+        assertEquals(22L, basemap.addressedTiles)
+        assertEquals(12 to 15, basemap.minZoom to basemap.maxZoom)
+        assertEquals(area, manager.publishedArea(areaId))
+        assertTrue(AreaState.Importing in states.seen)
+        assertNoStagingLeft()
+        states.close()
+    }
+
+    @Test
+    fun urlBasemapThatIsNotPmtilesFailsAndKeepsPreviousArea() {
+        val before = publishOldArea()
+        slice.basemapBody = "<html>moved</html>".toByteArray()
+        val manager = manager()
+        val states = Recorder(manager, areaId)
+        manager.download(areaId, bbox, basemap = BasemapSource.Url(server.url("/basemap.pmtiles").toString()))
+        val failed = states.await { it is AreaState.Failed } as AreaState.Failed
+        assertFalse(failed.retryable)
+        assertTrue(failed.message, failed.message.contains("not a valid PMTiles"))
+        assertOldAreaIntact(manager, before)
+        assertNoStagingLeft()
+        states.close()
+    }
+
+    /**
+     * On-device extract against a range-capable fake planet (the fixture
+     * archive). The published file must be byte-identical to the Rust engine
+     * driven in-process over the same bytes, i.e. to what the desktop engine
+     * (golden-tested against go-pmtiles) produces for this bbox.
+     */
+    @Test
+    fun extractedBasemapMatchesTheEngineAndIsPublishedWithTheData() {
+        val sub = Bbox(-112.085, 40.835, -112.07, 40.842)
+        val manager = manager()
+        val states = Recorder(manager, areaId)
+        val url = server.url("/planet.pmtiles").toString()
+        manager.download(areaId, sub, basemap = BasemapSource.Extract(url, maxZoom = 15))
+        val ready = states.await { it is AreaState.Ready || it is AreaState.Failed }
+        assertTrue("$ready", ready is AreaState.Ready)
+        ready as AreaState.Ready
+
+        val file = ready.area.basemapFile!!
+        val expected = referenceExtract(pmtiles, sub, maxZoom = 15)
+        assertArrayEquals(expected, file.readBytes())
+        val info = PmtilesInfo.read(file)
+        assertEquals(listOf(-112.085, 40.835, -112.07, 40.842), info.bounds)
+        assertEquals(12 to 15, info.minZoom to info.maxZoom)
+        val basemap = ready.area.metadata!!.basemap!!
+        assertEquals("extract", basemap.kind)
+        assertEquals(info.addressedTiles, basemap.addressedTiles)
+        assertTrue(info.addressedTiles in 1 until 22)
+        // Every request was a range request, and the sidecar counts them.
+        assertEquals(basemap.requests, slice.basemapRequests.get().toLong())
+        assertTrue(slice.rangeHeaders.all { it.startsWith("bytes=") })
+        assertEquals(listOf("Café Test"), cafeNames(ready.area.file))
+        assertNoStagingLeft()
+        states.close()
+    }
+
+    @Test
+    fun serverIgnoringRangeFailsAndKeepsPreviousArea() {
+        val before = publishOldArea()
+        slice.ignoreRange = true
+        val manager = manager()
+        val states = Recorder(manager, areaId)
+        manager.download(areaId, bbox, basemap = BasemapSource.Extract(server.url("/planet.pmtiles").toString()))
+        val failed = states.await { it is AreaState.Failed } as AreaState.Failed
+        assertFalse(failed.retryable)
+        assertTrue(failed.message, failed.message.contains("ignored the Range header"))
+        // One request, not retried: a 200 is not transient.
+        assertEquals(1, slice.basemapRequests.get())
+        assertOldAreaIntact(manager, before)
+        assertNoStagingLeft()
+        states.close()
+    }
+
+    @Test
+    fun basemapFailureAfterDataDoesNotPublishTheNewData() {
+        val before = publishOldArea()
+        slice.basemapCode = 404
+        val manager = manager()
+        val states = Recorder(manager, areaId)
+        manager.download(areaId, bbox, basemap = BasemapSource.Url(server.url("/basemap.pmtiles").toString()))
+        val failed = states.await { it is AreaState.Failed } as AreaState.Failed
+        assertFalse(failed.retryable)
+        assertTrue(failed.message, failed.message.contains("HTTP 404"))
+        // The data part succeeded (downloaded and imported) ...
+        assertEquals(1, slice.downloads.get())
+        assertTrue(AreaState.Importing in states.seen)
+        // ... and still nothing new is published: data, basemap and sidecar are the old ones.
+        assertOldAreaIntact(manager, before)
+        assertNoStagingLeft()
+        states.close()
+    }
+
+    /**
+     * The honesty bug of the first version: a cancel during the native
+     * import used to publish while the state said Cancelled. The hook blocks
+     * right after the import (like a long import: not interruptible), the
+     * test cancels, and the run must discard the staged import.
+     */
+    @Test
+    fun cancelDuringImportPublishesNothing() {
+        val before = publishOldArea()
+        val inImport = CountDownLatch(1)
+        val release = CountDownLatch(1)
+        AreaTestHooks.afterImport = {
+            inImport.countDown()
+            release.await(30, TimeUnit.SECONDS)
+        }
+        val manager = manager()
+        val states = Recorder(manager, areaId)
+        manager.download(areaId, bbox, basemap = BasemapSource.Url(server.url("/basemap.pmtiles").toString()))
+        assertTrue(inImport.await(30, TimeUnit.SECONDS))
+        manager.cancel(areaId)
+        states.await { it == AreaState.Cancelled }
+        release.countDown()
+        // Let the worker unwind, then check nothing was published and the state stayed Cancelled.
+        waitUntil { stagingDirs().isEmpty() }
+        assertEquals(AreaState.Cancelled, runBlocking { manager.state(areaId).first() })
+        assertOldAreaIntact(manager, before)
+        assertEquals("no basemap download after the cancel", 0, slice.basemapRequests.get())
+        assertNoStagingLeft()
+        states.close()
+    }
+
+    /** A cancel that arrives after the commit point is ignored: the run published, so the state is Ready. */
+    @Test
+    fun cancelAfterCommitPointReportsReady() {
+        publishOldArea()
+        val committed = CountDownLatch(1)
+        val release = CountDownLatch(1)
+        AreaTestHooks.afterCommitPoint = {
+            committed.countDown()
+            release.await(30, TimeUnit.SECONDS)
+        }
+        val manager = manager()
+        val states = Recorder(manager, areaId)
+        val workId = manager.download(areaId, bbox)
+        assertTrue(committed.await(30, TimeUnit.SECONDS))
+        manager.cancel(areaId)
+        // The state reader waits on the area lock until the commit is done.
+        Thread { Thread.sleep(500); release.countDown() }.start()
+        val ready = states.await { it is AreaState.Ready || it == AreaState.Cancelled }
+        assertTrue("$ready", ready is AreaState.Ready)
+        ready as AreaState.Ready
+        assertEquals(workId.toString(), ready.area.metadata!!.workId)
+        assertEquals(listOf("Café Test"), cafeNames(manager.areaFile(areaId)!!))
+        assertFalse(AreaState.Cancelled in states.seen)
+        waitUntil { stagingDirs().isEmpty() }
+        states.close()
+    }
+
+    @Test
+    fun latestProtomapsBuildIsTheNewestThatExists() {
+        slice.protomapsBuilds = setOf("/20261001.pmtiles", "/20260930.pmtiles")
+        val url = runBlocking {
+            ProtomapsBuilds.latestUrl(LocalDate.of(2026, 10, 3), baseUrl = server.url("/").toString())
+        }
+        assertEquals(server.url("/20261001.pmtiles").toString(), url)
+        val none = runCatching {
+            runBlocking { ProtomapsBuilds.latestUrl(LocalDate.of(2026, 10, 3), maxAgeDays = 1, baseUrl = server.url("/").toString()) }
+        }
+        assertTrue(none.exceptionOrNull() is java.io.IOException)
+    }
+
+    /**
+     * Real SliceOSM and a real Protomaps daily build: downtown Salt Lake City
+     * with an on-device extract to z15. Logs per-state timings and the
+     * extract's requests, bytes and tile count under tag AreaLive.
+     */
+    @Test
+    fun liveDownloadWithExtractedBasemap() {
+        assumeTrue("pass -e live true to run", InstrumentationRegistry.getArguments().getString("live") == "true")
+        val manager = AreaManager(target)
+        val id = "live-slc-basemap"
+        val resolveStarted = System.nanoTime()
+        val planet = runBlocking { ProtomapsBuilds.latestUrl() }
+        Log.i("AreaLive", "latest build $planet resolved in %.0f ms".format((System.nanoTime() - resolveStarted) / 1e6))
+        val states = Recorder(manager, id)
+        val started = System.nanoTime()
+        manager.download(id, Bbox(-111.895, 40.765, -111.885, 40.771), "osm-framework live test", BasemapSource.Extract(planet, 15))
+        val ready = states.await(300) { it is AreaState.Ready || it is AreaState.Failed }
+        val total = (System.nanoTime() - started) / 1e6
+        val firsts = LinkedHashMap<String, Double>()
+        states.timed.forEach { (nanos, state) ->
+            val key = if (state is AreaState.Basemap) "Basemap.${state.phase}" else state.javaClass.simpleName
+            firsts.putIfAbsent(key, (nanos - started) / 1e6)
+        }
+        firsts.forEach { (state, ms) -> Log.i("AreaLive", "first $state at %.0f ms".format(ms)) }
+        Log.i("AreaLive", "total %.0f ms, final $ready".format(total))
+        assertTrue("$ready", ready is AreaState.Ready)
+        ready as AreaState.Ready
+        val basemap = ready.area.metadata!!.basemap!!
+        val info = PmtilesInfo.read(ready.area.basemapFile!!)
+        Log.i("AreaLive", "basemap $basemap; file ${info.fileBytes} B, z${info.minZoom}-${info.maxZoom}, ${info.addressedTiles} tiles")
+        Log.i("AreaLive", "data ${ready.report}; ${cafeNames(ready.area.file).size} cafés")
+        assertTrue(info.addressedTiles > 0)
+        states.close()
+    }
+
     // --- helpers --------------------------------------------------------------
 
-    /** Publishes a distinguishable "previous" area directly, as an earlier download would have. */
-    private fun publishOldArea() {
+    /**
+     * Publishes a distinguishable "previous" area (data with an "Old Café",
+     * a basemap, a sidecar) through the same commit as a download, and
+     * returns it with the bytes of its basemap.
+     */
+    private fun publishOldArea(): Pair<AreaInfo, ByteArray> {
         val xml = File(target.cacheDir, "$areaId-old.osm")
         xml.writeText(
             """<osm version="0.6"><node id="7" lat="40.0" lon="-111.0" version="1">""" +
                 """<tag k="amenity" v="cafe"/><tag k="name" v="Old Café"/></node></osm>""",
         )
-        val area = AreaStorage(target).apply { prepare(areaId) }.areaFile(areaId)
-        OsmStore.importArea(xml.path, area.path)
+        val storage = AreaStorage(target).apply { prepare(areaId) }
+        val oldRun = UUID.randomUUID()
+        storage.prepareStaging(areaId, oldRun)
+        val report = OsmStore.importArea(xml.path, storage.stagedArea(areaId, oldRun).path)
         xml.delete()
+        val oldBasemap = pmtiles.copyOf() // same format, distinguishable by the sidecar
+        storage.stagedBasemap(areaId, oldRun).writeBytes(oldBasemap)
+        val metadata = AreaMetadata(
+            Bbox(-111.1, 39.9, -110.9, 40.1), "old", "2026-01-01T00:00:00Z", 1L, report,
+            BasemapMetadata("url", "http://old.example/x.pmtiles", oldBasemap.size.toLong(), 22, 12, 15, 1, oldBasemap.size.toLong()),
+            oldRun.toString(),
+        )
+        storage.writeStagedMetadata(areaId, oldRun, metadata)
+        storage.commit(areaId, oldRun, hasBasemap = true) {}
+        val published = storage.published(areaId)!!
+        assertEquals(metadata, published.metadata)
+        return published to oldBasemap
+    }
+
+    /** Data, basemap and sidecar are exactly the ones [publishOldArea] published. */
+    private fun assertOldAreaIntact(manager: AreaManager, before: Pair<AreaInfo, ByteArray>) {
+        assertEquals(before.first, manager.publishedArea(areaId))
+        assertEquals(listOf("Old Café"), cafeNames(manager.areaFile(areaId)!!))
+        assertArrayEquals(before.second, manager.basemapFile(areaId)!!.readBytes())
+    }
+
+    private fun stagingDirs(): List<File> =
+        File(target.filesDir, "osm-areas/.staging/$areaId").listFiles()?.toList().orEmpty()
+
+    private fun waitUntil(seconds: Long = 15, condition: () -> Boolean) {
+        val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(seconds)
+        while (!condition()) {
+            assertTrue("condition not met in $seconds s", System.nanoTime() < deadline)
+            Thread.sleep(50)
+        }
+    }
+
+    /**
+     * The same extract run in-process by the native engine over the fixture
+     * bytes (no HTTP): the expected output. Native handles live on one thread.
+     */
+    private fun referenceExtract(source: ByteArray, bbox: Bbox, maxZoom: Int): ByteArray {
+        val worker = Executors.newSingleThreadExecutor()
+        val dir = File(target.cacheDir, "$areaId-reference").apply { mkdirs() }
+        try {
+            return worker.submit<ByteArray> {
+                val serve = { r: ByteRange ->
+                    source.copyOfRange(r.offset.toInt(), minOf(source.size.toLong(), r.offset + r.length).toInt())
+                }
+                val plan = NativeBridge.basemapPlanNew(bbox.toJson().toString(), -1, maxZoom, 0.05)
+                val queue = ArrayDeque(listOf(ByteRange.fromJson(JSONObject(NativeBridge.basemapPlanFirstRequest(plan)))))
+                while (queue.isNotEmpty()) {
+                    val r = queue.removeFirst()
+                    val step = NativeBridge.basemapPlanFeed(plan, r.id, serve(r))
+                    if (step.trim() != "\"wait\"") {
+                        JSONObject(step).optJSONArray("fetch")?.let { queue += ByteRange.listFromJson(it.toString()) }
+                    }
+                }
+                val asm = NativeBridge.basemapPlanIntoAssembler(plan, File(dir, "ref.part").path)
+                try {
+                    for (r in ByteRange.listFromJson(NativeBridge.basemapAsmRemaining(asm))) {
+                        NativeBridge.basemapAsmWriteRange(asm, r.id, serve(r))
+                    }
+                    NativeBridge.basemapAsmFinish(asm, File(dir, "ref.pmtiles").path)
+                } finally {
+                    NativeBridge.basemapAsmFree(asm)
+                }
+                File(dir, "ref.pmtiles").readBytes()
+            }.get()
+        } finally {
+            worker.shutdown()
+            dir.deleteRecursively()
+        }
     }
 
     private fun assertNoStagingLeft() {
         val parts = File(target.noBackupFilesDir, "osm-area-downloads/$areaId").listFiles { f -> f.name.endsWith(".part") }
         assertEquals(emptyList<File>(), parts?.toList().orEmpty())
+        assertEquals(emptyList<File>(), stagingDirs())
+        assertFalse(File(target.filesDir, "osm-areas/$areaId.commit").exists())
     }
 
     /** Opens the area on one worker thread (stores are thread-confined) and lists café names. */
@@ -245,10 +558,19 @@ class AreaManagerTest {
 
     /**
      * Minimal SliceOSM: one job ID; the status reports half done on the first
-     * poll and complete on the second; the file is the fixture PBF. Knobs
-     * inject the failures each test needs.
+     * poll and complete on the second; the file is the fixture PBF. Also a
+     * basemap host: `/basemap.pmtiles` (plain download) and
+     * `/planet.pmtiles` (HTTP range requests, sliced from the fixture
+     * archive, 206 + Content-Range like a CDN), plus HEAD-able Protomaps
+     * build names. Knobs inject the failures each test needs.
      */
-    private class FakeSlice(pbf: ByteArray) : Dispatcher() {
+    private class FakeSlice(pbf: ByteArray, private val planet: ByteArray) : Dispatcher() {
+        @Volatile var basemapBody: ByteArray = planet
+        @Volatile var basemapCode = 200
+        @Volatile var ignoreRange = false
+        @Volatile var protomapsBuilds: Set<String> = emptySet()
+        val basemapRequests = AtomicInteger()
+        val rangeHeaders: MutableList<String> = Collections.synchronizedList(mutableListOf())
         @Volatile var submitCode = 201
         @Volatile var file: ByteArray = pbf
         @Volatile var throttle = false
@@ -289,6 +611,32 @@ class AreaManagerTest {
                         if (throttle) throttleBody(8, 250, TimeUnit.MILLISECONDS)
                     }.build()
                 }
+                path == "/basemap.pmtiles" -> {
+                    basemapRequests.incrementAndGet()
+                    if (basemapCode != 200) {
+                        MockResponse.Builder().code(basemapCode).body("no such file").build()
+                    } else {
+                        MockResponse.Builder().body(Buffer().write(basemapBody)).build()
+                    }
+                }
+                path == "/planet.pmtiles" -> {
+                    basemapRequests.incrementAndGet()
+                    val range = request.headers["Range"]
+                    if (range != null) rangeHeaders += range
+                    val match = range?.let { Regex("""bytes=(\d+)-(\d+)""").matchEntire(it) }
+                    if (ignoreRange || match == null) {
+                        MockResponse.Builder().body(Buffer().write(planet)).build()
+                    } else {
+                        val first = match.groupValues[1].toInt()
+                        val last = minOf(match.groupValues[2].toInt(), planet.size - 1)
+                        MockResponse.Builder()
+                            .code(206)
+                            .addHeader("Content-Range", "bytes $first-$last/${planet.size}")
+                            .body(Buffer().write(planet, first, last - first + 1))
+                            .build()
+                    }
+                }
+                request.method == "HEAD" && path in protomapsBuilds -> MockResponse.Builder().build()
                 else -> MockResponse.Builder().code(404).build()
             }
         }

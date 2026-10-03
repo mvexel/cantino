@@ -12,6 +12,7 @@ mod encoding;
 mod import;
 mod input;
 mod mobile_api;
+mod mobile_basemap;
 mod model;
 mod schema;
 pub mod slice;

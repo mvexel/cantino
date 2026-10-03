@@ -13,7 +13,7 @@ pub struct FrameworkStore {
     store: Store,
     thread: ThreadId,
 }
-fn protect(error: *mut *mut c_char, function: impl FnOnce() -> Result<i32>) -> i32 {
+pub(crate) fn protect(error: *mut *mut c_char, function: impl FnOnce() -> Result<i32>) -> i32 {
     // SAFETY: the ABI contract requires error to be NULL or a writable slot.
     if !error.is_null() {
         unsafe {
@@ -35,7 +35,7 @@ fn protect(error: *mut *mut c_char, function: impl FnOnce() -> Result<i32>) -> i
     }
     -1
 }
-unsafe fn text<'a>(input: *const c_char) -> Result<&'a str> {
+pub(crate) unsafe fn text<'a>(input: *const c_char) -> Result<&'a str> {
     if input.is_null() {
         return Err(Error::Invalid("null string argument".into()));
     }
@@ -53,7 +53,7 @@ unsafe fn handle<'a>(input: *mut FrameworkStore) -> Result<&'a FrameworkStore> {
     }
     Ok(handle)
 }
-unsafe fn output(slot: *mut *mut c_char, value: &impl serde::Serialize) -> Result<i32> {
+pub(crate) unsafe fn output(slot: *mut *mut c_char, value: &impl serde::Serialize) -> Result<i32> {
     if slot.is_null() {
         return Err(Error::Invalid("null output slot".into()));
     }

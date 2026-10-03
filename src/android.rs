@@ -11,11 +11,12 @@
 //! Java as a `long` holding the `FrameworkStore` pointer; the Kotlin class owns
 //! it and zeroes it after close so a handle is never closed twice.
 use crate::mobile_api::*;
+use crate::mobile_basemap::*;
 use jni::{
     EnvUnowned,
     errors::ThrowRuntimeExAndDefault,
-    objects::{JClass, JString},
-    sys::{jint, jlong},
+    objects::{JByteArray, JClass, JString},
+    sys::{jdouble, jint, jlong},
 };
 use std::{
     ffi::{CStr, CString, c_char},
@@ -235,6 +236,307 @@ pub extern "system" fn Java_io_github_mvexel_osmframework_NativeBridge_sliceProg
             osm_framework_slice_progress(status.as_ptr(), out, error)
         })?;
         Ok(JString::from_str(env, json.unwrap_or_default())?)
+    })
+    .resolve::<ThrowRuntimeExAndDefault>()
+}
+
+// --- Basemap extract ---------------------------------------------------------
+//
+// Plan and assembler handles cross into Java as `long` pointers, like store
+// handles, and carry the same thread confinement (checked in the C ABI): the
+// Kotlin driver (`BasemapExtract`) makes every call for one extract on one
+// dedicated thread and fetches on others. Tile ranges come in as file paths
+// (`basemapAsmWriteRangeFile`) so multi-megabyte responses never cross JNI as
+// `byte[]`; directory responses (small) come in as `byte[]`, copied once.
+
+/// Runs a C ABI call that returns a JSON buffer and converts it to a Java string.
+fn json_call<'local>(
+    env: &mut jni::Env<'local>,
+    function: impl FnOnce(*mut *mut c_char, *mut *mut c_char) -> i32,
+) -> Result<JString<'local>, BridgeError> {
+    let (_, json) = call(function)?;
+    Ok(JString::from_str(env, json.unwrap_or_default())?)
+}
+
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_io_github_mvexel_osmframework_NativeBridge_basemapPlanNew<'local>(
+    mut env: EnvUnowned<'local>,
+    _class: JClass<'local>,
+    bbox: JString<'local>,
+    min_zoom: jint,
+    max_zoom: jint,
+    overfetch: jdouble,
+) -> jlong {
+    env.with_env(|env| -> Result<jlong, BridgeError> {
+        let bbox = c_string(bbox.try_to_string(env)?)?;
+        let mut plan = ptr::null_mut();
+        // SAFETY: bbox lives for the call; plan is a writable slot.
+        call(|_, error| unsafe {
+            osm_framework_basemap_plan_new(
+                bbox.as_ptr(),
+                min_zoom,
+                max_zoom,
+                overfetch,
+                &mut plan,
+                error,
+            )
+        })?;
+        Ok(plan as jlong)
+    })
+    .resolve::<ThrowRuntimeExAndDefault>()
+}
+
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_io_github_mvexel_osmframework_NativeBridge_basemapPlanFirstRequest<
+    'local,
+>(
+    mut env: EnvUnowned<'local>,
+    _class: JClass<'local>,
+    plan: jlong,
+) -> JString<'local> {
+    env.with_env(|env| -> Result<JString<'local>, BridgeError> {
+        // SAFETY: live plan handle owned by the Kotlin driver on this thread.
+        json_call(env, |out, error| unsafe {
+            osm_framework_basemap_plan_first_request(plan as *mut FrameworkBasemapPlan, out, error)
+        })
+    })
+    .resolve::<ThrowRuntimeExAndDefault>()
+}
+
+/// Feeds a directory-phase response (`bytes` copied once out of the JVM heap).
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_io_github_mvexel_osmframework_NativeBridge_basemapPlanFeed<'local>(
+    mut env: EnvUnowned<'local>,
+    _class: JClass<'local>,
+    plan: jlong,
+    id: jlong,
+    bytes: JByteArray<'local>,
+) -> JString<'local> {
+    env.with_env(|env| -> Result<JString<'local>, BridgeError> {
+        let bytes = env.convert_byte_array(&bytes)?;
+        // SAFETY: live plan handle; bytes live for the call.
+        json_call(env, |out, error| unsafe {
+            osm_framework_basemap_plan_feed(
+                plan as *mut FrameworkBasemapPlan,
+                id as u64,
+                bytes.as_ptr(),
+                bytes.len(),
+                out,
+                error,
+            )
+        })
+    })
+    .resolve::<ThrowRuntimeExAndDefault>()
+}
+
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_io_github_mvexel_osmframework_NativeBridge_basemapPlanOutstanding<
+    'local,
+>(
+    mut env: EnvUnowned<'local>,
+    _class: JClass<'local>,
+    plan: jlong,
+) -> JString<'local> {
+    env.with_env(|env| -> Result<JString<'local>, BridgeError> {
+        // SAFETY: live plan handle on its owner thread.
+        json_call(env, |out, error| unsafe {
+            osm_framework_basemap_plan_outstanding(plan as *mut FrameworkBasemapPlan, out, error)
+        })
+    })
+    .resolve::<ThrowRuntimeExAndDefault>()
+}
+
+/// Consumes the plan (see the header: every call past the handle check) and
+/// returns the assembler handle.
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_io_github_mvexel_osmframework_NativeBridge_basemapPlanIntoAssembler<
+    'local,
+>(
+    mut env: EnvUnowned<'local>,
+    _class: JClass<'local>,
+    plan: jlong,
+    staging: JString<'local>,
+) -> jlong {
+    env.with_env(|env| -> Result<jlong, BridgeError> {
+        let staging = c_string(staging.try_to_string(env)?)?;
+        let mut assembler = ptr::null_mut();
+        // SAFETY: live plan handle; the Kotlin owner forgets it after this
+        // call; staging lives for the call; assembler is a writable slot.
+        call(|_, error| unsafe {
+            osm_framework_basemap_plan_into_assembler(
+                plan as *mut FrameworkBasemapPlan,
+                staging.as_ptr(),
+                &mut assembler,
+                error,
+            )
+        })?;
+        Ok(assembler as jlong)
+    })
+    .resolve::<ThrowRuntimeExAndDefault>()
+}
+
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_io_github_mvexel_osmframework_NativeBridge_basemapPlanFree<'local>(
+    mut env: EnvUnowned<'local>,
+    _class: JClass<'local>,
+    plan: jlong,
+) {
+    env.with_env(|_| -> Result<(), BridgeError> {
+        // SAFETY: live (or zero) plan handle, freed once by its Kotlin owner.
+        call(|_, error| unsafe {
+            osm_framework_basemap_plan_free(plan as *mut FrameworkBasemapPlan, error)
+        })?;
+        Ok(())
+    })
+    .resolve::<ThrowRuntimeExAndDefault>()
+}
+
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_io_github_mvexel_osmframework_NativeBridge_basemapAsmWriteRange<
+    'local,
+>(
+    mut env: EnvUnowned<'local>,
+    _class: JClass<'local>,
+    assembler: jlong,
+    id: jlong,
+    bytes: JByteArray<'local>,
+) {
+    env.with_env(|env| -> Result<(), BridgeError> {
+        let bytes = env.convert_byte_array(&bytes)?;
+        // SAFETY: live assembler handle on its owner thread; bytes live for the call.
+        call(|_, error| unsafe {
+            osm_framework_basemap_asm_write_range(
+                assembler as *mut FrameworkBasemapAssembler,
+                id as u64,
+                bytes.as_ptr(),
+                bytes.len(),
+                error,
+            )
+        })?;
+        Ok(())
+    })
+    .resolve::<ThrowRuntimeExAndDefault>()
+}
+
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_io_github_mvexel_osmframework_NativeBridge_basemapAsmWriteRangeFile<
+    'local,
+>(
+    mut env: EnvUnowned<'local>,
+    _class: JClass<'local>,
+    assembler: jlong,
+    id: jlong,
+    path: JString<'local>,
+) {
+    env.with_env(|env| -> Result<(), BridgeError> {
+        let path = c_string(path.try_to_string(env)?)?;
+        // SAFETY: live assembler handle on its owner thread; path lives for the call.
+        call(|_, error| unsafe {
+            osm_framework_basemap_asm_write_range_file(
+                assembler as *mut FrameworkBasemapAssembler,
+                id as u64,
+                path.as_ptr(),
+                error,
+            )
+        })?;
+        Ok(())
+    })
+    .resolve::<ThrowRuntimeExAndDefault>()
+}
+
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_io_github_mvexel_osmframework_NativeBridge_basemapAsmRemaining<
+    'local,
+>(
+    mut env: EnvUnowned<'local>,
+    _class: JClass<'local>,
+    assembler: jlong,
+) -> JString<'local> {
+    env.with_env(|env| -> Result<JString<'local>, BridgeError> {
+        // SAFETY: live assembler handle on its owner thread.
+        json_call(env, |out, error| unsafe {
+            osm_framework_basemap_asm_remaining(
+                assembler as *mut FrameworkBasemapAssembler,
+                out,
+                error,
+            )
+        })
+    })
+    .resolve::<ThrowRuntimeExAndDefault>()
+}
+
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_io_github_mvexel_osmframework_NativeBridge_basemapAsmProgress<
+    'local,
+>(
+    mut env: EnvUnowned<'local>,
+    _class: JClass<'local>,
+    assembler: jlong,
+) -> JString<'local> {
+    env.with_env(|env| -> Result<JString<'local>, BridgeError> {
+        // SAFETY: live assembler handle on its owner thread.
+        json_call(env, |out, error| unsafe {
+            osm_framework_basemap_asm_progress(
+                assembler as *mut FrameworkBasemapAssembler,
+                out,
+                error,
+            )
+        })
+    })
+    .resolve::<ThrowRuntimeExAndDefault>()
+}
+
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_io_github_mvexel_osmframework_NativeBridge_basemapAsmFinish<'local>(
+    mut env: EnvUnowned<'local>,
+    _class: JClass<'local>,
+    assembler: jlong,
+    output: JString<'local>,
+) {
+    env.with_env(|env| -> Result<(), BridgeError> {
+        let output = c_string(output.try_to_string(env)?)?;
+        // SAFETY: live assembler handle on its owner thread; output lives for the call.
+        call(|_, error| unsafe {
+            osm_framework_basemap_asm_finish(
+                assembler as *mut FrameworkBasemapAssembler,
+                output.as_ptr(),
+                error,
+            )
+        })?;
+        Ok(())
+    })
+    .resolve::<ThrowRuntimeExAndDefault>()
+}
+
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_io_github_mvexel_osmframework_NativeBridge_basemapAsmFree<'local>(
+    mut env: EnvUnowned<'local>,
+    _class: JClass<'local>,
+    assembler: jlong,
+) {
+    env.with_env(|_| -> Result<(), BridgeError> {
+        // SAFETY: live (or zero) assembler handle, freed once by its Kotlin owner.
+        call(|_, error| unsafe {
+            osm_framework_basemap_asm_free(assembler as *mut FrameworkBasemapAssembler, error)
+        })?;
+        Ok(())
+    })
+    .resolve::<ThrowRuntimeExAndDefault>()
+}
+
+/// Validates a local PMTiles file and describes its header (any thread).
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_io_github_mvexel_osmframework_NativeBridge_basemapInfo<'local>(
+    mut env: EnvUnowned<'local>,
+    _class: JClass<'local>,
+    path: JString<'local>,
+) -> JString<'local> {
+    env.with_env(|env| -> Result<JString<'local>, BridgeError> {
+        let path = c_string(path.try_to_string(env)?)?;
+        // SAFETY: path lives for the call.
+        json_call(env, |out, error| unsafe {
+            osm_framework_basemap_info(path.as_ptr(), out, error)
+        })
     })
     .resolve::<ThrowRuntimeExAndDefault>()
 }
