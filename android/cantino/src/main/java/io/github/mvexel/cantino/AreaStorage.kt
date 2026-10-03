@@ -342,4 +342,7 @@ internal object AreaTestHooks {
 
     /** Runs after each successful `setForeground` of a run in foreground mode, with the notification ID. */
     @Volatile var onForeground: ((Int) -> Unit)? = null
+
+    /** Replaces the manifest check of foreground mode: the gaps to report (empty = all declared). */
+    @Volatile var foregroundManifestGaps: (() -> List<String>)? = null
 }

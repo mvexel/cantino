@@ -1,6 +1,18 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Test APK only: AreaManagerTest talks plain HTTP to a fake SliceOSM server
-     on 127.0.0.1, which Android blocks by default. -->
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
-    <application android:usesCleartextTraffic="true" />
+<!-- Test APK only. AreaManagerTest talks plain HTTP to a fake SliceOSM server
+     on 127.0.0.1, which Android blocks by default. The foreground-service
+     entries are the opt-in snippet an app adds for AreaConfig.foreground
+     (the library manifest does not declare them); the foreground-mode test
+     needs them, the fallback test simulates their absence. -->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+
+    <application android:usesCleartextTraffic="true">
+        <service
+            android:name="androidx.work.impl.foreground.SystemForegroundService"
+            android:foregroundServiceType="dataSync"
+            tools:node="merge" />
+    </application>
 </manifest>

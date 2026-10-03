@@ -58,7 +58,7 @@ object StoreWorker {
         if (store == null || identity != openedIdentity) {
             closeStore()
             Log.i(TAG, "opening ${published.dataFile} ($identity)")
-            store = OsmStore.open(published.dataFile.path)
+            store = OsmStore.open(published.dataFile)
             openedIdentity = identity
         }
         area = published

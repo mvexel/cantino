@@ -73,8 +73,9 @@ class OsmStoreTest {
         val input = File(directory, "snapshot.osm")
         context.assets.open("snapshot.osm").use { source -> input.outputStream().use { source.copyTo(it) } }
         val area = File(directory, "area.sqlite")
-        OsmStore.importArea(input.path, area.path)
-        OsmStore.open(area.path).use { store ->
+        // File overloads (the other tests use paths).
+        OsmStore.importArea(input, area)
+        OsmStore.open(area).use { store ->
             val vertex = store.get(OsmId(OsmKind.NODE, 1)) as OsmObject.Node
             assertNull(vertex.metadata)
             assertEquals(3, vertex.locationVersion)

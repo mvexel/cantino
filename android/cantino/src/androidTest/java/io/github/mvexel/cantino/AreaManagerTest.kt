@@ -27,6 +27,7 @@ import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
 import java.io.File
+import java.time.Instant
 import java.time.LocalDate
 import java.util.Collections
 import java.util.UUID
@@ -70,6 +71,7 @@ class AreaManagerTest {
         AreaTestHooks.afterImport = null
         AreaTestHooks.afterCommitPoint = null
         AreaTestHooks.onForeground = null
+        AreaTestHooks.foregroundManifestGaps = null
         server.close()
     }
 
@@ -93,8 +95,12 @@ class AreaManagerTest {
         manager.download(areaId, bbox, "café test")
         val ready = states.await { it is AreaState.Ready } as AreaState.Ready
 
-        assertEquals(ObjectCounts(4, 2, 1), ready.report.counts)
-        assertEquals(FakeSlice.TIMESTAMP, ready.snapshotTimestamp)
+        val metadata = ready.area.metadata!!
+        assertEquals(ObjectCounts(4, 2, 1), metadata.report.counts)
+        assertEquals(Instant.parse(FakeSlice.TIMESTAMP), metadata.snapshotTimestamp)
+        // The sidecar keeps the server's string as received.
+        val sidecar = JSONObject(File(target.filesDir, "cantino-areas/$areaId.json").readText())
+        assertEquals(FakeSlice.TIMESTAMP, sidecar.getString("snapshot_timestamp"))
         // SliceOSM order is south, west, north, east; the name is passed through.
         val body = JSONObject(slice.submitBodies.single())
         assertEquals("café test", body.getString("Name"))
@@ -143,6 +149,54 @@ class AreaManagerTest {
         waitUntil { !foregroundServiceRunning() }
         assertNoStagingLeft()
         states.close()
+    }
+
+    /**
+     * Foreground mode requested, but the app manifest lacks the opt-in
+     * entries (simulated: this test APK declares them for the test above).
+     * The run must never ask for the foreground (a missing service type
+     * would crash the process inside WorkManager's service) and must finish
+     * as ordinary background work.
+     */
+    @Test
+    fun foregroundModeWithoutManifestEntriesFallsBackToBackground() {
+        AreaTestHooks.foregroundManifestGaps = { listOf("<uses-permission android.permission.FOREGROUND_SERVICE_DATA_SYNC>") }
+        val foregroundCalls = AtomicInteger()
+        AreaTestHooks.onForeground = { foregroundCalls.incrementAndGet() }
+        var foregroundDuringRun: Boolean? = null
+        AreaTestHooks.afterImport = { foregroundDuringRun = foregroundServiceRunning() }
+        val manager = AreaManager(target, config().copy(foreground = ForegroundConfig(title = "Test download")))
+        val states = Recorder(manager, areaId)
+        manager.download(areaId, bbox)
+        val ready = states.await { it is AreaState.Ready || it is AreaState.Failed }
+        assertTrue("$ready", ready is AreaState.Ready)
+
+        assertEquals("setForeground must not be called", 0, foregroundCalls.get())
+        assertEquals(false, foregroundDuringRun)
+        assertEquals(listOf("Café Test"), cafeNames(manager.dataFile(areaId)!!))
+        assertNoStagingLeft()
+        states.close()
+    }
+
+    /** The real manifest check against this test APK, which declares the opt-in entries. */
+    @Test
+    fun manifestCheckFindsTheOptInForegroundEntries() {
+        assertEquals(emptyList<String>(), AreaDownloadWorker.foregroundManifestGaps(target))
+    }
+
+    @Test
+    fun snapshotTimestampParsesRfc3339AndToleratesGarbage() {
+        val parse = { value: String? -> AreaMetadata.parseSnapshotTimestamp(value) }
+        val expected = Instant.parse("2026-10-03T20:30:01Z")
+        assertEquals(expected, parse("2026-10-03T20:30:01Z"))
+        assertEquals(expected, parse("2026-10-03t20:30:01z"))
+        assertEquals(expected, parse("2026-10-03 20:30:01Z"))
+        assertEquals(expected, parse("2026-10-03T22:30:01+02:00"))
+        assertEquals(Instant.parse("2026-10-03T20:30:01.250Z"), parse("2026-10-03T20:30:01.25Z"))
+        assertEquals(null, parse(null))
+        assertEquals(null, parse(""))
+        assertEquals(null, parse("yesterday"))
+        assertEquals(null, parse("2026-10-03T20:30:01")) // no offset: not RFC 3339
     }
 
     @Test
@@ -233,9 +287,10 @@ class AreaManagerTest {
         assertTrue("$ready", ready is AreaState.Ready)
         ready as AreaState.Ready
         val cafes = cafeNames(ready.area.dataFile)
-        Log.i("AreaLive", "snapshot ${ready.snapshotTimestamp}, ${ready.report}, ${cafes.size} cafés: $cafes")
-        assertNotNull(ready.snapshotTimestamp)
-        assertTrue(ready.report.counts.nodes > 0)
+        val metadata = ready.area.metadata!!
+        Log.i("AreaLive", "snapshot ${metadata.snapshotTimestamp}, ${metadata.report}, ${cafes.size} cafés: $cafes")
+        assertNotNull(metadata.snapshotTimestamp)
+        assertTrue(metadata.report.counts.nodes > 0)
         states.close()
     }
 
@@ -455,7 +510,7 @@ class AreaManagerTest {
         val basemap = ready.area.metadata!!.basemap!!
         val info = PmtilesInfo.read(ready.area.basemapFile!!)
         Log.i("AreaLive", "basemap $basemap; file ${info.fileBytes} B, z${info.minZoom}-${info.maxZoom}, ${info.addressedTiles} tiles")
-        Log.i("AreaLive", "data ${ready.report}; ${cafeNames(ready.area.dataFile).size} cafés")
+        Log.i("AreaLive", "data ${ready.area.metadata!!.report}; ${cafeNames(ready.area.dataFile).size} cafés")
         assertTrue(info.addressedTiles > 0)
         states.close()
     }

@@ -4,25 +4,13 @@
      until a connection is available. Apps that never download can remove them
      with tools:node="remove" (the offline basemap sample app does).
 
-     Foreground mode (AreaConfig.foreground, opt-in) runs the download worker
-     as a dataSync foreground service through WorkManager's
-     SystemForegroundService, which needs the two FOREGROUND_SERVICE
-     permissions and the service type (required on API 34+). Apps that never
-     enable foreground mode can remove all three with tools:node="remove".
-     POST_NOTIFICATIONS (API 33+) is the app's to declare and request: without
-     it the download still runs in the foreground, only the notification is
-     hidden from the shade. -->
-<manifest xmlns:android="http://schemas.android.com/apk/res/android"
-    xmlns:tools="http://schemas.android.com/tools">
+     Deliberately absent: the foreground-service entries of foreground mode
+     (AreaConfig.foreground, opt-in). FOREGROUND_SERVICE_DATA_SYNC and a
+     dataSync service type make Google Play ask every app for a foreground
+     service declaration, so apps that enable foreground mode add them
+     themselves (snippet in ForegroundConfig's KDoc and CHANGELOG.md). Without
+     them a foreground-mode run logs a warning and runs in the background. -->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
-
-    <application>
-        <service
-            android:name="androidx.work.impl.foreground.SystemForegroundService"
-            android:foregroundServiceType="dataSync"
-            tools:node="merge" />
-    </application>
 </manifest>

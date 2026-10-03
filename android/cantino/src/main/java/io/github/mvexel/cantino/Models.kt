@@ -9,8 +9,16 @@ import org.json.JSONObject
 // the Rust docs: raw tags, integer 1e-7 coordinates, ordered (possibly
 // repeated) references, metadata that may be absent.
 //
-// Every model here is an immutable value (data class or enum): equal content
-// means equal objects, and instances may be shared freely between threads.
+// Every model here is an immutable value: equal content means equal objects,
+// and instances may be shared freely between threads.
+//
+// Binary compatibility: types the library *returns* (OsmObject and its parts,
+// ObjectMetadata, ImportReport, ObjectCounts) are plain classes with
+// hand-written equals/hashCode/toString and internal constructors, not data
+// classes, so a field can be added later without breaking compiled apps
+// (a data class's copy() and componentN() would change signature). Types
+// apps *construct* (OsmId, Bbox, TagFilter, Query, ImportOptions) stay data
+// classes; see CHANGELOG.md for what that means for compatibility.
 
 /**
  * The three OSM object namespaces. IDs are only unique within a kind:
@@ -51,13 +59,30 @@ public data class OsmId(val kind: OsmKind, val id: Long) {
  * mean "unknown" rather than a real value (SliceOSM extracts usually carry
  * all fields). [timestampSeconds] is Unix seconds (UTC).
  */
-public data class ObjectMetadata(
-    val version: Long,
-    val timestampSeconds: Long,
-    val changeset: Long,
-    val uid: Long,
-    val user: String,
-)
+public class ObjectMetadata internal constructor(
+    /** Object version. */
+    public val version: Long,
+    /** Edit time, Unix seconds (UTC). */
+    public val timestampSeconds: Long,
+    /** Changeset ID. */
+    public val changeset: Long,
+    /** User ID of the editor. */
+    public val uid: Long,
+    /** User name of the editor. */
+    public val user: String,
+) {
+    override fun equals(other: Any?): Boolean = this === other || other is ObjectMetadata &&
+        version == other.version && timestampSeconds == other.timestampSeconds &&
+        changeset == other.changeset && uid == other.uid && user == other.user
+
+    override fun hashCode(): Int = hash(version, timestampSeconds, changeset, uid, user)
+
+    override fun toString(): String =
+        "ObjectMetadata(version=$version, timestampSeconds=$timestampSeconds, changeset=$changeset, uid=$uid, user=$user)"
+}
+
+/** hashCode over [values] in order, for the hand-written value classes. */
+internal fun hash(vararg values: Any?): Int = values.contentHashCode()
 
 /**
  * One OSM object as stored in the area: [Node], [Way] or [Relation] (the
@@ -93,11 +118,14 @@ public sealed interface OsmObject {
      * [OsmStore.get], but they are not spatially indexed: a bbox [Query]
      * never returns them. Reach them through their ways.
      */
-    public data class Node(
+    public class Node internal constructor(
         override val id: OsmId,
-        val latE7: Int,
-        val lonE7: Int,
-        val locationVersion: Int,
+        /** Latitude in 1e-7 degrees. */
+        public val latE7: Int,
+        /** Longitude in 1e-7 degrees. */
+        public val lonE7: Int,
+        /** Object version at which the node got its current coordinate. */
+        public val locationVersion: Int,
         override val tags: Map<String, String>,
         override val metadata: ObjectMetadata?,
     ) : OsmObject {
@@ -106,6 +134,15 @@ public sealed interface OsmObject {
 
         /** Longitude in degrees (WGS84). */
         public val lon: Double get() = lonE7 / 1e7
+
+        override fun equals(other: Any?): Boolean = this === other || other is Node &&
+            id == other.id && latE7 == other.latE7 && lonE7 == other.lonE7 &&
+            locationVersion == other.locationVersion && tags == other.tags && metadata == other.metadata
+
+        override fun hashCode(): Int = hash(id, latE7, lonE7, locationVersion, tags, metadata)
+
+        override fun toString(): String =
+            "Node(id=$id, latE7=$latE7, lonE7=$lonE7, locationVersion=$locationVersion, tags=$tags, metadata=$metadata)"
     }
 
     /**
@@ -114,27 +151,54 @@ public sealed interface OsmObject {
      * referenced node may be missing from the area when the way crosses the
      * area's edge: [OsmStore.get] then returns null for it.
      */
-    public data class Way(
+    public class Way internal constructor(
         override val id: OsmId,
-        val nodeIds: List<Long>,
+        /** Node references in order (repeats are significant). */
+        public val nodeIds: List<Long>,
         override val tags: Map<String, String>,
         override val metadata: ObjectMetadata?,
-    ) : OsmObject
+    ) : OsmObject {
+        override fun equals(other: Any?): Boolean = this === other || other is Way &&
+            id == other.id && nodeIds == other.nodeIds && tags == other.tags && metadata == other.metadata
+
+        override fun hashCode(): Int = hash(id, nodeIds, tags, metadata)
+
+        override fun toString(): String = "Way(id=$id, nodeIds=$nodeIds, tags=$tags, metadata=$metadata)"
+    }
 
     /**
      * One member of a [Relation]: the referenced object and its [role]
      * (raw string, may be empty). The member object may be missing from the
      * area (outside it, or never part of the extract).
      */
-    public data class Member(val id: OsmId, val role: String)
+    public class Member internal constructor(
+        /** The referenced object. */
+        public val id: OsmId,
+        /** The member's role, raw (may be empty). */
+        public val role: String,
+    ) {
+        override fun equals(other: Any?): Boolean = this === other || other is Member && id == other.id && role == other.role
+
+        override fun hashCode(): Int = hash(id, role)
+
+        override fun toString(): String = "Member(id=$id, role=$role)"
+    }
 
     /** A relation. [members] are in order; the same member may appear more than once. */
-    public data class Relation(
+    public class Relation internal constructor(
         override val id: OsmId,
-        val members: List<Member>,
+        /** Members in order. */
+        public val members: List<Member>,
         override val tags: Map<String, String>,
         override val metadata: ObjectMetadata?,
-    ) : OsmObject
+    ) : OsmObject {
+        override fun equals(other: Any?): Boolean = this === other || other is Relation &&
+            id == other.id && members == other.members && tags == other.tags && metadata == other.metadata
+
+        override fun hashCode(): Int = hash(id, members, tags, metadata)
+
+        override fun toString(): String = "Relation(id=$id, members=$members, tags=$tags, metadata=$metadata)"
+    }
 }
 
 // Interfaces cannot have an internal companion, so the parser is top-level.
@@ -255,10 +319,36 @@ public data class ImportOptions(
 }
 
 /** Number of objects per kind. */
-public data class ObjectCounts(val nodes: Long, val ways: Long, val relations: Long)
+public class ObjectCounts internal constructor(
+    /** Nodes (tagged and untagged). */
+    public val nodes: Long,
+    /** Ways. */
+    public val ways: Long,
+    /** Relations. */
+    public val relations: Long,
+) {
+    override fun equals(other: Any?): Boolean = this === other || other is ObjectCounts &&
+        nodes == other.nodes && ways == other.ways && relations == other.relations
+
+    override fun hashCode(): Int = hash(nodes, ways, relations)
+
+    override fun toString(): String = "ObjectCounts(nodes=$nodes, ways=$ways, relations=$relations)"
+}
 
 /** Result of an import: objects stored per kind, and the size of the published database file in bytes. */
-public data class ImportReport(val counts: ObjectCounts, val databaseBytes: Long) {
+public class ImportReport internal constructor(
+    /** Objects stored per kind. */
+    public val counts: ObjectCounts,
+    /** Size of the published database file in bytes. */
+    public val databaseBytes: Long,
+) {
+    override fun equals(other: Any?): Boolean = this === other || other is ImportReport &&
+        counts == other.counts && databaseBytes == other.databaseBytes
+
+    override fun hashCode(): Int = hash(counts, databaseBytes)
+
+    override fun toString(): String = "ImportReport(counts=$counts, databaseBytes=$databaseBytes)"
+
     /** Same shape as the Rust report, so it round-trips through [fromJson]. */
     internal fun toJson(): JSONObject = JSONObject()
         .put("counts", JSONObject().put("nodes", counts.nodes).put("ways", counts.ways).put("relations", counts.relations))

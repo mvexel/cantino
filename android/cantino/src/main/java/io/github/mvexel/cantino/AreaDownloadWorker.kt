@@ -3,9 +3,12 @@ package io.github.mvexel.cantino
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
+import android.content.ComponentName
 import android.content.Context
+import android.content.pm.PackageManager
 import android.content.pm.ServiceInfo
 import android.graphics.drawable.Icon
+import android.os.Build
 import android.os.SystemClock
 import android.util.Log
 import androidx.work.CoroutineWorker
@@ -66,7 +69,10 @@ import org.json.JSONObject
  *   import or basemap: [AreaConfig.foreground] runs the worker as a
  *   foreground service instead ([Foreground]), which has no such limit.
  *   Starting it is best effort: where Android refuses (background start on
- *   12+), the run continues as background work.
+ *   12+), the run continues as background work. The manifest entries it
+ *   needs are the app's to declare ([ForegroundConfig]); without them the
+ *   run never asks for the foreground ([foregroundManifestGaps]) and runs in
+ *   the background, with a warning in the log.
  */
 internal class AreaDownloadWorker(context: Context, parameters: WorkerParameters) :
     CoroutineWorker(context, parameters) {
@@ -76,7 +82,7 @@ internal class AreaDownloadWorker(context: Context, parameters: WorkerParameters
         val config = request.config
         val storage = AreaStorage(applicationContext)
         val http = SliceHttp(config.connectTimeoutMillis, config.readTimeoutMillis)
-        foreground = config.foreground?.let { Foreground(it, request) }
+        foreground = config.foreground?.takeIf { foregroundAllowed(request.areaId) }?.let { Foreground(it, request) }
         foreground?.update(this, PHASE_SUBMITTING, force = true)
         storage.prepare(request.areaId)
         // A commit of this very run may have passed its commit point before
@@ -336,6 +342,25 @@ internal class AreaDownloadWorker(context: Context, parameters: WorkerParameters
         foreground?.update(this, phase, fraction, bytes, total)
     }
 
+    /**
+     * Whether this run may ask for the foreground: the app's manifest has the
+     * entries [ForegroundConfig] documents. Checked before the first
+     * `setForeground`, because a missing service type is not reported back to
+     * the worker: WorkManager's SystemForegroundService would call
+     * `startForeground` with a type the manifest does not allow and crash
+     * the app's process.
+     */
+    private fun foregroundAllowed(areaId: String): Boolean {
+        val gaps = AreaTestHooks.foregroundManifestGaps?.invoke() ?: foregroundManifestGaps(applicationContext)
+        if (gaps.isEmpty()) return true
+        Log.w(
+            TAG,
+            "AreaConfig.foreground is set but the app manifest lacks ${gaps.joinToString()}; " +
+                "downloading $areaId in the background instead. Add the manifest entries shown in ForegroundConfig's documentation.",
+        )
+        return false
+    }
+
     /** Set at the start of [doWork] when the run is in foreground mode. */
     @Volatile private var foreground: Foreground? = null
 
@@ -347,7 +372,8 @@ internal class AreaDownloadWorker(context: Context, parameters: WorkerParameters
      * Best effort by design. `setForeground` fails where Android forbids
      * starting a foreground service (from the background on API 31+:
      * ForegroundServiceStartNotAllowedException, an IllegalStateException;
-     * a missing manifest type or permission: SecurityException). The run then
+     * a permission revoked or restricted at run time: SecurityException;
+     * missing manifest entries are caught earlier by [foregroundAllowed]). The run then
      * goes on as background work, exactly as without foreground mode, and
      * does not try again: a failed download because of a notification would
      * be worse than a slower one.
@@ -535,6 +561,37 @@ internal class AreaDownloadWorker(context: Context, parameters: WorkerParameters
     }
 
     internal companion object {
+        /**
+         * The foreground-mode manifest entries the app lacks (empty when it
+         * has them all): the FOREGROUND_SERVICE and FOREGROUND_SERVICE_DATA_SYNC
+         * permissions, and on API 29+ (where the type is readable) the
+         * `dataSync` type on WorkManager's SystemForegroundService. All are
+         * required on every API level so a misconfigured app shows up on any
+         * test device, not only on Android 14+. Reads the package manager.
+         */
+        fun foregroundManifestGaps(context: Context): List<String> {
+            val packageManager = context.packageManager
+            val requested = packageManager
+                .getPackageInfo(context.packageName, PackageManager.GET_PERMISSIONS)
+                .requestedPermissions.orEmpty().toSet()
+            val gaps = mutableListOf<String>()
+            for (permission in listOf("android.permission.FOREGROUND_SERVICE", "android.permission.FOREGROUND_SERVICE_DATA_SYNC")) {
+                if (permission !in requested) gaps += "<uses-permission $permission>"
+            }
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                val service = try {
+                    packageManager.getServiceInfo(ComponentName(context, SYSTEM_FOREGROUND_SERVICE), 0)
+                } catch (_: PackageManager.NameNotFoundException) {
+                    null
+                }
+                if (service == null || (service.foregroundServiceType and ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC) == 0) {
+                    gaps += "foregroundServiceType=\"dataSync\" on $SYSTEM_FOREGROUND_SERVICE"
+                }
+            }
+            return gaps
+        }
+
+        const val SYSTEM_FOREGROUND_SERVICE = "androidx.work.impl.foreground.SystemForegroundService"
         const val KEY_AREA = "area_id"
         const val KEY_BBOX = "bbox"
         const val KEY_NAME = "name"

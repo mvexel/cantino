@@ -34,6 +34,8 @@ import org.maplibre.android.style.layers.CircleLayer
 import org.maplibre.android.style.layers.PropertyFactory
 import org.maplibre.android.style.layers.SymbolLayer
 import org.maplibre.android.style.sources.GeoJsonSource
+import java.time.ZoneOffset
+import java.time.format.DateTimeFormatter
 
 /**
  * The map screen: offline basemap from the area's PMTiles, cafés from the
@@ -234,7 +236,7 @@ class MapScreen(
         title.text = "Cafés · ${rows.size} of ${all.size}"
         val area = area
         if (area != null) {
-            val snapshot = area.metadata?.snapshotTimestamp?.take(16)?.replace('T', ' ') ?: "unknown"
+            val snapshot = area.metadata?.snapshotTimestamp?.let(SNAPSHOT_FORMAT::format) ?: "unknown"
             val ref = reference?.let { "distances from ${it.source.label}" } ?: "no reference location"
             status.text = "Offline area · OSM data as of $snapshot UTC · $ref"
         }
@@ -379,5 +381,8 @@ class MapScreen(
         const val ME_SOURCE = "me"
         const val ME_LAYER = "me-point"
         const val EMPTY = """{"type":"FeatureCollection","features":[]}"""
+
+        /** Snapshot age as shown in the status line ("2026-10-03 20:30", UTC). */
+        val SNAPSHOT_FORMAT: DateTimeFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm").withZone(ZoneOffset.UTC)
     }
 }

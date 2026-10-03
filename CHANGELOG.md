@@ -9,7 +9,8 @@ Android library `io.github.mvexel:cantino:0.1.0` (AAR, minSdk 26,
 arm64-v8a and x86_64) over a Rust core with a C ABI (`include/cantino.h`, prefix `cantino_`).
 
 - **Offline OSM store** (`OsmStore`): import an OSM PBF or XML extract into a
-  SQLite area database, published atomically; lookup by ID; index-backed tag
+  SQLite area database, published atomically (`open` and `importArea` take
+  `File`s or path strings); lookup by ID; index-backed tag
   queries (`TagFilter.Exists` / `Equals`, ANDed); bbox spatial candidates
   (tagged nodes exact, ways and relations by bounding box); keyset pagination;
   candidate cap that fails instead of truncating. Raw tags, ordered way node
@@ -29,11 +30,51 @@ arm64-v8a and x86_64) over a Rust core with a C ABI (`include/cantino.h`, prefix
   `PmtilesInfo.read()` validates and describes a local PMTiles file.
 - **Foreground mode** (`AreaConfig.foreground`, opt-in): runs large downloads
   as a `dataSync` foreground service with a progress notification, beyond
-  WorkManager's 10-minute limit.
-- **Area metadata**: SliceOSM snapshot timestamp (data age), bbox, import
-  report, basemap source and transfer statistics.
+  WorkManager's 10-minute limit. The library manifest does **not** declare
+  the foreground-service entries (they make Google Play ask for a
+  foreground-service declaration), so an app that enables foreground mode
+  adds them to its own manifest:
+
+  ```xml
+  <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+  <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+  <application>
+      <service
+          android:name="androidx.work.impl.foreground.SystemForegroundService"
+          android:foregroundServiceType="dataSync"
+          tools:node="merge" />
+  </application>
+  ```
+
+  Without them a foreground-mode run logs a warning (tag
+  `AreaDownloadWorker`) and runs as ordinary background work.
+- **Manifest**: the library adds `INTERNET` and `ACCESS_NETWORK_STATE`;
+  WorkManager adds `WAKE_LOCK`, `RECEIVE_BOOT_COMPLETED` and
+  `FOREGROUND_SERVICE` (no service type, so no Play declaration). Apps that
+  never download may remove them with `tools:node="remove"`.
+- **Area metadata** (`AreaInfo.metadata`): SliceOSM snapshot timestamp as
+  `java.time.Instant` (data age; null if absent or not RFC 3339, the
+  sidecar file keeps the server's string), bbox, import report, basemap
+  source and transfer statistics. `AreaState.Ready` carries only the
+  published `AreaInfo`.
 - Kotlin explicit API mode: the public surface is deliberate and documented
   (KDoc on every public symbol); `Cantino.VERSION`; errors are `CantinoException`.
+- **Compatibility policy** (semver; before 1.0 a minor version may break the
+  API, a patch version does not):
+  - Types Cantino *returns* are regular classes with value equality, not
+    data classes, and apps cannot construct them (internal constructors):
+    `AreaInfo`, `AreaMetadata`, `BasemapMetadata`, `ImportReport`,
+    `ObjectCounts`, `PmtilesInfo`, the `AreaState` subtypes,
+    `OsmObject.Node`/`Way`/`Relation`, `OsmObject.Member`, `ObjectMetadata`.
+    New properties can be added to them in a minor version without breaking
+    compiled apps. There is no `copy()` or destructuring on them.
+  - Types apps *construct* stay data classes for `copy()` convenience:
+    `Query`, `Bbox`, `TagFilter.*`, `OsmId`, `ImportOptions`, `AreaConfig`,
+    `ForegroundConfig`, `BasemapSource.*`. Their constructors (with default
+    arguments) and properties are covered by the policy above; their
+    generated `copy()` and `componentN()` are **not** covered before 1.0:
+    a new property may change their signatures, so apps using them should
+    expect to recompile on a minor upgrade. Use named arguments.
 - **Area file format**: SQLite `application_id` 0x434E544E ("CNTN"),
   `user_version` (FORMAT_VERSION) 1. Pre-release builds wrote "OSMF"
   (0x4F534D46); those files are rejected and must be re-imported.

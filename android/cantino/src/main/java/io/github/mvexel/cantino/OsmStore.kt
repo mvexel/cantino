@@ -2,6 +2,7 @@ package io.github.mvexel.cantino
 
 import org.json.JSONArray
 import org.json.JSONObject
+import java.io.File
 
 /**
  * A failure reported by Cantino: the native core (bad input file,
@@ -16,8 +17,9 @@ public class CantinoException(message: String, cause: Throwable? = null) :
 /**
  * An open, read-only offline area database.
  *
- * Get one from [open], with a path from [AreaManager.dataFile] /
- * [AreaInfo.dataFile] or from your own [importArea].
+ * Get one from [open], with the file from [AreaManager.dataFile] /
+ * [AreaInfo.dataFile] or from your own [importArea]. Every entry point
+ * takes either a [File] or a path string.
  *
  * **Threading: confined to one thread.** The native handle (one read-only
  * SQLite connection) belongs to the thread that called [open]. Every call,
@@ -47,6 +49,10 @@ public class OsmStore private constructor(private var handle: Long) : AutoClosea
         @JvmStatic
         public fun open(path: String): OsmStore = OsmStore(native { NativeBridge.open(path) })
 
+        /** [open] for a [File], e.g. [AreaInfo.dataFile]. */
+        @JvmStatic
+        public fun open(file: File): OsmStore = open(file.path)
+
         /**
          * Imports an OSM PBF or OSM XML file ([input]) into an area database
          * at [destination], publishing it atomically: the new file replaces
@@ -67,6 +73,12 @@ public class OsmStore private constructor(private var handle: Long) : AutoClosea
         @JvmOverloads
         public fun importArea(input: String, destination: String, options: ImportOptions = ImportOptions()): ImportReport =
             ImportReport.fromJson(JSONObject(native { NativeBridge.importArea(input, destination, options.toJson()) }))
+
+        /** [importArea] for [File]s. */
+        @JvmStatic
+        @JvmOverloads
+        public fun importArea(input: File, destination: File, options: ImportOptions = ImportOptions()): ImportReport =
+            importArea(input.path, destination.path, options)
     }
 
     /**

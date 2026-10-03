@@ -47,8 +47,9 @@ import java.util.concurrent.TimeUnit
  *   [OsmStore] that is already open keeps reading its old snapshot (the old
  *   file stays alive while open); close and reopen it after
  *   [AreaState.Ready] to see the new data.
- * - The library manifest adds INTERNET and ACCESS_NETWORK_STATE to the app
- *   (plus the foreground-service entries described in [ForegroundConfig]).
+ * - The library manifest adds INTERNET and ACCESS_NETWORK_STATE to the app,
+ *   nothing else of its own. Foreground mode needs manifest entries the app
+ *   adds itself (see [ForegroundConfig]).
  *
  * Threading: [download], [cancel] and [state] are cheap and may be called
  * from any thread, including the main thread. [dataFile], [basemapFile] and
@@ -180,7 +181,7 @@ public class AreaManager @JvmOverloads constructor(context: Context, private val
                 val metadata = published?.metadata
                 when {
                     metadata != null && metadata.workId == info.id ->
-                        AreaState.Ready(metadata.report, metadata.snapshotTimestamp, published)
+                        AreaState.Ready(published)
                     info.state == WorkInfo.State.CANCELLED -> AreaState.Cancelled
                     // Succeeded but replaced since (or pruned metadata): what is on disk.
                     else -> AreaState.Idle(published)

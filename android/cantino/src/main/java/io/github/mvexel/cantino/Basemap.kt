@@ -143,15 +143,26 @@ public enum class BasemapPhase {
  * @property tileContents Distinct tile blobs (deduplicated).
  * @property fileBytes Size of the file.
  */
-public data class PmtilesInfo(
-    val minZoom: Int,
-    val maxZoom: Int,
-    val bounds: Bbox,
-    val addressedTiles: Long,
-    val tileEntries: Long,
-    val tileContents: Long,
-    val fileBytes: Long,
+public class PmtilesInfo internal constructor(
+    public val minZoom: Int,
+    public val maxZoom: Int,
+    public val bounds: Bbox,
+    public val addressedTiles: Long,
+    public val tileEntries: Long,
+    public val tileContents: Long,
+    public val fileBytes: Long,
 ) {
+    override fun equals(other: Any?): Boolean = this === other || other is PmtilesInfo &&
+        minZoom == other.minZoom && maxZoom == other.maxZoom && bounds == other.bounds &&
+        addressedTiles == other.addressedTiles && tileEntries == other.tileEntries &&
+        tileContents == other.tileContents && fileBytes == other.fileBytes
+
+    override fun hashCode(): Int = hash(minZoom, maxZoom, bounds, addressedTiles, tileEntries, tileContents, fileBytes)
+
+    override fun toString(): String =
+        "PmtilesInfo(minZoom=$minZoom, maxZoom=$maxZoom, bounds=$bounds, addressedTiles=$addressedTiles, " +
+            "tileEntries=$tileEntries, tileContents=$tileContents, fileBytes=$fileBytes)"
+
     public companion object {
         /**
          * Validates [file] as PMTiles v3 (magic, version, every section inside

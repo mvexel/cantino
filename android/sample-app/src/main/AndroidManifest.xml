@@ -4,7 +4,10 @@
      would fail). ACCESS_NETWORK_STATE stays: MapLibre's ConnectivityReceiver
      queries ConnectivityManager on CONNECTIVITY_CHANGE and the app crashes
      with a SecurityException without it (seen 2026-10-03, MapLibre 13.6.1).
-     Wi-Fi state and location (MapLibre's location component) are unused. -->
+     Wi-Fi state and location (MapLibre's location component) are unused.
+     FOREGROUND_SERVICE comes from WorkManager (a Cantino dependency) and is
+     unused: this app never downloads, so it carries no foreground-service
+     permission at all. -->
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
 
@@ -12,6 +15,7 @@
     <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" tools:node="remove" />
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" tools:node="remove" />
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" tools:node="remove" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" tools:node="remove" />
 
     <application
         android:label="OSM basemap"

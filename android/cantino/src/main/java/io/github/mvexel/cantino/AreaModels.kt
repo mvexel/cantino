@@ -2,6 +2,9 @@ package io.github.mvexel.cantino
 
 import org.json.JSONObject
 import java.io.File
+import java.time.Instant
+import java.time.OffsetDateTime
+import java.time.format.DateTimeParseException
 import java.util.UUID
 
 /**
@@ -71,12 +74,33 @@ public data class AreaConfig(
  * A city-sized area (10×10 km) takes well under a minute, so most apps do
  * not need this.
  *
- * **What the library declares** (merged into the app manifest):
- * `FOREGROUND_SERVICE`, `FOREGROUND_SERVICE_DATA_SYNC`, and
- * `foregroundServiceType="dataSync"` on WorkManager's
- * `SystemForegroundService`. Apps that never enable foreground mode may
- * remove them with `tools:node="remove"`. Apps on Google Play must declare
- * the dataSync foreground service use in the Play Console.
+ * **The app declares it (opt-in manifest entries).** The library manifest
+ * does not declare foreground-service entries, so apps that never use this
+ * mode do not carry a `dataSync` foreground service (which Google Play asks
+ * apps to justify in the Play Console). An app that sets [AreaConfig.foreground]
+ * adds to its own `AndroidManifest.xml`:
+ *
+ * ```xml
+ * <manifest xmlns:android="http://schemas.android.com/apk/res/android"
+ *     xmlns:tools="http://schemas.android.com/tools">
+ *     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+ *     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+ *     <application>
+ *         <service
+ *             android:name="androidx.work.impl.foreground.SystemForegroundService"
+ *             android:foregroundServiceType="dataSync"
+ *             tools:node="merge" />
+ *     </application>
+ * </manifest>
+ * ```
+ *
+ * (WorkManager itself already declares `FOREGROUND_SERVICE` and the service;
+ * the snippet adds the `dataSync` type and its permission.) If foreground
+ * mode is requested but these entries are missing, each run logs a warning
+ * (tag `AreaDownloadWorker`) naming what is missing and runs as ordinary
+ * background work; it never fails and never starts a service the manifest
+ * does not allow. Apps on Google Play must declare the dataSync foreground
+ * service use in the Play Console.
  *
  * **What the app is responsible for.**
  * - `POST_NOTIFICATIONS` on Android 13+: declare and request it if you want
@@ -129,11 +153,11 @@ public data class ForegroundConfig(
  * @property basemapFile The published PMTiles basemap, or null when the area
  *   was downloaded with [BasemapSource.None].
  */
-public data class AreaInfo(
-    val areaId: String,
-    val dataFile: File,
-    val metadata: AreaMetadata?,
-    val basemapFile: File? = null,
+public class AreaInfo internal constructor(
+    public val areaId: String,
+    public val dataFile: File,
+    public val metadata: AreaMetadata?,
+    public val basemapFile: File? = null,
 ) {
     /**
      * The basemap as a MapLibre Native source URL
@@ -141,6 +165,13 @@ public data class AreaInfo(
      * basemap. Use it as the `url` of a vector source in the style.
      */
     public val pmtilesUrl: String? get() = basemapFile?.let { "pmtiles://file://${it.absolutePath}" }
+
+    override fun equals(other: Any?): Boolean = this === other || other is AreaInfo &&
+        areaId == other.areaId && dataFile == other.dataFile && metadata == other.metadata && basemapFile == other.basemapFile
+
+    override fun hashCode(): Int = hash(areaId, dataFile, metadata, basemapFile)
+
+    override fun toString(): String = "AreaInfo(areaId=$areaId, dataFile=$dataFile, metadata=$metadata, basemapFile=$basemapFile)"
 }
 
 /** How a published basemap was obtained; see [BasemapSource]. */
@@ -168,16 +199,28 @@ public enum class BasemapKind(internal val wire: String) {
  * @property requests HTTP requests the download made (1 for a URL download).
  * @property transferredBytes Bytes transferred (the file size for a URL download).
  */
-public data class BasemapMetadata(
-    val kind: BasemapKind,
-    val sourceUrl: String,
-    val fileBytes: Long,
-    val addressedTiles: Long,
-    val minZoom: Int,
-    val maxZoom: Int,
-    val requests: Long,
-    val transferredBytes: Long,
+public class BasemapMetadata internal constructor(
+    public val kind: BasemapKind,
+    public val sourceUrl: String,
+    public val fileBytes: Long,
+    public val addressedTiles: Long,
+    public val minZoom: Int,
+    public val maxZoom: Int,
+    public val requests: Long,
+    public val transferredBytes: Long,
 ) {
+    override fun equals(other: Any?): Boolean = this === other || other is BasemapMetadata &&
+        kind == other.kind && sourceUrl == other.sourceUrl && fileBytes == other.fileBytes &&
+        addressedTiles == other.addressedTiles && minZoom == other.minZoom && maxZoom == other.maxZoom &&
+        requests == other.requests && transferredBytes == other.transferredBytes
+
+    override fun hashCode(): Int =
+        hash(kind, sourceUrl, fileBytes, addressedTiles, minZoom, maxZoom, requests, transferredBytes)
+
+    override fun toString(): String =
+        "BasemapMetadata(kind=$kind, sourceUrl=$sourceUrl, fileBytes=$fileBytes, addressedTiles=$addressedTiles, " +
+            "minZoom=$minZoom, maxZoom=$maxZoom, requests=$requests, transferredBytes=$transferredBytes)"
+
     // Sidecar keys are a stored format: renaming a Kotlin property must not change them.
     internal fun toJson(): JSONObject = JSONObject()
         .put("kind", kind.wire)
@@ -209,10 +252,10 @@ public data class BasemapMetadata(
  *
  * @property bbox The requested area.
  * @property name The job name given to [AreaManager.download].
- * @property snapshotTimestamp SliceOSM's replication timestamp of the OSM data
- *   (ISO 8601 UTC, e.g. `2026-10-03T20:30:01Z`): show it to users as the age
- *   of the data. Null if the server did not report one. Kept as the server's
- *   string; parse it with `java.time.Instant.parse` if needed.
+ * @property snapshotTimestamp SliceOSM's replication timestamp of the OSM data:
+ *   show it to users as the age of the data. Null if the server did not
+ *   report one or reported one that is not an RFC 3339 date-time (the
+ *   sidecar file keeps the server's string as received, for diagnosis).
  * @property importedAtMillis Device clock (Unix milliseconds) when the area was published.
  * @property report The import's object counts and database size.
  * @property basemap The published basemap, null for [BasemapSource.None].
@@ -220,19 +263,39 @@ public data class BasemapMetadata(
  *   (null for areas published by hand). Changes with every refresh, so it
  *   also serves as a version key for caches of the area's content.
  */
-public data class AreaMetadata(
-    val bbox: Bbox,
-    val name: String,
-    val snapshotTimestamp: String?,
-    val importedAtMillis: Long,
-    val report: ImportReport,
-    val basemap: BasemapMetadata? = null,
-    val workId: UUID? = null,
+public class AreaMetadata internal constructor(
+    public val bbox: Bbox,
+    public val name: String,
+    /**
+     * The server's timestamp string as received (SliceOSM status
+     * `Timestamp`); stored in the sidecar unchanged. [snapshotTimestamp] is
+     * its parsed form.
+     */
+    internal val snapshotTimestampRaw: String?,
+    public val importedAtMillis: Long,
+    public val report: ImportReport,
+    public val basemap: BasemapMetadata? = null,
+    public val workId: UUID? = null,
 ) {
+    public val snapshotTimestamp: Instant? = parseSnapshotTimestamp(snapshotTimestampRaw)
+
+    // Value semantics over the public view: two sidecars that spell the same
+    // instant differently describe the same snapshot.
+    override fun equals(other: Any?): Boolean = this === other || other is AreaMetadata &&
+        bbox == other.bbox && name == other.name && snapshotTimestamp == other.snapshotTimestamp &&
+        importedAtMillis == other.importedAtMillis && report == other.report &&
+        basemap == other.basemap && workId == other.workId
+
+    override fun hashCode(): Int = hash(bbox, name, snapshotTimestamp, importedAtMillis, report, basemap, workId)
+
+    override fun toString(): String =
+        "AreaMetadata(bbox=$bbox, name=$name, snapshotTimestamp=$snapshotTimestamp, importedAtMillis=$importedAtMillis, " +
+            "report=$report, basemap=$basemap, workId=$workId)"
+
     internal fun toJson(): JSONObject = JSONObject()
         .put("bbox", bbox.toJson())
         .put("name", name)
-        .put("snapshot_timestamp", snapshotTimestamp ?: JSONObject.NULL)
+        .put("snapshot_timestamp", snapshotTimestampRaw ?: JSONObject.NULL)
         .put("imported_at_millis", importedAtMillis)
         .put("report", report.toJson())
         .put("basemap", basemap?.toJson() ?: JSONObject.NULL)
@@ -248,6 +311,24 @@ public data class AreaMetadata(
             json.optJSONObject("basemap")?.let { BasemapMetadata.fromJson(it) },
             if (json.isNull("work_id")) null else UUID.fromString(json.getString("work_id")),
         )
+
+        /**
+         * RFC 3339 (SliceOSM sends `2026-10-03T20:30:01Z`): `Z` or a numeric
+         * offset, optional fraction, `T`/`t` or a space between date and
+         * time. Anything else (or null) is null, never an exception: a
+         * malformed server timestamp must not fail a download or hide an area.
+         */
+        fun parseSnapshotTimestamp(value: String?): Instant? {
+            if (value.isNullOrBlank()) return null
+            val normalized = value.trim().uppercase(java.util.Locale.ROOT).let {
+                if (it.length > 10 && it[10] == ' ') it.substring(0, 10) + "T" + it.substring(11) else it
+            }
+            return try {
+                OffsetDateTime.parse(normalized).toInstant()
+            } catch (_: DateTimeParseException) {
+                null
+            }
+        }
     }
 }
 
@@ -272,23 +353,40 @@ public data class AreaMetadata(
  */
 public sealed interface AreaState {
     /** No download is known. [published] is the area on disk, if any. */
-    public data class Idle(val published: AreaInfo?) : AreaState
+    public class Idle internal constructor(public val published: AreaInfo?) : AreaState {
+        override fun equals(other: Any?): Boolean = this === other || other is Idle && published == other.published
+        override fun hashCode(): Int = hash(published)
+        override fun toString(): String = "Idle(published=$published)"
+    }
 
     /**
      * Enqueued and waiting: for network/storage constraints, or for a backoff
      * after a transient failure. [previousRuns] is the number of runs that
      * already happened (0 before the first).
      */
-    public data class Queued(val previousRuns: Int) : AreaState
+    public class Queued internal constructor(public val previousRuns: Int) : AreaState {
+        override fun equals(other: Any?): Boolean = this === other || other is Queued && previousRuns == other.previousRuns
+        override fun hashCode(): Int = previousRuns
+        override fun toString(): String = "Queued(previousRuns=$previousRuns)"
+    }
 
     /** Submitting the job to SliceOSM, or re-attaching to the job of an interrupted run. */
     public data object Submitting : AreaState
 
     /** SliceOSM is cutting the extract. [fraction] is 0..1, or null before the server reports totals. */
-    public data class Slicing(val fraction: Double?) : AreaState
+    public class Slicing internal constructor(public val fraction: Double?) : AreaState {
+        override fun equals(other: Any?): Boolean = this === other || other is Slicing && fraction == other.fraction
+        override fun hashCode(): Int = hash(fraction)
+        override fun toString(): String = "Slicing(fraction=$fraction)"
+    }
 
     /** Downloading the PBF: [bytes] so far of [totalBytes], which is null when the server sends no length. */
-    public data class Downloading(val bytes: Long, val totalBytes: Long?) : AreaState
+    public class Downloading internal constructor(public val bytes: Long, public val totalBytes: Long?) : AreaState {
+        override fun equals(other: Any?): Boolean = this === other || other is Downloading &&
+            bytes == other.bytes && totalBytes == other.totalBytes
+        override fun hashCode(): Int = hash(bytes, totalBytes)
+        override fun toString(): String = "Downloading(bytes=$bytes, totalBytes=$totalBytes)"
+    }
 
     /**
      * Importing into SQLite, into a staging file: nothing is published yet.
@@ -303,16 +401,29 @@ public sealed interface AreaState {
      * the progress in [phase]; [totalBytes] is null while unknown (directory
      * phase, or a server sending no length).
      */
-    public data class Basemap(val phase: BasemapPhase, val bytes: Long, val totalBytes: Long?) : AreaState
+    public class Basemap internal constructor(
+        public val phase: BasemapPhase,
+        public val bytes: Long,
+        public val totalBytes: Long?,
+    ) : AreaState {
+        override fun equals(other: Any?): Boolean = this === other || other is Basemap &&
+            phase == other.phase && bytes == other.bytes && totalBytes == other.totalBytes
+        override fun hashCode(): Int = hash(phase, bytes, totalBytes)
+        override fun toString(): String = "Basemap(phase=$phase, bytes=$bytes, totalBytes=$totalBytes)"
+    }
 
     /**
      * Published: OSM data and, if requested, the basemap. Open [area]'s
      * [AreaInfo.dataFile] with [OsmStore.open]; already-open stores keep the
      * old snapshot. A cancel that arrives once publishing has begun is
-     * ignored and the run still ends here. [report] and [snapshotTimestamp]
-     * repeat [AreaInfo.metadata] for convenience.
+     * ignored and the run still ends here. The import report and snapshot
+     * timestamp are in [area]'s [AreaInfo.metadata].
      */
-    public data class Ready(val report: ImportReport, val snapshotTimestamp: String?, val area: AreaInfo) : AreaState
+    public class Ready internal constructor(public val area: AreaInfo) : AreaState {
+        override fun equals(other: Any?): Boolean = this === other || other is Ready && area == other.area
+        override fun hashCode(): Int = area.hashCode()
+        override fun toString(): String = "Ready(area=$area)"
+    }
 
     /**
      * Gave up. [message] is a developer-facing description (not localized).
@@ -320,7 +431,12 @@ public sealed interface AreaState {
      * exhausted their retries: calling [AreaManager.download] again later may
      * succeed. False means the request or the data is bad.
      */
-    public data class Failed(val message: String, val retryable: Boolean) : AreaState
+    public class Failed internal constructor(public val message: String, public val retryable: Boolean) : AreaState {
+        override fun equals(other: Any?): Boolean = this === other || other is Failed &&
+            message == other.message && retryable == other.retryable
+        override fun hashCode(): Int = hash(message, retryable)
+        override fun toString(): String = "Failed(message=$message, retryable=$retryable)"
+    }
 
     /**
      * Cancelled by [AreaManager.cancel] before publishing began: nothing of
