@@ -7,6 +7,7 @@
 //! a SliceOSM request adapter. See `schema` for the file format.
 #[cfg(target_os = "android")]
 mod android;
+pub mod basemap;
 mod encoding;
 mod import;
 mod input;
