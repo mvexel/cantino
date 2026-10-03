@@ -25,6 +25,7 @@ against the repo before trusting it.
 - [x] Measure on Pixel 8 (`scripts/bench-android.sh`, results in `docs/bench/2026-10-03-slc-pixel8.json`)
 - [x] Compare against thresholds: import 5.0 s ✅; peak RSS 425 MB ❌; db 338 MB = 26× ❌; tag query p95 32.6 s ❌
 - [ ] **DECISION (Martijn):** keep OSMExpress + fix our layer, or revisit backend? Blocks phases 3–6.
+- [ ] Proposed (awaiting GO): 2h spike, pure-Rust SQLite store (osmpbf + rusqlite) on the same SLC bench. Kill criteria → stay on OSMExpress if db > 215 MB, Pixel import > 60 s, or tag query p95 > 200 ms
 - [ ] If kept: default `preserve_untagged_metadata=false` (338 → 215 MB)
 - [ ] If kept: tag index table at import (additive LMDB table in fork) → tag queries in ms
 - [ ] If kept: replace 3× size threshold with an absolute per-city budget; re-run bench
