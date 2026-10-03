@@ -26,9 +26,9 @@ Background, evidence and build instructions: `HANDOFF.md`.
 
 ## Plan
 
-Phases, in order (tracked as an epic with sub-issues in the GitHub repo):
+Phases, in order. Progress is tracked in `TODO.md` (no GitHub board):
 
-0. Scope + tracking (this file, repo, epic).
+0. Scope + tracking (this file, repo, TODO.md).
 1. Android vertical slice: x86_64 emulator + arm64 phone, instrumented test does
    fixture import / get / query through JNI.
 2. Phone measurement, go/no-go on OSMExpress: city extract size, db size,
