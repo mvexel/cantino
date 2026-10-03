@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Café reference app.
+     INTERNET and ACCESS_NETWORK_STATE come from the framework library (area
+     downloads); ACCESS_NETWORK_STATE is also required by MapLibre's
+     ConnectivityReceiver. Location is used once, on first run, to centre the
+     offline area (LocationManager, no Play Services), and later to sort
+     "nearby" from where the user is. Wi-Fi state (declared by MapLibre) is
+     unused and removed. -->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" tools:node="remove" />
+
+    <application
+        android:label="Offline cafés"
+        android:allowBackup="false"
+        android:theme="@android:style/Theme.DeviceDefault.Light.NoActionBar">
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:configChanges="orientation|screenSize|screenLayout|keyboardHidden">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+        <activity
+            android:name=".DetailActivity"
+            android:exported="false" />
+    </application>
+</manifest>

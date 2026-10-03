@@ -19,6 +19,7 @@ Background, evidence and build instructions: `HANDOFF.md`.
 ## Out of scope (do not build without a scope change here)
 
 - Edits, upload, sync, conflict handling.
+- Offline routing (planned for later: TODO.md §8; research first).
 - Overlapping areas, incremental `.osc` refresh, country-scale operation.
 - On-device vector tile generation, multipolygon assembly for rendering.
 - Global tag index.
