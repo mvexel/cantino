@@ -4,6 +4,9 @@
 plugins {
     id("com.android.library")
     `maven-publish`
+    // API reference: `./gradlew :cantino:dokkaGeneratePublicationHtml`
+    // → cantino/build/dokka/html (public API only; explicit API mode).
+    id("org.jetbrains.dokka")
 }
 
 // One version for the whole framework: the Rust crate's (../../Cargo.toml).
@@ -91,6 +94,33 @@ afterEvaluate {
                 groupId = "io.github.mvexel"
                 artifactId = "cantino"
                 version = cantinoVersion
+                pom {
+                    name.set("Cantino")
+                    description.set(
+                        "Cantino, an offline OpenStreetMap SDK for Android: downloads OpenStreetMap " +
+                            "data and an optional PMTiles basemap for an app-chosen area and queries it offline.",
+                    )
+                    url.set("https://github.com/mvexel/cantino")
+                    licenses {
+                        license {
+                            name.set("Apache-2.0")
+                            url.set("https://www.apache.org/licenses/LICENSE-2.0.txt")
+                            distribution.set("repo")
+                        }
+                    }
+                    developers {
+                        developer {
+                            id.set("mvexel")
+                            name.set("Martijn van Exel")
+                            url.set("https://github.com/mvexel")
+                        }
+                    }
+                    scm {
+                        url.set("https://github.com/mvexel/cantino")
+                        connection.set("scm:git:https://github.com/mvexel/cantino.git")
+                        developerConnection.set("scm:git:ssh://git@github.com/mvexel/cantino.git")
+                    }
+                }
             }
         }
         repositories {
@@ -98,6 +128,41 @@ afterEvaluate {
                 name = "local"
                 url = uri(rootProject.layout.buildDirectory.dir("repo"))
             }
+            // GitHub Pages layout, written by scripts/publish-pages.sh
+            // (-PpagesRepo=<dir>/maven); never pushed by the build.
+            providers.gradleProperty("pagesRepo").orNull?.let { dir ->
+                maven {
+                    name = "pages"
+                    url = uri(dir)
+                }
+            }
         }
+    }
+}
+
+dokka {
+    moduleName.set("Cantino")
+    moduleVersion.set(cantinoVersion)
+    dokkaSourceSets.configureEach {
+        // Explicit API mode makes the public surface deliberate; document only it.
+        documentedVisibilities.set(setOf(org.jetbrains.dokka.gradle.engine.parameters.VisibilityModifier.Public))
+        // Set to true to audit KDoc coverage: as of 0.1.0 the only undocumented
+        // public symbols are the equals/hashCode/toString overrides of the
+        // value classes, so it stays off to keep the build output clean.
+        reportUndocumented.set(false)
+        skipEmptyPackages.set(true)
+        includes.from("dokka-module.md")
+        sourceLink {
+            localDirectory.set(file("src/main/java"))
+            remoteUrl("https://github.com/mvexel/cantino/blob/v$cantinoVersion/android/cantino/src/main/java")
+            remoteLineSuffix.set("#L")
+        }
+        externalDocumentationLinks.register("kotlinx-coroutines") {
+            url("https://kotlinlang.org/api/kotlinx.coroutines/")
+            packageListUrl("https://kotlinlang.org/api/kotlinx.coroutines/package-list")
+        }
+    }
+    pluginsConfiguration.html {
+        footerMessage.set("Cantino ${cantinoVersion}. Map data © OpenStreetMap contributors (ODbL).")
     }
 }

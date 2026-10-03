@@ -56,6 +56,7 @@ public data class AreaConfig(
     val basemapParallelism: Int = 4,
     val foreground: ForegroundConfig? = null,
 ) {
+    /** Defaults of [AreaConfig]. */
     public companion object {
         /** The public SliceOSM service (OpenStreetMap US). */
         public const val DEFAULT_SLICE_BASE_URL: String = "https://slice.openstreetmap.us/"
@@ -134,6 +135,7 @@ public data class ForegroundConfig(
     val smallIcon: Int = android.R.drawable.stat_sys_download,
     val cancelLabel: String? = "Cancel",
 ) {
+    /** Defaults of [ForegroundConfig]. */
     public companion object {
         /** Channel used when the app does not name one. */
         public const val DEFAULT_CHANNEL_ID: String = "cantino-area-downloads"
@@ -352,7 +354,11 @@ public class AreaMetadata internal constructor(
  * back to [Idle] carrying the published area.
  */
 public sealed interface AreaState {
-    /** No download is known. [published] is the area on disk, if any. */
+    /**
+     * No download is known.
+     *
+     * @property published The area on disk, if any.
+     */
     public class Idle internal constructor(public val published: AreaInfo?) : AreaState {
         override fun equals(other: Any?): Boolean = this === other || other is Idle && published == other.published
         override fun hashCode(): Int = hash(published)
@@ -361,8 +367,9 @@ public sealed interface AreaState {
 
     /**
      * Enqueued and waiting: for network/storage constraints, or for a backoff
-     * after a transient failure. [previousRuns] is the number of runs that
-     * already happened (0 before the first).
+     * after a transient failure.
+     *
+     * @property previousRuns Runs that already happened (0 before the first).
      */
     public class Queued internal constructor(public val previousRuns: Int) : AreaState {
         override fun equals(other: Any?): Boolean = this === other || other is Queued && previousRuns == other.previousRuns
@@ -373,14 +380,23 @@ public sealed interface AreaState {
     /** Submitting the job to SliceOSM, or re-attaching to the job of an interrupted run. */
     public data object Submitting : AreaState
 
-    /** SliceOSM is cutting the extract. [fraction] is 0..1, or null before the server reports totals. */
+    /**
+     * SliceOSM is cutting the extract.
+     *
+     * @property fraction Progress 0..1, or null before the server reports totals.
+     */
     public class Slicing internal constructor(public val fraction: Double?) : AreaState {
         override fun equals(other: Any?): Boolean = this === other || other is Slicing && fraction == other.fraction
         override fun hashCode(): Int = hash(fraction)
         override fun toString(): String = "Slicing(fraction=$fraction)"
     }
 
-    /** Downloading the PBF: [bytes] so far of [totalBytes], which is null when the server sends no length. */
+    /**
+     * Downloading the OSM data (PBF).
+     *
+     * @property bytes Bytes downloaded so far.
+     * @property totalBytes Size of the download, or null when the server sends no length.
+     */
     public class Downloading internal constructor(public val bytes: Long, public val totalBytes: Long?) : AreaState {
         override fun equals(other: Any?): Boolean = this === other || other is Downloading &&
             bytes == other.bytes && totalBytes == other.totalBytes
@@ -400,6 +416,10 @@ public sealed interface AreaState {
      * after the OSM data was imported (staged, not yet published). [bytes] is
      * the progress in [phase]; [totalBytes] is null while unknown (directory
      * phase, or a server sending no length).
+     *
+     * @property phase What the basemap step is doing.
+     * @property bytes Bytes transferred so far in [phase].
+     * @property totalBytes Bytes to transfer in [phase], or null while unknown.
      */
     public class Basemap internal constructor(
         public val phase: BasemapPhase,
@@ -418,6 +438,8 @@ public sealed interface AreaState {
      * old snapshot. A cancel that arrives once publishing has begun is
      * ignored and the run still ends here. The import report and snapshot
      * timestamp are in [area]'s [AreaInfo.metadata].
+     *
+     * @property area The area this run published.
      */
     public class Ready internal constructor(public val area: AreaInfo) : AreaState {
         override fun equals(other: Any?): Boolean = this === other || other is Ready && area == other.area
@@ -430,6 +452,9 @@ public sealed interface AreaState {
      * [retryable] is true for transient causes (network, server) that
      * exhausted their retries: calling [AreaManager.download] again later may
      * succeed. False means the request or the data is bad.
+     *
+     * @property message Developer-facing description of the failure (not localized).
+     * @property retryable True for a transient cause that exhausted its retries.
      */
     public class Failed internal constructor(public val message: String, public val retryable: Boolean) : AreaState {
         override fun equals(other: Any?): Boolean = this === other || other is Failed &&

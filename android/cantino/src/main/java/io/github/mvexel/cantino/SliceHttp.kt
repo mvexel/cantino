@@ -111,7 +111,7 @@ internal class SliceHttp(private val connectTimeoutMillis: Int, private val read
      * Bytes `offset until offset + length` of [url] into memory (directory
      * ranges of a basemap extract: small). With [allowShort] the server may
      * answer with fewer bytes when the file ends earlier (the 16 KiB first
-     * request of a tiny archive). See [checkRange] for what is accepted.
+     * request of a tiny archive). See [openRange] for what is accepted.
      */
     suspend fun getRange(url: String, offset: Long, length: Long, allowShort: Boolean = false): ByteArray =
         connect(url) { connection ->

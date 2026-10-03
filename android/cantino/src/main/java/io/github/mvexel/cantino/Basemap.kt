@@ -38,6 +38,8 @@ public sealed interface BasemapSource {
      * version, sections within the file) before it is published; anything
      * else fails the download (non-retryable). The constructor throws
      * [IllegalArgumentException] unless [url] is http(s).
+     *
+     * @property url http(s) URL of the PMTiles v3 file.
      */
     public data class Url(val url: String) : BasemapSource {
         init {
@@ -61,6 +63,10 @@ public sealed interface BasemapSource {
      *
      * The constructor throws [IllegalArgumentException] unless [planetUrl] is
      * http(s), [maxZoom] is 0..31 and [overfetch] is finite and >= 0.
+     *
+     * @property planetUrl http(s) URL of the remote PMTiles v3 archive (must support range requests).
+     * @property maxZoom Highest zoom level to extract, clamped to the archive's.
+     * @property overfetch Extra bytes allowed per wanted byte, to merge requests.
      */
     public data class Extract(val planetUrl: String, val maxZoom: Int = 15, val overfetch: Double = 0.05) : BasemapSource {
         init {
@@ -163,6 +169,7 @@ public class PmtilesInfo internal constructor(
         "PmtilesInfo(minZoom=$minZoom, maxZoom=$maxZoom, bounds=$bounds, addressedTiles=$addressedTiles, " +
             "tileEntries=$tileEntries, tileContents=$tileContents, fileBytes=$fileBytes)"
 
+    /** Reading a local PMTiles file. */
     public companion object {
         /**
          * Validates [file] as PMTiles v3 (magic, version, every section inside
@@ -220,7 +227,7 @@ internal data class ExtractStats(
  * errors (not a PMTiles v3 archive, unclustered, unsupported compression)
  * are permanent. Cancellation aborts in-flight requests. On every exit the
  * native handles are freed on their thread; an unfinished assembler deletes
- * its staging file, so only a successful [run] leaves [output] behind.
+ * its staging file, so only a successful [run] leaves its output file behind.
  */
 internal class BasemapExtract(
     private val http: SliceHttp,

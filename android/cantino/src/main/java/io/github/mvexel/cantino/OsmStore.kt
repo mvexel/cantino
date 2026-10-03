@@ -39,6 +39,7 @@ public class CantinoException(message: String, cause: Throwable? = null) :
  * Returned objects own copies of their data and outlive the store.
  */
 public class OsmStore private constructor(private var handle: Long) : AutoCloseable {
+    /** Opening areas and importing extracts. */
     public companion object {
         /**
          * Opens a published area database (created by [importArea] or

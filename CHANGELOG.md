@@ -81,5 +81,12 @@ arm64-v8a and x86_64) over a Rust core with a C ABI (`include/cantino.h`, prefix
 - Café reference app (`android/cafe-app`) demonstrating the full offline flow
   in airplane mode.
 
+- **Distribution and docs**: static Maven repository at
+  `https://mvexel.github.io/cantino/maven` (POM with license, developer and
+  SCM), API reference (Dokka) at `https://mvexel.github.io/cantino/api/`,
+  guide in `docs/guide/`. `AreaManager.state()` returns a `Flow` but
+  kotlinx-coroutines is not an API dependency in 0.1.0: apps declare it
+  themselves (see the README's Install section).
+
 Not in this release: iOS adapter, edits/upload, incremental refresh,
 overlapping areas, byte-range resume of downloads.

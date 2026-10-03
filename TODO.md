@@ -81,11 +81,20 @@ Target onboarding flow (Martijn, 2026-10-03): get location → offer to download
 - [x] Name research: OSMF policy allows "osm" only descriptively; candidates checked on crates.io/Maven/GitHub
 - (superseded) **Name** before going public (OSMF trademark check + availability; research running) → rename package/artifact/JNI/C prefix/crate/repo
 - [x] Repo goes public, Apache-2.0 (Martijn 2026-10-03); LICENSE + NOTICE (ODbL/Protomaps attribution) prepared
-- [ ] Distribution: AAR published as a static Maven repo (no-auth; GitHub Pages) — prepared by Claude, publish step run by Martijn
-- [ ] README quickstart (install → download area → query → MapLibre basemap), verified by building it as a fresh project against the published artifact
-- [ ] Concepts guide: areas/snapshots/refresh, basemap sources, query semantics, threading, permissions, privacy
-- [ ] API reference (Dokka from KDoc), published as an artifact
-- [ ] Café app walkthrough; building from source / C ABI notes
+- [x] Distribution prepared (2026-10-03): `scripts/publish-pages.sh [--worktree]` builds native libs, the release AAR with POM metadata (name, description, url, Apache-2.0, developer, scm) into a GitHub Pages Maven layout + Dokka HTML + landing page (`build/pages`: `/maven/io/github/mvexel/cantino/0.1.0/`, `/api/`, `/index.html`, `.nojekyll`), synced into a local orphan `gh-pages` worktree at `build/gh-pages` (nothing committed, never pushed)
+- [ ] Publish step (Martijn): commit + push `gh-pages`, tag `v0.1.0`, enable Pages, make repo public (commands printed by the script)
+- [x] README quickstart (install → download area → query → MapLibre basemap), verified 2026-10-03: code blocks extracted verbatim from README.md into a fresh Gradle 9.8 / AGP 9.4.1 project, only the Maven URL swapped for `file://…/build/pages/maven`; `assembleDebug` green; on the x86_64 emulator `libcantino.so` loaded, live download Ready in ~10 s (136 cafés logged), relaunch in airplane mode: cafés + basemap rendered
+- [x] Guide `docs/guide/`: concepts, downloading (state machine, cancellation, failures, foreground mode, sizes, privacy, permissions), basemaps, querying, performance
+- [x] API reference: Dokka 2.2.0 on `:cantino` (`dokkaGeneratePublicationHtml`, public API only, source links to tag v0.1.0); fixed 4 unresolved KDoc links and added `@property` docs for constructor properties of input types and AreaState subtypes, plus companion docs (only equals/hashCode/toString overrides remain undocumented); published under `/api/` by the Pages script
+- [x] Café app walkthrough (`docs/guide/cafe-app.md`), building from source (`building.md`), C ABI notes (`c-abi.md`; its C example compiles and links against `libcantino`)
+- [ ] 0.2 API candidates found while documenting (2026-10-03, not decided):
+  - coroutines are an `implementation` dependency (via work-runtime-ktx, POM scope runtime) although `Flow` (`AreaManager.state`) and `suspend` (`ProtomapsBuilds.latestUrl`) are public API: apps must declare kotlinx-coroutines themselves (README says so). Make it `api`
+  - `state(areaId)` follows the area, not a run: right after `download()` (WorkManager enqueues asynchronously) the flow can still emit the previous run's final state, and `Failed`/`Cancelled` carry no work ID to tell them apart. Quickstart works around it with `dropWhile`. Options: work ID on every state, `state(runId)`, or a `suspend download` that returns once enqueued
+  - no `Bbox` around a point (every app writes `squareAround`)
+  - way/relation geometry: Kotlin has only per-node `get`; the Rust core has `way_coordinates`/dependencies. Expose a batch get or way coordinates
+  - thread confinement + coroutines is an easy trap (store held across suspension on `Dispatchers.IO`); ship a small owner-thread wrapper like the café app's `StoreWorker`
+  - `publishedArea`/`dataFile` block on disk: offer `suspend` variants
+  - offline style assets (style.json, glyphs, sprites) need a node/npm script; consider publishing them as a downloadable artifact
 ## 8. Offline routing (later — not started; added 2026-10-03 by Martijn)
 - [ ] Research: on-device routing engines (e.g. Valhalla, GraphHopper, OSRM, Ferrostar/Valhalla mobile, pure-Rust options), their data models/graph formats vs our SQLite raw graph (build graph on device from the area db, or download pre-built tiles?), size/import cost for a ~10×10 km area, licensing, Android/iOS fit, and amount of work
 - [ ] Café app feature: real distance and travel time per chosen mode (walk/bike/car) in the nearby list, and "route to…" drawn on the map

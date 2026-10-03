@@ -140,7 +140,7 @@ internal class AreaStorage(context: Context) {
      * [beforeCommit] runs under the lock immediately before the commit point;
      * throwing from it aborts with nothing changed. [hasBasemap] says whether
      * the version includes `basemap.pmtiles` (if not, a previously published
-     * basemap is removed). [afterCommitPoint] is a test hook.
+     * basemap is removed). [AreaTestHooks.afterCommitPoint] is a test hook.
      *
      * Throws [IOException] only after the commit point if a rename failed:
      * the version is committed and the next [recover] finishes it.

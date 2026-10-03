@@ -43,6 +43,9 @@ public enum class OsmKind(internal val code: Int, internal val wire: String) {
  * Identity of an OSM object: its [kind] and its numeric [id] within that kind.
  * IDs are the raw OSM IDs of the extract (positive for data from the OSM
  * database).
+ *
+ * @property kind Node, way or relation.
+ * @property id The OSM ID within [kind].
  */
 public data class OsmId(val kind: OsmKind, val id: Long) {
     internal fun toJson() = JSONObject().put("type", kind.wire).put("id", id)
@@ -233,6 +236,11 @@ internal fun osmObjectFromJson(json: JSONObject): OsmObject {
  * ±180/±90, not finite) is rejected where it is used: [OsmStore.query]
  * throws [CantinoException], [AreaManager.download] ends in a
  * non-retryable [AreaState.Failed].
+ *
+ * @property west Western edge, longitude in degrees (-180..180).
+ * @property south Southern edge, latitude in degrees (-90..90).
+ * @property east Eastern edge, longitude in degrees, `>= west`.
+ * @property north Northern edge, latitude in degrees, `>= south`.
  */
 public data class Bbox(val west: Double, val south: Double, val east: Double, val north: Double) {
     internal fun toJson() = JSONObject().put("west", west).put("south", south).put("east", east).put("north", north)
@@ -248,10 +256,19 @@ public data class Bbox(val west: Double, val south: Double, val east: Double, va
  * no trimming; a missing tag and a tag with an empty value are distinct.
  */
 public sealed interface TagFilter {
-    /** The object has tag [key], with any value (including empty). */
+    /**
+     * The object has tag [key], with any value (including empty).
+     *
+     * @property key Tag key, raw (case-sensitive).
+     */
     public data class Exists(val key: String) : TagFilter
 
-    /** The object has tag [key] with exactly [value]. */
+    /**
+     * The object has tag [key] with exactly [value].
+     *
+     * @property key Tag key, raw (case-sensitive).
+     * @property value Tag value, compared exactly (case-sensitive, no trimming).
+     */
     public data class Equals(val key: String, val value: String) : TagFilter
 }
 
@@ -282,6 +299,14 @@ internal fun TagFilter.toJson(): JSONObject = when (this) {
  * [maxCandidates] bounds the spatial candidates a bbox-driven query collects
  * (all kinds together). Exceeding it throws [CantinoException]; results
  * are never silently truncated. Narrow the box or add a tag filter.
+ *
+ * @property tags Tag filters, all of which must match (AND). Empty: no tag condition.
+ * @property bbox Spatial candidate filter, or null for none.
+ * @property after Keyset cursor: return only objects ordered after this ID
+ *   (the last [OsmObject.id] of the previous page). Null for the first page.
+ * @property limit Maximum objects per call, 1..10 000.
+ * @property maxCandidates Maximum spatial candidates a bbox-driven query may
+ *   collect before it fails with [CantinoException].
  */
 public data class Query(
     val tags: List<TagFilter> = emptyList(),
@@ -307,6 +332,9 @@ public data class Query(
  * [OsmObject.metadata] and only [OsmObject.Node.locationVersion], which makes
  * the database noticeably smaller. [cacheMiB] is SQLite's page cache during
  * the import in MiB: resident memory, not a cap on the import's total memory.
+ *
+ * @property preserveUntaggedMetadata Keep full editing metadata for untagged nodes (larger file).
+ * @property cacheMiB SQLite page cache during the import, in MiB.
  */
 public data class ImportOptions(
     val preserveUntaggedMetadata: Boolean = false,
