@@ -48,7 +48,7 @@ against the repo before trusting it.
 - [x] Decision record: separate PMTiles basemap for the area bbox (CLAUDE.md scope)
 - [x] Obtain extract: `pmtiles extract` (go-pmtiles 1.31.2) from build.protomaps.com/20261002.pmtiles, SLC bbox z0–15 → 12 MB, 748 tiles (work/basemap, not committed)
 - [x] Offline style: @protomaps/basemaps 5.7.2 light flavor, glyphs/sprites as asset:// (fonts 14 MB for 3 stacks — subset to Latin ranges later)
-- [ ] Render offline in MapLibre Native Android 13.6.1 (sample app module) in airplane mode — waits for 2b migration (both touch android/)
+- [x] Render offline in MapLibre Native Android 13.6.1 (`android/sample-app`, assets from `scripts/basemap-assets.sh`) on the Pixel 8 in airplane mode, no INTERNET permission; tiles, glyphs, sprites render, logcat clean (docs/screenshots/2026-10-03-basemap-z13.png, -z15.png). Fonts subset to 6 ranges: 1.7 MB. ACCESS_NETWORK_STATE is required (MapLibre's ConnectivityReceiver crashes without it). Debug APK 50 MB, both ABIs; arm64 share ~29 MB (libmaplibre 12.8, pmtiles 11.7, libosm_framework 3.9)
 
 ## 5. Area download lifecycle
 - [ ] Android: WorkManager submit/poll/download/cancel → staged import

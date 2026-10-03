@@ -14,3 +14,4 @@ dependencyResolutionManagement {
 }
 rootProject.name = "osm-framework-android"
 include(":osm-framework")
+include(":sample-app")
