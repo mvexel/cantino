@@ -167,3 +167,74 @@ pub extern "system" fn Java_io_github_mvexel_osmframework_NativeBridge_importAre
     })
     .resolve::<ThrowRuntimeExAndDefault>()
 }
+
+/// Optional Java string → owned C string (`null` → `None`).
+fn optional(env: &mut jni::Env, value: &JString) -> Result<Option<CString>, BridgeError> {
+    if value.is_null() {
+        Ok(None)
+    } else {
+        Ok(Some(c_string(value.try_to_string(env)?)?))
+    }
+}
+
+/// SliceOSM submit request: `{"url","body"}`. `base` may be Java `null`.
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_io_github_mvexel_osmframework_NativeBridge_sliceJobRequest<'local>(
+    mut env: EnvUnowned<'local>,
+    _class: JClass<'local>,
+    base: JString<'local>,
+    bbox: JString<'local>,
+    name: JString<'local>,
+) -> JString<'local> {
+    env.with_env(|env| -> Result<JString<'local>, BridgeError> {
+        let base = optional(env, &base)?;
+        let bbox = c_string(bbox.try_to_string(env)?)?;
+        let name = c_string(name.try_to_string(env)?)?;
+        let base = base.as_ref().map_or(ptr::null(), |value| value.as_ptr());
+        // SAFETY: all strings live for the call; base may be NULL by contract.
+        let (_, json) = call(|out, error| unsafe {
+            osm_framework_slice_job_request(base, bbox.as_ptr(), name.as_ptr(), out, error)
+        })?;
+        Ok(JString::from_str(env, json.unwrap_or_default())?)
+    })
+    .resolve::<ThrowRuntimeExAndDefault>()
+}
+
+/// SliceOSM job from a submit response or a persisted ID: `{"job_id","status_url","download_url"}`.
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_io_github_mvexel_osmframework_NativeBridge_sliceJob<'local>(
+    mut env: EnvUnowned<'local>,
+    _class: JClass<'local>,
+    base: JString<'local>,
+    response: JString<'local>,
+) -> JString<'local> {
+    env.with_env(|env| -> Result<JString<'local>, BridgeError> {
+        let base = optional(env, &base)?;
+        let response = c_string(response.try_to_string(env)?)?;
+        let base = base.as_ref().map_or(ptr::null(), |value| value.as_ptr());
+        // SAFETY: strings live for the call; base may be NULL by contract.
+        let (_, json) = call(|out, error| unsafe {
+            osm_framework_slice_job(base, response.as_ptr(), out, error)
+        })?;
+        Ok(JString::from_str(env, json.unwrap_or_default())?)
+    })
+    .resolve::<ThrowRuntimeExAndDefault>()
+}
+
+/// SliceOSM status document → `{"complete","fraction","size_bytes","timestamp"}`.
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_io_github_mvexel_osmframework_NativeBridge_sliceProgress<'local>(
+    mut env: EnvUnowned<'local>,
+    _class: JClass<'local>,
+    status: JString<'local>,
+) -> JString<'local> {
+    env.with_env(|env| -> Result<JString<'local>, BridgeError> {
+        let status = c_string(status.try_to_string(env)?)?;
+        // SAFETY: status lives for the call.
+        let (_, json) = call(|out, error| unsafe {
+            osm_framework_slice_progress(status.as_ptr(), out, error)
+        })?;
+        Ok(JString::from_str(env, json.unwrap_or_default())?)
+    })
+    .resolve::<ThrowRuntimeExAndDefault>()
+}

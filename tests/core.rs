@@ -271,6 +271,95 @@ fn slice_request_preserves_bbox_order_and_validates_job_ids() {
 }
 
 #[test]
+fn slice_service_builds_urls_from_any_base() {
+    let default = slice::Service::default();
+    assert_eq!(default.submit_url(), slice::API);
+    // A missing trailing slash is added; endpoints hang off the base.
+    let local = slice::Service::new("http://127.0.0.1:8080").unwrap();
+    assert_eq!(local.submit_url(), "http://127.0.0.1:8080/api/");
+    let urls = slice::job_urls(&local, " \"2637da98-20a1-428f-b6db-18ac2861b763\"\n").unwrap();
+    assert_eq!(urls.job_id, "2637da98-20a1-428f-b6db-18ac2861b763");
+    assert_eq!(
+        urls.status_url,
+        "http://127.0.0.1:8080/api/2637da98-20a1-428f-b6db-18ac2861b763"
+    );
+    assert_eq!(
+        urls.download_url,
+        "http://127.0.0.1:8080/files/2637da98-20a1-428f-b6db-18ac2861b763.osm.pbf"
+    );
+    for bad in [
+        "",
+        "ftp://host/",
+        "https://",
+        "https:///path",
+        "https://h/?q=1",
+    ] {
+        assert!(slice::Service::new(bad).is_err(), "{bad}");
+    }
+    // An HTML error page or an empty body is not a job.
+    assert!(slice::job_urls(&default, "<html>busy</html>").is_err());
+    assert!(slice::job_urls(&default, "").is_err());
+
+    let request =
+        slice::job_request(&local, "café", Bbox::new(-111., 40., -110., 41.).unwrap()).unwrap();
+    assert_eq!(request.url, "http://127.0.0.1:8080/api/");
+    let body: serde_json::Value = serde_json::from_str(&request.body).unwrap();
+    assert_eq!(body["Name"], "café");
+    assert_eq!(
+        body["RegionData"],
+        serde_json::json!([40., -111., 41., -110.])
+    );
+    // Inverted boxes are rejected before anything reaches the network.
+    assert!(
+        slice::job_request(
+            &local,
+            "x",
+            Bbox {
+                west: -110.,
+                south: 40.,
+                east: -111.,
+                north: 41.
+            }
+        )
+        .is_err()
+    );
+}
+
+#[test]
+fn slice_progress_summarizes_live_status_documents() {
+    let parse = |text: &str| -> slice::ProgressSummary {
+        serde_json::from_str::<slice::Progress>(text)
+            .unwrap()
+            .summary()
+    };
+    // Shape captured from the live service on 2026-10-03: Complete is true
+    // while ElemsProg is still below ElemsTotal.
+    let done = parse(
+        r#"{"Timestamp":"2026-10-03T20:30:01Z","CellsTotal":20,"CellsProg":20,"NodesTotal":12623,"NodesProg":12623,"ElemsTotal":18204,"ElemsProg":18117,"SizeBytes":229028,"Elapsed":0.12,"Complete":true}"#,
+    );
+    assert_eq!(
+        done,
+        slice::ProgressSummary {
+            complete: true,
+            fraction: Some(1.0),
+            size_bytes: Some(229028),
+            timestamp: Some("2026-10-03T20:30:01Z".into()),
+        }
+    );
+    // Elements are preferred over nodes; nodes are the fallback.
+    let running = parse(
+        r#"{"Complete":false,"NodesTotal":10,"NodesProg":10,"ElemsTotal":40,"ElemsProg":10}"#,
+    );
+    assert_eq!(running.fraction, Some(0.25));
+    let nodes_only = parse(r#"{"Complete":false,"NodesTotal":4,"NodesProg":1,"ElemsTotal":0}"#);
+    assert_eq!(nodes_only.fraction, Some(0.25));
+    // No totals yet: unknown, not zero. An empty timestamp is absent.
+    let queued = parse(r#"{"Complete":false,"Timestamp":""}"#);
+    assert_eq!((queued.fraction, queued.timestamp), (None, None));
+    assert!(serde_json::from_str::<slice::Progress>(r#"{"error":"x"}"#).is_err());
+}
+
+#[test]
 fn duplicate_tags_and_deleted_objects_do_not_activate() {
     let directory = tempfile::tempdir().unwrap();
     let input = directory.path().join("bad.osm");

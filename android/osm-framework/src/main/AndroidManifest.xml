@@ -1,1 +1,9 @@
-<manifest />
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Merged into every app that uses the library. Area downloads (AreaManager)
+     need the network; ACCESS_NETWORK_STATE lets WorkManager hold a download
+     until a connection is available. Apps that never download can remove them
+     with tools:node="remove" (the offline basemap sample app does). -->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+</manifest>

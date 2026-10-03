@@ -61,7 +61,7 @@ class OsmStore private constructor(private var handle: Long) : AutoCloseable {
     }
 }
 
-private inline fun <T> native(block: () -> T): T =
+internal inline fun <T> native(block: () -> T): T =
     try {
         block()
     } catch (error: RuntimeException) {

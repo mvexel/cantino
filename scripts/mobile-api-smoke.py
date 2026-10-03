@@ -15,6 +15,9 @@ lib.osm_framework_get.argtypes = [ptr,c.c_int32,c.c_int64,c.POINTER(ptr),c.POINT
 lib.osm_framework_query.argtypes = [ptr,string,c.POINTER(ptr),c.POINTER(ptr)]
 lib.osm_framework_close.argtypes = [ptr,c.POINTER(ptr)]
 lib.osm_framework_free.argtypes = [ptr]
+lib.osm_framework_slice_job_request.argtypes = [string,string,string,c.POINTER(ptr),c.POINTER(ptr)]
+lib.osm_framework_slice_job.argtypes = [string,string,c.POINTER(ptr),c.POINTER(ptr)]
+lib.osm_framework_slice_progress.argtypes = [string,c.POINTER(ptr),c.POINTER(ptr)]
 
 def call(function, *args):
     result, error = ptr(), ptr()
@@ -57,4 +60,19 @@ with tempfile.TemporaryDirectory() as directory:
     finally:
         assert lib.osm_framework_close(handle,c.byref(error)) == 0
         lib.osm_framework_free(error)
-print('Rust mobile C ABI import/open/get/query/error/free checks passed')
+
+# SliceOSM protocol helpers: NULL base means the public service.
+_, request = call(lib.osm_framework_slice_job_request,None,
+                  b'{"west":-111.9,"south":40.7,"east":-111.8,"north":40.8}','test'.encode())
+assert request['url'] == 'https://slice.openstreetmap.us/api/'
+assert json.loads(request['body'])['RegionData'] == [40.7,-111.9,40.8,-111.8]
+_, job = call(lib.osm_framework_slice_job,b'http://127.0.0.1:9',b'2637da98-20a1-428f-b6db-18ac2861b763\n')
+assert job['download_url'] == 'http://127.0.0.1:9/files/2637da98-20a1-428f-b6db-18ac2861b763.osm.pbf'
+try:
+    call(lib.osm_framework_slice_job,None,b'../../etc/passwd')
+    raise AssertionError('expected job ID error')
+except RuntimeError:
+    pass
+_, progress = call(lib.osm_framework_slice_progress,b'{"Complete":false,"ElemsTotal":4,"ElemsProg":1}')
+assert progress == {'complete':False,'fraction':0.25,'size_bytes':None,'timestamp':None}
+print('Rust mobile C ABI import/open/get/query/error/free/slice checks passed')

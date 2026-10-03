@@ -39,7 +39,7 @@ against the repo before trusting it.
 
 - [ ] Follow-ups from migration: in-app import 8.2 s vs 5.7 s plain binary (cause unknown); import peak memory grows with area (chunk writes); JNI+JSON ≈ 0.08 ms/object; decide whether to drop unused node_way/member_rel (−25 MB)
 
-## 3. iOS vertical slice
+## 3. iOS vertical slice — SKIPPED for now (2026-10-03, Martijn): finish Android end-to-end first
 - [ ] Inspect Mac (Xcode, toolchain)
 - [ ] xcframework: device arm64 + simulator arm64
 - [ ] Swift wrapper + XCTest on simulator (import, get, query)
@@ -51,9 +51,15 @@ against the repo before trusting it.
 - [x] Render offline in MapLibre Native Android 13.6.1 (`android/sample-app`, assets from `scripts/basemap-assets.sh`) on the Pixel 8 in airplane mode, no INTERNET permission; tiles, glyphs, sprites render, logcat clean (docs/screenshots/2026-10-03-basemap-z13.png, -z15.png). Fonts subset to 6 ranges: 1.7 MB. ACCESS_NETWORK_STATE is required (MapLibre's ConnectivityReceiver crashes without it). Debug APK 50 MB, both ABIs; arm64 share ~29 MB (libmaplibre 12.8, pmtiles 11.7, libosm_framework 3.9)
 
 ## 5. Area download lifecycle
-- [ ] Android: WorkManager submit/poll/download/cancel → staged import
+Target onboarding flow (Martijn, 2026-10-03): get location → offer to download area (raw OSM + PMTiles basemap) → retrieve both → usable offline. An area is Ready only when both parts are published.
+- [x] OSM data part: WorkManager + SliceOSM (`AreaManager`; protocol in Rust `src/slice.rs` behind `osm_framework_slice_*`). Live SliceOSM, downtown SLC 0.01°×0.006° on the Pixel 8: Ready in 3.6 s (submit 0.6 s, slicing 2.2 s, download 0.5 s, import 0.2 s; 15.9k nodes, 2.1 MB db)
+- [ ] Basemap part: on-device PMTiles extract for the area bbox via HTTP range requests against a configurable planet PMTiles URL (default Protomaps daily build for demos; production should mirror). Research done: no Rust crate does extract → proposed: own Rust extract (~500–800 lines, port of go-pmtiles extract.go), plan→fetch→assemble across the C ABI with the platform doing HTTP; source URL configurable, resolve latest Protomaps build for demos, document R2 mirror for production. GO 2026-10-03, with basemap **opt-in**: per-area BasemapSource = None (default) | Url(ready PMTiles from any online source) | Extract(planet URL, maxZoom). Rust extract core DONE (c1bc109: golden-identical to go-pmtiles; live SLC 40 req, 13.1 MB, 748 tiles, 2.3 s). Next: C ABI + JNI + AreaManager integration after the OSM-data agent finishes; resume-after-kill of a basemap download not built (separate slice)
+- [ ] Area = raw + basemap, combined state; area bbox from location: ~10×10 km box centred on the user by default (Martijn 2026-10-03), a caller parameter, never a hard cap — size must not be a bottleneck
+- [x] Android: WorkManager submit/poll/download/cancel → staged import. `AreaManagerTest` against a fake SliceOSM (happy path; 500s while polling → inline + WorkManager retry resuming the same job; cancel mid-download; corrupt PBF; 400 on submit) green on Pixel 8 and emulator
 - [ ] iOS: URLSession background equivalent
-- [ ] Kill/restart mid-download recovers; failed replace keeps old area
+- [x] Failed or cancelled replace keeps old area (tested: cancel mid-download, corrupt PBF)
+- [ ] Kill/restart mid-download recovers: the job checkpoint resume is tested through a WorkManager retry, not an actual process kill
+- [ ] Download follow-ups: `setForeground` (dataSync foreground service + notification) for big areas vs the 10 min run limit and Doze; byte-range resume of the PBF; an import already running when cancel arrives still publishes; Rust import staging dirs orphaned by a kill mid-import
 
 ## 6. Café reference app
 - [ ] Find nearby cafés, filter outdoor seating + opening hours (unknown stays unknown)

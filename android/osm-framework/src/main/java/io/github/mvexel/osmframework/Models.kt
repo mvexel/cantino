@@ -103,6 +103,11 @@ sealed interface OsmObject {
 /** A non-wrapping WGS84 rectangle in degrees. Split dateline-crossing areas into two. */
 data class Bbox(val west: Double, val south: Double, val east: Double, val north: Double) {
     internal fun toJson() = JSONObject().put("west", west).put("south", south).put("east", east).put("north", north)
+
+    internal companion object {
+        fun fromJson(json: JSONObject) =
+            Bbox(json.getDouble("west"), json.getDouble("south"), json.getDouble("east"), json.getDouble("north"))
+    }
 }
 
 /** Tag predicates match raw strings; a missing tag and an empty value are distinct. */
@@ -161,6 +166,11 @@ data class ImportOptions(
 data class Counts(val nodes: Long, val ways: Long, val relations: Long)
 
 data class ImportReport(val counts: Counts, val databaseBytes: Long) {
+    /** Same shape as the Rust report, so it round-trips through [fromJson]. */
+    internal fun toJson(): JSONObject = JSONObject()
+        .put("counts", JSONObject().put("nodes", counts.nodes).put("ways", counts.ways).put("relations", counts.relations))
+        .put("database_bytes", databaseBytes)
+
     internal companion object {
         fun fromJson(json: JSONObject) = ImportReport(
             json.getJSONObject("counts").let { Counts(it.getLong("nodes"), it.getLong("ways"), it.getLong("relations")) },

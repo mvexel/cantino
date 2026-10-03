@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Test APK only: AreaManagerTest talks plain HTTP to a fake SliceOSM server
+     on 127.0.0.1, which Android blocks by default. -->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <application android:usesCleartextTraffic="true" />
+</manifest>

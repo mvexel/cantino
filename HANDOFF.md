@@ -2,7 +2,7 @@
 
 Updated October 3, 2026. This document is for the next developer continuing the Android and iOS framework. Scope and boundaries are in `CLAUDE.md`, and progress is tracked in `TODO.md`.
 
-The core imports an OSM snapshot (PBF or XML) into a single read-only SQLite file, reopens it offline, and answers lookups, tag queries and bbox queries through indexes. One Rust library serves both platforms. Android works end to end on a Pixel 8 and an emulator. iOS, the offline basemap app, the download lifecycle and the café reference app are still to be built.
+The core imports an OSM snapshot (PBF or XML) into a single read-only SQLite file, reopens it offline, and answers lookups, tag queries and bbox queries through indexes. One Rust library serves both platforms. Android works end to end on a Pixel 8 and an emulator. iOS and the café reference app are still to be built; Android area downloads (OSM data) work end to end against SliceOSM.
 
 ## Product goals
 
@@ -86,6 +86,17 @@ cargo run --release --example offline -- get AREA.sqlite way 1
 
 The toolchain is pinned to Rust **1.99.0**. Neither Docker nor a C++ toolchain is needed: `rusqlite` compiles its bundled SQLite. Imports accept PBF and OSM XML. They reject non-ascending IDs, duplicates, deleted or invisible objects, history files and osmChange files.
 
+### Android area downloads
+
+`AreaManager` (Kotlin, `android/osm-framework`) runs the SliceOSM lifecycle in WorkManager: `download(areaId, bbox, name)` enqueues unique work per area (REPLACE), `cancel(areaId)`, `state(areaId): Flow<AreaState>`, `areaFile(areaId)`, `publishedArea(areaId)`. The protocol (request body, URLs, job-ID validation, progress) is in Rust (`src/slice.rs`, C ABI `osm_framework_slice_*`) so iOS reuses it; Kotlin does only HTTP (`HttpURLConnection`) and scheduling.
+
+- **Files:** published area `filesDir/osm-areas/<areaId>.sqlite` plus a `<areaId>.json` sidecar (SliceOSM snapshot timestamp, bbox, import report). Download staging and the job checkpoint live in `noBackupFilesDir/osm-area-downloads/<areaId>/`.
+- **Invariant:** the published file changes only through `OsmStore.importArea`'s atomic rename. Failures, cancellation and process death before that leave it intact. Open stores keep the old snapshot until reopened.
+- **Retries:** transient errors (IO, 5xx, 408, 429) retry inline, then through WorkManager backoff. A restarted run resumes polling its checkpointed job instead of resubmitting. Other 4xx and import failures are final. The PBF itself restarts from byte 0.
+- **Cancellation** is honored until the import starts; the native import is not interruptible.
+- **Tests:** `AreaManagerTest` uses a fake SliceOSM (MockWebServer 5.4.0; 5.5.0 needs compileSdk 37). The live test is skipped unless `-Pandroid.testInstrumentationRunnerArguments.live=true`; it logs per-state timings under the `AreaLive` tag.
+- The library manifest adds INTERNET and ACCESS_NETWORK_STATE; WorkManager adds WAKE_LOCK, RECEIVE_BOOT_COMPLETED and FOREGROUND_SERVICE. The sample app still removes INTERNET.
+
 ### Android
 
 ```sh
@@ -124,4 +135,4 @@ The Kotlin API is `OsmStore` (open, importArea, get, query, close) with typed mo
 - **Peak memory during import is about 156 MB above the runtime.** The importer holds node coordinates, node→way pairs and tag rows in memory, which grows with area size. Chunked writes would reduce this. Dropping the unused `node_way` and `member_rel` tables would save about 25 MB of file.
 - **Query cost through the AAR is dominated by JNI and JSON** (about 0.08 ms per object). A binary or batched wire format is the lever if this matters.
 - Fonts for the basemap are 14 MB for three stacks; subset them to the ranges needed.
-- Pending phases are tracked in `TODO.md`: iOS slice, offline basemap rendering, the download lifecycle, and the café reference app.
+- Pending phases are tracked in `TODO.md`: iOS slice, basemap download, the iOS download lifecycle, and the café reference app.

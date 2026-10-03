@@ -200,3 +200,90 @@ pub unsafe extern "C" fn osm_framework_import(
         unsafe { output(out, &report) }
     })
 }
+
+// SliceOSM protocol helpers. These are pure functions (no I/O, no handles, no
+// thread confinement): the platform adapter performs HTTP itself and asks the
+// core how to build requests and how to read responses, so the protocol is
+// implemented once for Android and iOS. `base` may be NULL for the public
+// service; otherwise it is an http(s) base URL such as a local test server.
+
+fn slice_service(base: *const c_char) -> Result<slice::Service> {
+    if base.is_null() {
+        Ok(slice::Service::default())
+    } else {
+        slice::Service::new(unsafe { text(base)? })
+    }
+}
+
+/// Writes `{"url": submit URL, "body": JSON text to POST}`.
+///
+/// # Safety
+/// `base` is NULL or a live UTF-8 string; `bbox` (`{"west","south","east","north"}`)
+/// and `name` are live UTF-8 strings; output slots obey the header contract.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn osm_framework_slice_job_request(
+    base: *const c_char,
+    bbox: *const c_char,
+    name: *const c_char,
+    out: *mut *mut c_char,
+    error: *mut *mut c_char,
+) -> i32 {
+    if !out.is_null() {
+        unsafe {
+            *out = std::ptr::null_mut();
+        }
+    }
+    protect(error, || {
+        let service = slice_service(base)?;
+        let bbox: Bbox = serde_json::from_str(unsafe { text(bbox)? })?;
+        let request = slice::job_request(&service, unsafe { text(name)? }, bbox)?;
+        unsafe { output(out, &request) }
+    })
+}
+
+/// Parses a submit response body (the job UUID) and writes
+/// `{"job_id","status_url","download_url"}`. Also used to re-derive the URLs
+/// of a job ID the adapter persisted, since the ID is re-validated here.
+///
+/// # Safety
+/// As for `osm_framework_slice_job_request`.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn osm_framework_slice_job(
+    base: *const c_char,
+    response: *const c_char,
+    out: *mut *mut c_char,
+    error: *mut *mut c_char,
+) -> i32 {
+    if !out.is_null() {
+        unsafe {
+            *out = std::ptr::null_mut();
+        }
+    }
+    protect(error, || {
+        let service = slice_service(base)?;
+        let urls = slice::job_urls(&service, unsafe { text(response)? })?;
+        unsafe { output(out, &urls) }
+    })
+}
+
+/// Reads a job status document and writes
+/// `{"complete":bool,"fraction":0..1|null,"size_bytes":n|null,"timestamp":"..."|null}`.
+///
+/// # Safety
+/// `status` is a live UTF-8 string; output slots obey the header contract.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn osm_framework_slice_progress(
+    status: *const c_char,
+    out: *mut *mut c_char,
+    error: *mut *mut c_char,
+) -> i32 {
+    if !out.is_null() {
+        unsafe {
+            *out = std::ptr::null_mut();
+        }
+    }
+    protect(error, || {
+        let progress: slice::Progress = serde_json::from_str(unsafe { text(status)? })?;
+        unsafe { output(out, &progress.summary()) }
+    })
+}
