@@ -31,11 +31,13 @@ against the repo before trusting it.
 - [x] Pre-baked download format proposal: `docs/research/2026-10-03-prebaked-dataset-format.md` (parked)
 
 ## 2b. Migrate core to SQLite (variant B)
-- [ ] Port `spike/sqlite-b` into `src/` behind the existing Rust API (Store, import_area, Query, get, dependencies, way_coordinates), atomic staged publish kept
-- [ ] Remove OSMExpress: submodule, `src/ffi.rs`, build.rs native linking, Docker native build; C ABI + JNI unchanged
-- [ ] Rust integration tests green (adapt OSMExpress-specific ones); Clippy; ABI smoke
-- [ ] Android instrumented tests + city bench green on Pixel 8 and emulator through the AAR
-- [ ] Update HANDOFF/CLAUDE.md; archive the OSMExpress fork notes
+- [x] Port `spike/sqlite-b` into `src/` behind the existing Rust API (Store, import_area, Query, get, dependencies, way_coordinates), atomic staged publish kept
+- [x] Remove OSMExpress: submodule, `src/ffi.rs`, build.rs native linking, Docker native build; C ABI + JNI unchanged
+- [x] Rust integration tests green (adapt OSMExpress-specific ones); Clippy; ABI smoke
+- [x] Android instrumented tests + city bench green on Pixel 8 and emulator through the AAR
+- [x] Update HANDOFF/CLAUDE.md; archive the OSMExpress fork notes
+
+- [ ] Follow-ups from migration: in-app import 8.2 s vs 5.7 s plain binary (cause unknown); import peak memory grows with area (chunk writes); JNI+JSON ≈ 0.08 ms/object; decide whether to drop unused node_way/member_rel (−25 MB)
 
 ## 3. iOS vertical slice
 - [ ] Inspect Mac (Xcode, toolchain)
@@ -43,8 +45,10 @@ against the repo before trusting it.
 - [ ] Swift wrapper + XCTest on simulator (import, get, query)
 
 ## 4. Basemap
-- [ ] Decision record: separate PMTiles basemap for the area bbox
-- [ ] 2h spike: obtain bbox PMTiles extract, render offline in MapLibre Native
+- [x] Decision record: separate PMTiles basemap for the area bbox (CLAUDE.md scope)
+- [x] Obtain extract: `pmtiles extract` (go-pmtiles 1.31.2) from build.protomaps.com/20261002.pmtiles, SLC bbox z0–15 → 12 MB, 748 tiles (work/basemap, not committed)
+- [x] Offline style: @protomaps/basemaps 5.7.2 light flavor, glyphs/sprites as asset:// (fonts 14 MB for 3 stacks — subset to Latin ranges later)
+- [ ] Render offline in MapLibre Native Android 13.6.1 (sample app module) in airplane mode — waits for 2b migration (both touch android/)
 
 ## 5. Area download lifecycle
 - [ ] Android: WorkManager submit/poll/download/cancel → staged import

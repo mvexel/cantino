@@ -28,10 +28,16 @@ def call(function, *args):
         lib.osm_framework_free(error)
 
 with tempfile.TemporaryDirectory() as directory:
-    area = str(pathlib.Path(directory)/'area.osmx').encode()
+    area = str(pathlib.Path(directory)/'area.sqlite').encode()
     fixture = pathlib.Path(__file__).resolve().parent.parent/'tests/fixtures/snapshot.osm'
+    # Default options (NULL): untagged nodes keep no metadata.
     _, report = call(lib.osm_framework_import,str(fixture).encode(),area,None)
     assert report['counts'] == {'nodes':4,'ways':2,'relations':1}
+    # Options JSON from older callers carries fields that no longer exist;
+    # they must be ignored. This import replaces the area above.
+    options = b'{"map_size":1073741824,"sort_pairs":3,"preserve_untagged_metadata":true}'
+    _, report = call(lib.osm_framework_import,str(fixture).encode(),area,options)
+    assert report['database_bytes'] > 0
     handle, error = ptr(), ptr()
     assert lib.osm_framework_open(area,c.byref(handle),c.byref(error)) == 0
     assert not error.value

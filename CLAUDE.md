@@ -7,8 +7,8 @@ Background, evidence and build instructions: `HANDOFF.md`.
 
 ## In scope (current milestone: read-only)
 
-- Import a SliceOSM PBF extract into an OSMExpress database, publish atomically.
-- Lookup by ID, tag queries, bbox spatial candidates, dependency reporting.
+- Import a SliceOSM PBF (or OSM XML) extract into a SQLite area file, publish atomically.
+- Lookup by ID, index-backed tag queries, bbox spatial candidates, dependency reporting.
 - Android (JNI + Kotlin, AAR) and iOS (xcframework + Swift) adapters.
 - Area download lifecycle: submit, poll, download, cancel, staged import.
   One area per app. Refresh = full replace.
@@ -43,9 +43,10 @@ Phases, in order. Progress is tracked in `TODO.md` (no GitHub board):
 
 ## Working rules
 
-- Preserve OSMExpress naming, style and storage format; fork changes stay
-  limited to embedding/mobile needs (`vendor/OSMExpress`, branch `mobile-core`).
-- Rust: rustfmt, `cargo clippy --all-targets -- -D warnings`, toolchain 1.99.0.
+- Storage format is documented in `src/schema.rs` / `src/encoding.rs`; bump
+  `FORMAT_VERSION` on any incompatible change.
+- Rust: toolchain 1.99.0; `scripts/check.sh` (fmt, clippy -D warnings, tests,
+  C ABI smoke) must pass.
 - Liberal explanatory comments on ownership, transactions and invariants.
 - `work/sqlite-prototype` is parked. Do not resume it.
 - Spatial results are candidates; never advertise exact intersection.

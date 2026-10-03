@@ -10,13 +10,13 @@ class OsmFrameworkException(message: String, cause: Throwable? = null) :
 /**
  * An open offline area database.
  *
- * Thread confinement: LMDB read transactions and the Rust handle belong to the
- * thread that called [open]. Every call, including [close], must run on that
- * same thread; the core rejects calls from other threads with an error rather
- * than corrupting state. Use one dedicated worker thread per store.
+ * Thread confinement: the Rust handle (one read-only SQLite connection) belongs
+ * to the thread that called [open]. Every call, including [close], must run on
+ * that same thread; the core rejects calls from other threads with an error
+ * rather than corrupting state. Use one dedicated worker thread per store.
  *
- * Only one store may be open per database path in a process (an LMDB rule);
- * reuse the open store instead of opening one per query.
+ * Several stores may open the same area, but [open] loads dictionaries, so
+ * reuse an open store instead of opening one per query.
  *
  * Returned objects own copies of their data and outlive the store.
  */

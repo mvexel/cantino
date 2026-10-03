@@ -28,7 +28,7 @@ data class OsmId(val kind: OsmKind, val id: Long) {
 }
 
 /**
- * OSMExpress stores absent source fields as zero/empty, so a zero here may mean
+ * Absent source fields are stored as zero/empty, so a zero here may mean
  * "unknown" rather than a real value. Timestamp is Unix seconds.
  */
 data class Metadata(
@@ -42,7 +42,7 @@ data class Metadata(
 sealed interface OsmObject {
     val id: OsmId
     val tags: Map<String, String>
-    /** Null when the database has no metadata for this object (legacy untagged nodes). */
+    /** Null for untagged nodes imported without [ImportOptions.preserveUntaggedMetadata]. */
     val metadata: Metadata?
 
     /** Coordinates in 1e-7 degrees, matching storage without float drift. */
@@ -117,10 +117,14 @@ sealed interface TagFilter {
 }
 
 /**
- * All [tags] filters must match. A [bbox] selects spatial *candidates*: ways or
- * relations crossing the box without a member node inside it can be omitted.
- * Results are ordered by kind then ID; pass the last result's id as [after] to
- * fetch the next page. [maxCandidates] bounds spatial work per namespace.
+ * All [tags] filters must match. A [bbox] selects *candidates*: tagged nodes
+ * match exactly (point inside the box), ways and relations match when their
+ * bounding box intersects it, so a way crossing the box without a node inside
+ * is included, and one bending around the box can be too. Untagged nodes are
+ * never returned by a bbox query. Results are ordered by kind then ID; pass the
+ * last result's id as [after] to fetch the next page. [maxCandidates] bounds
+ * the spatial candidates a bbox-driven query collects (all kinds together);
+ * exceeding it is an error, never a silent truncation.
  */
 data class Query(
     val tags: List<TagFilter> = emptyList(),
@@ -139,18 +143,18 @@ data class Query(
 }
 
 /**
- * [mapSize] reserves virtual address space, not RAM; a full map fails the
- * import cleanly. [sortPairs] bounds each of five external sorters (16 bytes per pair).
+ * [preserveUntaggedMetadata] keeps version/timestamp/changeset/user for untagged
+ * nodes too; by default they read back with null [OsmObject.metadata] and only
+ * [OsmObject.Node.locationVersion]. [cacheMb] is SQLite's page cache during
+ * import (resident memory, not a hard cap on the import's total memory).
  */
 data class ImportOptions(
-    val mapSize: Long = 1L shl 30,
-    val sortPairs: Int = 65_536,
-    val preserveUntaggedMetadata: Boolean = true,
+    val preserveUntaggedMetadata: Boolean = false,
+    val cacheMb: Int = 16,
 ) {
     internal fun toJson(): String = JSONObject()
-        .put("map_size", mapSize)
-        .put("sort_pairs", sortPairs)
         .put("preserve_untagged_metadata", preserveUntaggedMetadata)
+        .put("cache_mb", cacheMb)
         .toString()
 }
 

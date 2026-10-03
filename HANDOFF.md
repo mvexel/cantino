@@ -1,151 +1,127 @@
 # Offline OSM mobile framework handoff
 
-Updated October 3, 2026. This document helps the next developer continue the Android and iOS framework from the first implemented data-core pass. The core now imports OSM data into an OSMExpress database, reopens it offline, returns raw objects, and supports tag queries and spatial candidates. Linux behavior is tested and Android arm64 libraries compile. A phone application, iOS validation, and offline map rendering remain to be built.
+Updated October 3, 2026. This document is for the next developer continuing the Android and iOS framework. Scope and boundaries are in `CLAUDE.md`, and progress is tracked in `TODO.md`.
+
+The core imports an OSM snapshot (PBF or XML) into a single read-only SQLite file, reopens it offline, and answers lookups, tag queries and bbox queries through indexes. One Rust library serves both platforms. Android works end to end on a Pixel 8 and an emulator. iOS, the offline basemap app, the download lifecycle and the café reference app are still to be built.
 
 ## Product goals
 
-Build a headless native framework for app makers who need OpenStreetMap data while offline. Android and iOS share a Rust core. Applications define their download area, obtain live extracts from SliceOSM, retain raw OSM graph data, and eventually display an offline basemap through MapLibre Native.
+The framework is a headless native framework for app makers who need OpenStreetMap data while offline. Applications define their download area and obtain live extracts from SliceOSM. The framework retains the raw OSM graph and displays an offline basemap: a separate PMTiles extract rendered with MapLibre Native.
 
-The reference application finds cafés in an app-defined city area. The intended acceptance scenario is to download the area, restart in airplane mode, display the basemap, find nearby cafés, filter outdoor seating and opening hours, and inspect the complete tags and underlying objects. Missing opening-hours information must remain unknown. Café policy and opening-hours interpretation belong above the general data core.
+The reference application finds cafés in a city area. The acceptance scenario has these steps:
 
-Read-only data access is the current milestone. Offline edit batches, upload synchronization, conflict handling, refresh, overlapping areas, and country-scale operation are later milestones. Map styling is controlled by app developers against a documented source schema; raw OSM PBF cannot be passed directly to MapLibre as vector tiles.
+- download the area
+- restart in airplane mode
+- display the basemap
+- find nearby cafés
+- filter by outdoor seating and opening hours
+- inspect the full tags and the underlying objects
 
-## Decisions and working style
+Missing opening hours stay unknown. Café policy and opening-hours interpretation belong above the data core.
 
-The user authorized assistant implementation and requested liberal explanatory comments. Preserve OSMExpress's C++ naming, indentation, storage format and general implementation approach. Keep changes to that fork focused on embedding and mobile needs. Rust follows idiomatic Rust conventions and rustfmt. Explain ownership, transactions, invariants and uncertain guarantees in comments and documentation.
+Read-only data access is the current milestone. Edits, upload, conflicts, refresh, overlapping areas and country scale come later.
 
-OSMExpress is the selected backend for this first pass. Its LMDB tables store coordinates, Cap'n Proto object payloads, S2 node cells and reverse references. The Rust framework handles API ownership, query composition, dependency reporting and area publication. The earlier SQLite draft is parked under `work/sqlite-prototype` and is outside the compiled library; do not accidentally resume that implementation.
+## Storage decision (2026-10-03)
 
-## Repositories and locations
+**The SQLite store replaced OSMExpress.** The first backend was OSMExpress (LMDB) behind a fork. On a Pixel 8 with a Salt Lake City extract (13 MB PBF, 1.44M nodes) it produced a 338 MB database and 425 MB peak memory, and a tag query took 32.6 s at p95. Two SQLite schemas were then spiked side by side, and variant B won. The evidence is in `docs/bench/`, and the spike code is in `spike/` (variant A stopped unfinished).
 
-| Component | Location and revision |
-| --- | --- |
-| Upstream OSMExpress | https://github.com/bdon/OSMExpress |
-| User's fork | https://github.com/mvexel/OSMExpress |
-| Fork implementation branch | `mobile-core`, commit `1e10945` (local until pushed) |
-| Upstream starting revision | `045a515132e91a3679ce3df27329937c9b8b221a` |
-| Working fork checkout | `/home/mvexel/Documents/Codex/2026-10-03/can-x20/outputs/OSMExpress` |
-| Rust framework checkout | `/home/mvexel/Documents/Codex/2026-10-03/i-want-to-build-a-framework/outputs/osm-framework` |
-| Framework backend dependency | `vendor/OSMExpress`, a Git submodule pinned to the fork commit above |
-| Earlier requirements and lessons | Sibling `../tutorial` directory |
+| Pixel 8, Salt Lake City | OSMExpress | SQLite core, through the AAR |
+| --- | --- | --- |
+| Database | 338 MB | 128.5 MB (9.8× the PBF) |
+| Import | 5.0 s | 8.2 s (5.7 s as a plain binary) |
+| Peak memory (VmHWM, includes about 126 MB of test runtime) | 425 MB | 282 MB |
+| Tag query p95 (175 cafés) | 32,600 ms | 22 ms (the Rust core alone takes 3–4 ms; the rest is JNI, JSON and Kotlin decoding) |
+| Bbox + tag query p95 | 350 ms | 3.7 ms |
 
-The fork branch has been pushed. The framework is a separate local repository and has no GitHub remote configured. No upstream PR has been opened. The submodule pins an exact backend commit; its configured tracking branch is `mobile-core`, but ordinary submodule checkout uses the pinned commit.
+OSMExpress is gone from the build. The fork `mvexel/OSMExpress` branch `mobile-core` (commit `1e10945`) is kept for reference. It contains an upstreamable fix for UB in its `CHECK_LMDB` macro (commit `978f265`). That bug was found because the Android run returned not-found for every lookup, even though Linux happened to work. The lesson: native warnings are not noise, and on-device tests catch bugs that desktop tests miss.
+
+The parked server-side option is pre-baked area files for download. Its format proposal is in `docs/research/2026-10-03-prebaked-dataset-format.md`: ship the zstd-compressed SQLite file with a signed manifest.
 
 ## Architecture
 
 ```text
-Android Kotlin adapter                 iOS Swift adapter
-               \                         /
-                Rust framework C ABI
-                  owned JSON buffers
-                          |
-                    Rust data core
-                          |
-                   OSMExpress C ABI
-                          |
-             LMDB / Cap'n Proto / S2
+Android Kotlin (OsmStore, Models.kt)        iOS Swift (pending)
+        |  JNI (src/android.rs)                |  C header
+        +-------- C ABI: include/osm_framework.h, owned JSON buffers --------+
+                                   |
+                          Rust core (src/)
+                 import.rs  input.rs  store.rs  encoding.rs
+                                   |
+                  SQLite (rusqlite, bundled, R-tree enabled)
 ```
 
-The platform adapters are pending. Both C headers have explicit handle and buffer ownership. A Store belongs to one worker thread, and returned Rust objects own their strings and references. The framework rejects a second Store for the same canonical path because LMDB forbids opening an environment twice in a process. Reuse the existing Store rather than opening one per query.
+The area format is documented in `src/schema.rs`:
 
-The Rust API is usable directly by desktop test harnesses. `include/osm_framework.h` exposes open, import, get, query, close and free calls for platform adapters. Objects and query results cross the boundary as UTF-8 JSON. Native and Rust errors become status codes; neither boundary intentionally unwinds into the caller. Free a framework buffer with `osm_framework_free`; free a backend buffer with `osmx_free`. These allocators are separate contracts.
+- **Objects:** one row per object with compact blobs. Way references are delta-zigzag varints, and tag keys and roles are interned.
+- **Indexes:** `tag_index(k, v, kind, id)`, an `rtree_i32` `geo` table, and the reverse-reference tables `node_way` and `member_rel`.
+- **Identification:** the file header carries an `application_id` and a format version.
+- **Import:** writes one transaction, builds indexes after loading, and compacts with `VACUUM INTO`. It is staged in a private sibling directory, synced, and published by atomic rename, so a failure leaves any existing area intact.
 
-## Implemented behavior
+Ownership and threading:
 
-| Capability | Current behavior |
+- A Store is one read-only connection that belongs to its creating thread.
+- The C ABI checks the calling thread and returns an error instead of misbehaving. Several Stores may open the same file.
+- Errors and panics become status codes and never unwind into the caller.
+- Free framework buffers with `osm_framework_free`.
+
+## Query semantics
+
+| Query | Behavior |
 | --- | --- |
-| Raw object model | Typed node, way and relation IDs; raw tags; integer coordinates; ordered way nodes; member kinds, roles and repeated references |
-| Metadata | Framework imports retain payloads for untagged nodes; existing upstream files may lack those payloads |
-| Import | Synchronous PBF/XML import through libosmium and OSMExpress into a private sibling staging directory |
-| Publication | Validate the completed database, sync it and publish by atomic rename; failures leave an existing area intact |
-| Lookup and scans | Owned objects by ID and bounded ID-ordered namespace scans |
-| General tag queries | ANDed existence/equality predicates, stable kind/ID order and keyset pagination |
-| Spatial selection | Bounded S2 node-cell candidates and parent ways/relations; point results receive an exact bbox filter |
-| Dependency reporting | Missing references retain their positions; recursive traversal has a visited set and object budget |
-| Geometry support | Ordered optional coordinates for a way; missing nodes remain explicit gaps |
-| SliceOSM protocol | Validated bbox request body, UUID/status/download URLs and progress decoding; platform HTTP scheduling is pending |
-| Mobile interface | Rust and backend C APIs with owned JSON results and explicit cleanup |
-
-Replacing an area does not alter an already-open Store's snapshot. Drop the old Store and reopen the destination to use the replacement. Index construction spans several transactions, so an incomplete staging database must never be presented as an active area.
+| Tags | ANDed `Equals` and `Exists` filters, driven from `tag_index` by the most selective filter. No full scans. A query plan test enforces this |
+| Bbox | Nodes use an exact point-in-box test. Ways and relations match when their bounds intersect the box, so a way that crosses the box with no node inside it is included. A way that bends around the box may also be included: bounds are a candidate filter, not exact geometry |
+| Bbox on untagged nodes | **Untagged nodes (way vertices) are not spatially indexed**, so a bbox query never returns them. Reach them through their ways |
+| Bounds at the edge | Bounds cover only the members present in the extract, so objects clipped at the area edge get smaller boxes |
+| Ordering and paging | Results are ordered nodes → ways → relations, then by ID. Keyset pagination uses `after` |
+| Metadata | Untagged nodes store only their version by default, so `metadata` is null and `location_version` is set. `preserve_untagged_metadata` keeps full metadata, at a large size cost |
 
 ## Build and test
 
-The Rust project pins toolchain **1.99.0**. Linux native builds require Docker, Git and Python 3. Initialize the backend and its S2 submodule:
-
 ```sh
-git submodule update --init --recursive
-scripts/build-native.sh
+scripts/check.sh            # fmt, clippy -D warnings, cargo test, C ABI smoke via ctypes
+cargo run --release --example offline -- import INPUT.osm.pbf AREA.sqlite
+cargo run --release --example offline -- cafes AREA.sqlite
+cargo run --release --example offline -- get AREA.sqlite way 1
 ```
 
-This builds the native library in a Debian container, then builds Rust, runs its integration tests and Clippy, and exercises both C interfaces. Native artifacts go into `vendor/OSMExpress/build-linux/artifacts`; Cargo uses that directory by default. Set `OSMX_LIB_DIR` to use an existing native build, or `OSMX_SOURCE_DIR` when running the scripts to use another backend checkout.
+The toolchain is pinned to Rust **1.99.0**. Neither Docker nor a C++ toolchain is needed: `rusqlite` compiles its bundled SQLite. Imports accept PBF and OSM XML. They reject non-ascending IDs, duplicates, deleted or invisible objects, history files and osmChange files.
 
-The desktop harness exercises the same core:
-
-```sh
-cargo run --example offline -- import INPUT.osm.pbf AREA.osmx
-cargo run --example offline -- cafes AREA.osmx
-```
-
-Imports require current snapshot objects with positive IDs in ascending order within each namespace. Duplicate IDs, duplicate tag keys, deleted objects and history input are rejected. There is no built-in input sorting or `.osc` refresh importer in the framework.
-
-### Android build
-
-The verified compilation target is **arm64-v8a, Android API 26, NDK r29**. Install the Rust target for the pinned toolchain, set the NDK location, and run:
+### Android
 
 ```sh
-rustup target add aarch64-linux-android --toolchain 1.99.0
-export ANDROID_NDK_ROOT=/path/to/android-ndk-r29
-scripts/build-android.sh
-```
-
-The local NDK used in this session is under `/home/mvexel/Documents/Codex/2026-10-03/can-x20/work/android/android-ndk-r29`. The script cross-compiles the native dependencies and Rust library. The phone package needs all three shared libraries from `target/android/arm64-v8a`: `libosm_framework.so`, `libosmx-mobile.so`, and `libc++_shared.so`. The C header is `include/osm_framework.h`. `scripts/build-android.sh` now builds **arm64-v8a and x86_64** (pass ABIs as arguments to limit it) into `target/android/<ABI>/`.
-
-The Android library lives in `android/` (Gradle 9.8 wrapper, AGP 9.4.1, compileSdk 36, minSdk 26). The JDK is pinned in `mise.toml`, because the system Java 25 is a runtime only. The JNI exports are in `src/android.rs` and wrap the same C ABI, so the thread checks and panic containment are shared with iOS. The Kotlin API is `OsmStore` (open/importArea/get/query/close) with typed models in `Models.kt` (`OsmObject`, `OsmId`, `Query`, `TagFilter`, `Bbox`, `ImportOptions`, `ImportReport`). JSON is only the wire format across JNI. `./gradlew :osm-framework:publishReleasePublicationToLocalRepository` writes a stripped AAR (6.3 MB, both ABIs) to `android/build/repo`. The NDK used is the SDK-managed `~/Android/Sdk/ndk/29.0.14206865`, which `build-android.sh` now defaults to. Run the instrumented tests with:
-
-```sh
+rustup target add aarch64-linux-android x86_64-linux-android --toolchain 1.99.0
+scripts/build-android.sh    # → target/android/{arm64-v8a,x86_64}/libosm_framework.so
 cd android && mise exec -- ./gradlew :osm-framework:connectedDebugAndroidTest
+mise exec -- ./gradlew :osm-framework:publishReleasePublicationToLocalRepository  # AAR → android/build/repo
+ANDROID_SERIAL=<device> scripts/bench-android.sh CITY.osm.pbf                   # city benchmark JSON
 ```
 
-The local SDK is at `~/Android/Sdk`, with the AVD `osmfw-x86_64` (API 35).
+Local setup:
 
-On 2026-10-03 the instrumented tests (import, get, query, Unicode round-trip, malformed-query recovery, rejection of calls from another thread, closed store) passed on a **Pixel 8 (Android 17, arm64)** and the **x86_64 emulator**. iOS needs a Mac/Xcode build and runtime proof; access to a Mac was confirmed earlier, but that machine has not been inspected.
+- **SDK:** `~/Android/Sdk`, with NDK `29.0.14206865` (SDK-managed, also used by Gradle to strip libraries). The emulator image is AVD `osmfw-x86_64` (API 35).
+- **JDK:** pinned in `mise.toml`, because the system Java 25 has no `javac`.
+- **Build:** Gradle 9.8 wrapper and AGP 9.4.1, with compileSdk 36 and minSdk 26.
 
-## Verification evidence
+The Kotlin API is `OsmStore` (open, importArea, get, query, close) with typed models in `Models.kt`. JSON is only the wire format across JNI. The library depends only on libc, libm and libdl.
 
-- **13 Rust integration tests pass**, including metadata preservation, Unicode tags, ordered references, missing dependencies, spatial budgets, pagination, cyclic relations, failed imports, successful replacement, duplicate/deleted input rejection and SliceOSM request validation.
-- `cargo fmt --check` and `cargo clippy --all-targets -- -D warnings` are the required Rust checks.
-- The backend C API smoke test forces `MDB_MAP_FULL` and checks that errors return without killing the process. Invalid arguments also return recoverable errors.
-- A foreign runtime calls the Rust mobile C API through Python ctypes: import, open, lookup, query, malformed-query recovery, close and buffer freeing pass.
-- The optional native CLI compatibility harness passes import, node/way/relation lookup, extract, PBF re-import and `.osc` update checks. Updates are tested for upstream compatibility but are not exposed by the framework API.
-- A live SliceOSM request for a small Salt Lake City rectangle returned a **90,034-byte PBF**, with snapshot timestamp **2026-10-03T18:44:47Z**. The core imported **4,490 nodes, 527 ways and 53 relations** into a **1,900,544-byte database**, reopened it and found a café through `amenity=cafe`.
+`CityBenchmark` reports an `AssumptionViolatedException` when no PBF is passed. That's expected: it is skipped, not broken.
 
-The live request and database are scratch evidence under the continuation chat's `work/live-smoke` directory. They are not a city benchmark or a stable test fixture. The first OSMExpress assessment's pinned-container probe is in that chat's `outputs/osmx-evaluation`; its binary image and the inspected source revision were separate evidence. The current tests compile the fork itself.
+## Verification evidence (2026-10-03)
 
-Native builds emit warnings from upstream/libosmium and the pinned S2 headers. The compilation succeeds. Those warnings have not been eliminated through broad upstream code changes.
+- 17 Rust integration tests and 2 unit tests pass, along with Clippy, rustfmt and the ctypes C ABI smoke test. The tests also check that XML and PBF imports produce identical objects and that a way crossing the box without inner nodes is returned.
+- Six Android instrumented tests pass on a Pixel 8 (Android 17) and an x86_64 emulator (Android 15). They cover:
+  - import, get and query
+  - a Unicode round-trip across JNI
+  - pagination and bbox
+  - an invalid query leaving the store usable
+  - thread confinement and a closed store
+  - untagged-node metadata
+- The Salt Lake City numbers above are on the Pixel. All café counts (175 total, 15 downtown) match between backends.
 
-### Lesson: native warnings are not noise
+## Risks and open work
 
-The first run on Android found a real bug. Every `get` returned not-found because the fork's recoverable `CHECK_LMDB` macro declared `int retval = (x)`, and call sites pass their own `retval`. The result is a self-initialized variable, which is undefined behavior. Linux happened to work. Clang `-O3` for Android dropped the success path. The fix is fork commit `978f265`. Linux tests cannot catch this class of bug, so the Android instrumented tests are its regression test.
-
-## Limits and open work
-
-**Spatial results are candidates.** OSMExpress indexes nodes in S2 cells and follows reverse references. A way crossing a box with both endpoints outside selected cells can be omitted, and a polygon containing the box without selected member nodes can also be omitted. Relation selection follows the same graph semantics. Do not advertise exact geometry intersection, complete spatial coverage, or automatic recursive extraction completeness.
-
-**Tags are currently scanned.** Tag-only queries stream bounded pages instead of using a global tag index. Country-wide queries can be slow. Pagination limits returned results, not total scan work. The spatial candidate budget is per namespace.
-
-**Memory budgets are partial.** The default map size is 1 GiB of virtual address space. Each of five sorters holds at most 65,536 pairs, totaling roughly 5 MiB for the pair arrays. PBF buffers, object transactions, merge state, JSON conversion and other allocations add memory. Peak resident memory and phone import latency have not been measured. Very small sorter budgets can create many merge runs. Country-scale import needs further work and measurement.
-
-**The source format has limits.** Coordinates use OSMExpress/libosmium's 10⁻⁷-degree precision; arbitrary nanodegree PBF precision is not preserved. The unchanged OSMExpress schema encodes absent metadata fields as zero or empty values; it cannot recover their original presence. Legacy untagged nodes expose null metadata and their location version. New imports can retain available metadata, but cannot restore information already omitted by a downloaded extract.
-
-**Maps and editing are pending.** There is no multipolygon assembly, vector tile generation, rendering source schema, MapLibre integration, café reference UI, opening-hours interpreter, edit journal, uploader, or conflict resolution. The SliceOSM module describes the job protocol; the platform still must submit requests, poll, download, manage cancellation and call staged import.
-
-## Next implementation steps
-
-1. ~~Minimal Android adapter on device.~~ Done 2026-10-03 (see above).
-2. Measure a real city extract on that phone: download size, database size, peak memory, import time and query latency. Tune import and query budgets from those results.
-3. Build the same native backend and Rust ABI on the available Mac, then prove Swift lookup on an iOS simulator/device.
-4. Add area download state and background lifecycle around the SliceOSM protocol. Define cancellation, refresh and overlapping-area policies before implementing them.
-5. Define geometry and rendering semantics, including incomplete references, relation cycles, multipolygons and a documented vector-tile schema. Integrate MapLibre Native.
-6. Build the offline café acceptance scenario. Add edits and synchronization afterward as separate layers with their own data and failure contracts.
-
-Keep the fork small and consider upstreaming general embedding fixes. Pin new backend revisions deliberately, rerun the compatibility and framework checks, and update this handoff when evidence changes a decision.
+- **Import inside the app is about 45% slower than the plain binary** (8.2 s vs 5.7 s on the same phone). The cause is unconfirmed; app-storage encryption and the write amplification from `VACUUM INTO` are suspects.
+- **Peak memory during import is about 156 MB above the runtime.** The importer holds node coordinates, node→way pairs and tag rows in memory, which grows with area size. Chunked writes would reduce this. Dropping the unused `node_way` and `member_rel` tables would save about 25 MB of file.
+- **Query cost through the AAR is dominated by JNI and JSON** (about 0.08 ms per object). A binary or batched wire format is the lever if this matters.
+- Fonts for the basemap are 14 MB for three stacks; subset them to the ranges needed.
+- Pending phases are tracked in `TODO.md`: iOS slice, offline basemap rendering, the download lifecycle, and the café reference app.

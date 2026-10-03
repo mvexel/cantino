@@ -25,9 +25,9 @@ class OsmStoreTest {
         val directory = File(target.cacheDir, "osm-test-${System.nanoTime()}").apply { mkdirs() }
         val input = File(directory, "snapshot.osm")
         context.assets.open("snapshot.osm").use { source -> input.outputStream().use { source.copyTo(it) } }
-        val area = File(directory, "area.osmx")
-        // Three pairs per run exercises the external merge sorter on device too.
-        val report = OsmStore.importArea(input.path, area.path, ImportOptions(sortPairs = 3))
+        val area = File(directory, "area.sqlite")
+        // Keep untagged-node metadata so node 1's metadata can be checked.
+        val report = OsmStore.importArea(input.path, area.path, ImportOptions(preserveUntaggedMetadata = true))
         assertEquals(Counts(4, 2, 1), report.counts)
         assertTrue(report.databaseBytes > 0)
         return area
@@ -68,6 +68,21 @@ class OsmStoreTest {
     }
 
     @Test
+    fun untaggedNodesHaveNoMetadataByDefault() = onWorker {
+        val directory = File(target.cacheDir, "osm-test-${System.nanoTime()}").apply { mkdirs() }
+        val input = File(directory, "snapshot.osm")
+        context.assets.open("snapshot.osm").use { source -> input.outputStream().use { source.copyTo(it) } }
+        val area = File(directory, "area.sqlite")
+        OsmStore.importArea(input.path, area.path)
+        OsmStore.open(area.path).use { store ->
+            val vertex = store.get(OsmId(OsmKind.NODE, 1)) as OsmObject.Node
+            assertNull(vertex.metadata)
+            assertEquals(3, vertex.locationVersion)
+            assertEquals(124L, store.get(OsmId(OsmKind.NODE, 2))!!.metadata!!.changeset)
+        }
+    }
+
+    @Test
     fun paginationAndBbox() = onWorker {
         OsmStore.open(importFixture().path).use { store ->
             val highways = Query(tags = listOf(TagFilter.Exists("highway")), limit = 1)
@@ -80,6 +95,9 @@ class OsmStoreTest {
             val inBox = store.query(Query(bbox = box)).map { it.id }
             assertTrue(OsmId(OsmKind.NODE, 2) in inBox)
             assertTrue(OsmId(OsmKind.NODE, 1) !in inBox)
+            // Way 2 crosses this box with both of its nodes outside it.
+            val crossing = Bbox(west = -111.002, south = 39.999, east = -110.998, north = 40.002)
+            assertTrue(OsmId(OsmKind.WAY, 2) in store.query(Query(bbox = crossing)).map { it.id })
         }
     }
 

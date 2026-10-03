@@ -1,82 +1,45 @@
-use crate::{ffi, *};
+//! Read side of a published area: lookups, tag/bbox queries and graph helpers.
+use crate::{
+    encoding::{Reader, corrupt},
+    import::{Counts, e7_bounds},
+    schema::{self, NODE, RELATION, WAY, packed},
+    *,
+};
+use rusqlite::{Connection, OpenFlags, OptionalExtension, params};
 use serde::{Deserialize, Serialize};
 use std::{
-    collections::{BTreeSet, HashSet},
+    collections::{BTreeSet, HashMap},
     marker::PhantomData,
-    os::raw::c_void,
-    path::{Path, PathBuf},
-    ptr::NonNull,
+    path::Path,
     rc::Rc,
-    sync::{Mutex, OnceLock},
 };
 
-// LMDB forbids opening the same environment twice in one process. Register a
-// canonical path and keep a lease for the entire native handle's lifetime.
-fn environments() -> &'static Mutex<HashSet<PathBuf>> {
-    static ENVIRONMENTS: OnceLock<Mutex<HashSet<PathBuf>>> = OnceLock::new();
-    ENVIRONMENTS.get_or_init(|| Mutex::new(HashSet::new()))
-}
-struct Lease(PathBuf);
-impl Lease {
-    fn acquire(path: &Path) -> Result<Self> {
-        let path = path.canonicalize()?;
-        let mut environments = environments()
-            .lock()
-            .map_err(|_| Error::Native("environment registry poisoned".into()))?;
-        if !environments.insert(path.clone()) {
-            return Err(Error::Invalid(
-                "this area is already open; reuse its Store".into(),
-            ));
-        }
-        Ok(Self(path))
-    }
-}
-impl Drop for Lease {
-    fn drop(&mut self) {
-        if let Ok(mut registry) = environments().lock() {
-            registry.remove(&self.0);
-        }
-    }
-}
-
-/// Owns one immutable OSMExpress area. Use it on one worker thread; the `Rc`
-/// marker deliberately prevents moving or sharing the handle across threads.
-/// Objects returned from lookup/query own their data and outlive this handle.
+/// Owns one read-only connection to a published area file.
+///
+/// Thread confinement: use a `Store` on one worker thread. The `Rc` marker
+/// deliberately makes it neither `Send` nor `Sync`; the C ABI additionally
+/// checks the calling thread at runtime. SQLite itself would tolerate
+/// serialised cross-thread use, but cached statements and the decoding
+/// dictionaries are not designed for it, and one confinement rule is simpler
+/// for the Kotlin and Swift adapters than two.
+///
+/// Several `Store`s may open the same file (also across processes): the file
+/// is never written after publication, and SQLite's shared read locks allow
+/// any number of readers. Opening per query is still wasteful, because `open`
+/// loads the key and user dictionaries.
+///
+/// Objects returned from lookups and queries own their data and outlive the
+/// store.
 pub struct Store {
-    handle: NonNull<c_void>,
-    _lease: Lease,
+    connection: Connection,
+    /// Interned tag keys and member roles by dictionary id.
+    dict: Vec<String>,
+    /// Reverse of `dict`, for turning query keys into ids.
+    keys: HashMap<String, i64>,
+    users: HashMap<u32, String>,
     _thread: PhantomData<Rc<()>>,
 }
-#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
-#[serde(default)]
-pub struct ImportOptions {
-    /// Maximum database mapping. A full map produces an error, never an abort.
-    pub map_size: usize,
-    /// Maximum pairs per sorter (five sorters, 16 bytes per pair).
-    /// This is a sorting budget, not a cap on the entire import's memory.
-    pub sort_pairs: usize,
-    pub preserve_untagged_metadata: bool,
-}
-impl Default for ImportOptions {
-    fn default() -> Self {
-        Self {
-            map_size: 1024 * 1024 * 1024,
-            sort_pairs: 65536,
-            preserve_untagged_metadata: true,
-        }
-    }
-}
-#[derive(Debug, Clone, Copy, Default, Serialize, Deserialize, PartialEq, Eq)]
-pub struct Counts {
-    pub nodes: usize,
-    pub ways: usize,
-    pub relations: usize,
-}
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
-pub struct ImportReport {
-    pub counts: Counts,
-    pub database_bytes: u64,
-}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct MissingReference {
     pub position: usize,
@@ -93,6 +56,11 @@ pub enum TagFilter {
     Equals(String, String),
 }
 impl TagFilter {
+    fn key(&self) -> &str {
+        match self {
+            Self::Exists(key) | Self::Equals(key, _) => key,
+        }
+    }
     fn matches(&self, object: &Object) -> bool {
         match self {
             Self::Exists(key) => object.tag(key).is_some(),
@@ -100,17 +68,28 @@ impl TagFilter {
         }
     }
 }
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Query {
     /// All filters must match; missing and empty tag values are distinct.
     pub tags: Vec<TagFilter>,
-    /// Spatial queries use OSMExpress's node-cell/parent selection. They can
-    /// omit crossing or containing geometries without selected member nodes.
+    /// Spatial filter. Tagged nodes match exactly when the point lies inside
+    /// the box (edges included). Ways and relations match when their bounding
+    /// box intersects it, so results are *candidates*: a way that bends around
+    /// the box, or a relation whose members only surround it, is returned
+    /// although no part of it lies inside. Ways crossing the box without a node
+    /// inside it are included. Untagged nodes are never returned by a bbox
+    /// query; reach them through their ways. Bounds cover only members present
+    /// in the area, so clipped objects can be missed near the area's edge.
     pub bbox: Option<Bbox>,
+    /// Keyset cursor: return objects strictly after this one in `(kind, id)`
+    /// order (nodes, then ways, then relations; ascending IDs).
     pub after: Option<OsmId>,
     pub limit: usize,
-    /// Per namespace; bound spatial candidates before they enter Rust.
+    /// Upper bound on the spatial candidates a bbox-driven query may collect
+    /// (all kinds together). Exceeding it is an error, not a truncation, so a
+    /// caller never mistakes a partial answer for a complete one.
     pub max_candidates: usize,
 }
 impl Default for Query {
@@ -125,147 +104,312 @@ impl Default for Query {
     }
 }
 
+#[derive(Debug, Clone, Copy)]
+#[repr(i32)]
+pub enum ObjectKind {
+    Node = 0,
+    Way = 1,
+    Relation = 2,
+}
+
+/// Index-backed tag lookups. Rows of `tag_index` for one `(k, v)` are stored
+/// in `(kind, id)` order, so an `Equals` driver streams results in output
+/// order without sorting and resumes from the cursor with a B-tree seek.
+/// An `Exists` driver reads every row of the key (a prefix range of the
+/// primary key) and sorts them by `(kind, id)`: cost grows with the number of
+/// objects carrying the key, per page.
+const TAG_EQUALS: &str = "SELECT kind, id FROM tag_index
+     WHERE k = ?1 AND v = ?2 AND (kind, id) > (?3, ?4) ORDER BY kind, id";
+const TAG_EXISTS: &str = "SELECT kind, id FROM tag_index
+     WHERE k = ?1 AND (kind, id) > (?3, ?4) ORDER BY kind, id";
+/// The same ranges, counted up to a cap, to choose the most selective driver.
+const COUNT_EQUALS: &str =
+    "SELECT count(*) FROM (SELECT 1 FROM tag_index WHERE k = ?1 AND v = ?2 LIMIT ?3)";
+const COUNT_EXISTS: &str = "SELECT count(*) FROM (SELECT 1 FROM tag_index WHERE k = ?1 LIMIT ?3)";
+/// Bounds intersection on the R-tree; for point rows this is point-in-box.
+const GEO_SEARCH: &str =
+    "SELECT id FROM geo WHERE minx <= ?2 AND maxx >= ?1 AND miny <= ?4 AND maxy >= ?3 LIMIT ?5";
+const COUNT_GEO: &str = "SELECT count(*) FROM (SELECT id FROM geo
+     WHERE minx <= ?2 AND maxx >= ?1 AND miny <= ?4 AND maxy >= ?3 LIMIT ?5)";
+/// Object reads. Statements are prepared once per connection and cached.
+const NODE_BY_ID: &str = "SELECT id, lat, lon, version, payload FROM nodes WHERE id = ?1";
+const WAY_BY_ID: &str = "SELECT id, refs, payload FROM ways WHERE id = ?1";
+const RELATION_BY_ID: &str = "SELECT id, members, payload FROM relations WHERE id = ?1";
+const NODE_RANGE: &str =
+    "SELECT id, lat, lon, version, payload FROM nodes WHERE id > ?1 ORDER BY id LIMIT ?2";
+const WAY_RANGE: &str = "SELECT id, refs, payload FROM ways WHERE id > ?1 ORDER BY id LIMIT ?2";
+const RELATION_RANGE: &str =
+    "SELECT id, members, payload FROM relations WHERE id > ?1 ORDER BY id LIMIT ?2";
+/// Selectivity estimates stop counting here; beyond it the exact number does
+/// not change which driver is cheaper by much.
+const ESTIMATE_CAP: i64 = 10_000;
+
+/// Where a query's candidates come from.
+enum Driver<'q> {
+    Tag(&'q TagFilter, i64),
+    Bbox,
+    Scan,
+}
+
 impl Store {
+    /// Opens a published area read-only.
     pub fn open(path: impl AsRef<Path>) -> Result<Self> {
-        Self::open_with_map_size(path, ImportOptions::default().map_size)
-    }
-    pub fn open_with_map_size(path: impl AsRef<Path>, map_size: usize) -> Result<Self> {
-        let lease = Lease::acquire(path.as_ref())?;
-        let path = ffi::path(&lease.0)?;
-        let mut handle = std::ptr::null_mut();
-        let mut error = ffi::NativeString::empty();
-        // SAFETY: pointers refer to initialized output slots and a live CString.
-        let code = unsafe { ffi::osmx_open(path.as_ptr(), map_size, &mut handle, &mut error.0) };
-        ffi::status(code, &error)?;
-        let handle =
-            NonNull::new(handle).ok_or_else(|| Error::Native("null store handle".into()))?;
+        // NO_MUTEX: the handle is confined to one thread (see the type docs),
+        // so SQLite's per-connection mutex would be pure overhead.
+        let connection = Connection::open_with_flags(
+            path,
+            OpenFlags::SQLITE_OPEN_READ_ONLY | OpenFlags::SQLITE_OPEN_NO_MUTEX,
+        )?;
+        let (application_id, version): (i32, i32) = connection.query_row(
+            "SELECT * FROM pragma_application_id, pragma_user_version",
+            [],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )?;
+        if application_id != schema::APPLICATION_ID || version != schema::FORMAT_VERSION {
+            return Err(Error::Invalid(format!(
+                "not an osm-framework area of format {} (application_id {application_id:#x}, \
+                 version {version}); re-import it",
+                schema::FORMAT_VERSION
+            )));
+        }
+        let mut dict = vec![];
+        {
+            let mut statement = connection.prepare("SELECT id, s FROM dict ORDER BY id")?;
+            let mut rows = statement.query([])?;
+            while let Some(row) = rows.next()? {
+                // Ids are dense from 0, so the position in `dict` is the id.
+                if row.get::<_, i64>(0)? != dict.len() as i64 {
+                    return Err(corrupt("dictionary ids are not dense"));
+                }
+                dict.push(row.get::<_, String>(1)?);
+            }
+        }
+        let keys = dict
+            .iter()
+            .enumerate()
+            .map(|(id, text)| (text.clone(), id as i64))
+            .collect();
+        let users = connection
+            .prepare("SELECT uid, name FROM users")?
+            .query_map([], |row| Ok((row.get::<_, u32>(0)?, row.get(1)?)))?
+            .collect::<rusqlite::Result<_>>()?;
+        // Room for every statement this type prepares (about 20), so mixed
+        // workloads never evict and re-prepare.
+        connection.set_prepared_statement_cache_capacity(32);
         Ok(Self {
-            handle,
-            _lease: lease,
+            connection,
+            dict,
+            keys,
+            users,
             _thread: PhantomData,
         })
     }
+
     pub fn get(&self, id: OsmId) -> Result<Option<Object>> {
         let (kind, id) = checked_id(id)?;
-        let mut output = ffi::NativeString::empty();
-        let mut error = ffi::NativeString::empty();
-        // SAFETY: handle stays live; native strings are freed by their RAII wrappers.
-        let code =
-            unsafe { ffi::osmx_get(self.handle.as_ptr(), kind, id, &mut output.0, &mut error.0) };
-        if !ffi::status(code, &error)? {
-            return Ok(None);
+        match kind {
+            NODE => self.read_nodes(NODE_BY_ID, params![id]),
+            WAY => self.read_ways(WAY_BY_ID, params![id]),
+            _ => self.read_relations(RELATION_BY_ID, params![id]),
         }
-        Ok(Some(serde_json::from_str(output.text()?)?))
+        .map(|mut objects| objects.pop())
     }
+
+    /// Counts recorded at import. Constant time.
     pub fn counts(&self) -> Result<Counts> {
-        let mut output = ffi::NativeString::empty();
-        let mut error = ffi::NativeString::empty();
-        // SAFETY: handle and output slots stay live through this call.
-        let code = unsafe { ffi::osmx_stats(self.handle.as_ptr(), &mut output.0, &mut error.0) };
-        ffi::status(code, &error)?;
-        Ok(serde_json::from_str(output.text()?)?)
+        let mut counts = Counts::default();
+        let mut statement = self
+            .connection
+            .prepare_cached("SELECT key, value FROM area")?;
+        let mut rows = statement.query([])?;
+        while let Some(row) = rows.next()? {
+            let value = row.get::<_, i64>(1)? as usize;
+            match row.get_ref(0)?.as_str()? {
+                "nodes" => counts.nodes = value,
+                "ways" => counts.ways = value,
+                "relations" => counts.relations = value,
+                _ => {}
+            }
+        }
+        Ok(counts)
     }
-    pub fn scan(&self, kind: ObjectKind, after: u64, limit: usize) -> Result<Vec<Object>> {
-        let mut output = ffi::NativeString::empty();
-        let mut error = ffi::NativeString::empty();
-        // SAFETY: handle and output slots stay live through this call.
-        let code = unsafe {
-            ffi::osmx_scan(
-                self.handle.as_ptr(),
-                kind as i32,
-                after,
-                limit,
-                &mut output.0,
-                &mut error.0,
-            )
+
+    /// Recorded counts, checked against the tables (a full pass over each
+    /// table's B-tree). Import uses this before publishing.
+    pub(crate) fn verify_counts(&self) -> Result<Counts> {
+        let recorded = self.counts()?;
+        let count = |table: &str| -> Result<usize> {
+            let value: i64 =
+                self.connection
+                    .query_row(&format!("SELECT count(*) FROM {table}"), [], |row| {
+                        row.get(0)
+                    })?;
+            Ok(value as usize)
         };
-        ffi::status(code, &error)?;
-        Ok(serde_json::from_str(output.text()?)?)
+        let actual = Counts {
+            nodes: count("nodes")?,
+            ways: count("ways")?,
+            relations: count("relations")?,
+        };
+        if actual != recorded {
+            return Err(Error::Corrupt(format!(
+                "area records {recorded:?} but holds {actual:?}"
+            )));
+        }
+        Ok(actual)
     }
+
+    /// One namespace in ID order, starting after `after`. A primary-key range
+    /// read; useful for exports and for checking an area exhaustively.
+    pub fn scan(&self, kind: ObjectKind, after: u64, limit: usize) -> Result<Vec<Object>> {
+        if !(1..=10000).contains(&limit) {
+            return Err(Error::Invalid("scan limit must be 1..=10000".into()));
+        }
+        let after = i64::try_from(after).map_err(|_| Error::Invalid("cursor too large".into()))?;
+        let limit = limit as i64;
+        match kind {
+            ObjectKind::Node => self.read_nodes(NODE_RANGE, params![after, limit]),
+            ObjectKind::Way => self.read_ways(WAY_RANGE, params![after, limit]),
+            ObjectKind::Relation => self.read_relations(RELATION_RANGE, params![after, limit]),
+        }
+    }
+
+    /// IDs whose stored bounds intersect `bbox` (points: inside it), sorted.
+    /// Errors when more than `maximum` objects match instead of truncating.
+    /// See `Query::bbox` for what the bounds do and do not promise.
     pub fn spatial_candidates(&self, bbox: Bbox, maximum: usize) -> Result<Vec<OsmId>> {
         bbox.validate()?;
-        let mut output = ffi::NativeString::empty();
-        let mut error = ffi::NativeString::empty();
-        // SAFETY: arguments are values; handle and outputs live through this call.
-        let code = unsafe {
-            ffi::osmx_candidates(
-                self.handle.as_ptr(),
-                bbox.west,
-                bbox.south,
-                bbox.east,
-                bbox.north,
-                maximum,
-                &mut output.0,
-                &mut error.0,
-            )
-        };
-        ffi::status(code, &error)?;
-        Ok(serde_json::from_str(output.text()?)?)
+        let [west, east, south, north] = e7_bounds(bbox);
+        let mut ids = vec![];
+        if west > east || south > north {
+            // The box lies between two e7 grid lines: nothing can be inside.
+            return Ok(ids);
+        }
+        let mut statement = self.connection.prepare_cached(GEO_SEARCH)?;
+        let cap = i64::try_from(maximum).unwrap_or(i64::MAX - 1) + 1;
+        let mut rows = statement.query(params![west, east, south, north, cap])?;
+        while let Some(row) = rows.next()? {
+            if ids.len() == maximum {
+                return Err(Error::Invalid(format!(
+                    "bbox selects more than {maximum} candidates; narrow it or raise the limit"
+                )));
+            }
+            ids.push(unpack(row.get(0)?)?);
+        }
+        ids.sort_unstable();
+        Ok(ids)
     }
-    /// Query raw tags with stable `(kind, ID)` ordering and keyset pagination.
-    /// Tag-only queries scan bounded pages; no global tag index exists yet.
+
+    /// Query raw tags and/or a bbox with stable `(kind, id)` ordering and
+    /// keyset pagination.
+    ///
+    /// Execution never scans object tables for filtered queries:
+    /// - With tag filters, the filter matching the fewest index rows drives
+    ///   (estimated with capped counts on `tag_index`); the other filters are
+    ///   checked on each candidate object.
+    /// - With a bbox, the R-tree is a candidate source too. Whichever of the
+    ///   best tag filter and the bbox selects fewer rows drives; the other is
+    ///   applied per candidate (bbox via an R-tree rowid lookup).
+    /// - Without any filter, objects are read in primary-key order.
     pub fn query(&self, query: &Query) -> Result<Vec<Object>> {
         if !(1..=10000).contains(&query.limit) {
             return Err(Error::Invalid("query limit must be 1..=10000".into()));
         }
-        if let Some(after) = query.after {
-            checked_id(after)?;
-        }
-        let matches = |object: &Object| query.tags.iter().all(|tag| tag.matches(object));
-        let mut objects = vec![];
-        if let Some(bbox) = query.bbox {
-            for id in self.spatial_candidates(bbox, query.max_candidates)? {
-                if query.after.is_some_and(|after| id <= after) {
-                    continue;
+        let cursor = match query.after {
+            Some(after) => checked_id(after)?,
+            None => (-1, 0), // before every (kind, id)
+        };
+        let bounds = match query.bbox {
+            Some(bbox) => {
+                bbox.validate()?;
+                let bounds = e7_bounds(bbox);
+                if bounds[0] > bounds[1] || bounds[2] > bounds[3] {
+                    return Ok(vec![]);
                 }
-                if let Some(object) = self.get(id)? {
-                    // S2 cells cover the rectangle conservatively. Point queries
-                    // can be filtered exactly without assembling way polygons.
-                    if let Object::Node(node) = &object {
-                        let point = node.coordinate;
-                        if point.lon() < bbox.west
-                            || point.lon() > bbox.east
-                            || point.lat() < bbox.south
-                            || point.lat() > bbox.north
-                        {
-                            continue;
-                        }
+                Some(bounds)
+            }
+            None => None,
+        };
+        // Resolve keys once. An unknown key cannot match anything, and the
+        // filters are ANDed, so the whole query is empty.
+        let mut key_ids = Vec::with_capacity(query.tags.len());
+        for filter in &query.tags {
+            match self.keys.get(filter.key()) {
+                Some(id) => key_ids.push(*id),
+                None => return Ok(vec![]),
+            }
+        }
+
+        let mut driver = Driver::Scan;
+        let mut best = i64::MAX;
+        // Estimates only matter when there is a choice to make.
+        let choose = query.tags.len() + usize::from(bounds.is_some()) > 1;
+        for (filter, key) in query.tags.iter().zip(&key_ids) {
+            let estimate = if choose {
+                self.estimate(filter, *key)?
+            } else {
+                0
+            };
+            // Strictly smaller wins, so ties keep the earlier filter; an
+            // Equals filter on the same key range is never larger than Exists.
+            if estimate < best {
+                best = estimate;
+                driver = Driver::Tag(filter, *key);
+            }
+        }
+        if let Some(bounds) = bounds {
+            // Tag drivers stream in output order; the bbox driver must collect
+            // and sort, so it only wins when strictly more selective.
+            if !choose || self.estimate_bbox(bounds)? < best {
+                driver = Driver::Bbox;
+            }
+        }
+
+        let accept = |object: &Object| query.tags.iter().all(|tag| tag.matches(object));
+        let mut objects = vec![];
+        match driver {
+            Driver::Scan => self.scan_all(cursor, query.limit, &mut objects)?,
+            Driver::Tag(filter, key) => {
+                // Both statements number their parameters alike (?2 is unused
+                // by TAG_EXISTS) so one binding serves either.
+                let (sql, value) = match filter {
+                    TagFilter::Equals(_, value) => (TAG_EQUALS, Some(value.as_str())),
+                    TagFilter::Exists(_) => (TAG_EXISTS, None),
+                };
+                let mut statement = self.connection.prepare_cached(sql)?;
+                let mut rows = statement.query(params![key, value, cursor.0, cursor.1])?;
+                while let Some(row) = rows.next()? {
+                    let id = typed(row.get(0)?, row.get(1)?)?;
+                    if let Some(bounds) = bounds
+                        && !self.intersects(id, bounds)?
+                    {
+                        continue;
                     }
-                    if matches(&object) {
+                    let object = self
+                        .get(id)?
+                        .ok_or_else(|| corrupt("tag index names a missing object"))?;
+                    if accept(&object) {
                         objects.push(object);
-                    }
-                    if objects.len() == query.limit {
-                        break;
+                        if objects.len() == query.limit {
+                            break;
+                        }
                     }
                 }
             }
-        } else {
-            for kind in [ObjectKind::Node, ObjectKind::Way, ObjectKind::Relation] {
-                let mut after = 0;
-                if let Some(cursor) = query.after {
-                    let (cursor_kind, cursor_id) = cursor.parts();
-                    if cursor_kind > kind as i64 {
+            Driver::Bbox => {
+                let bbox = query.bbox.expect("bbox driver implies a bbox");
+                let after = query.after;
+                for id in self.spatial_candidates(bbox, query.max_candidates)? {
+                    if after.is_some_and(|after| id <= after) {
                         continue;
                     }
-                    if cursor_kind == kind as i64 {
-                        after = cursor_id as u64;
-                    }
-                }
-                loop {
-                    let page = self.scan(kind, after, 256)?;
-                    if page.is_empty() {
-                        break;
-                    }
-                    for object in page {
-                        after = object.id().parts().1 as u64;
-                        if query.after.is_some_and(|cursor| object.id() <= cursor) {
-                            continue;
-                        }
-                        if matches(&object) {
-                            objects.push(object);
-                        }
+                    let object = self
+                        .get(id)?
+                        .ok_or_else(|| corrupt("spatial index names a missing object"))?;
+                    if accept(&object) {
+                        objects.push(object);
                         if objects.len() == query.limit {
-                            return Ok(objects);
+                            break;
                         }
                     }
                 }
@@ -273,36 +417,42 @@ impl Store {
         }
         Ok(objects)
     }
+
     /// Resolve in original order. A missing node remains `None`, so a renderer
     /// cannot accidentally draw a line across an unresolved gap.
     pub fn way_coordinates(&self, id: WayId) -> Result<Option<Vec<Option<Coordinate>>>> {
         let Some(Object::Way(way)) = self.get(OsmId::Way(id))? else {
             return Ok(None);
         };
+        let mut statement = self
+            .connection
+            .prepare_cached("SELECT lat, lon FROM nodes WHERE id = ?1")?;
         let coordinates = way
             .nodes
             .into_iter()
-            .map(|id| {
-                Ok(match self.get(OsmId::Node(id))? {
-                    Some(Object::Node(node)) => Some(node.coordinate),
-                    _ => None,
-                })
+            .map(|node| {
+                let point = statement
+                    .query_row([node.0], |row| Ok((row.get(0)?, row.get(1)?)))
+                    .optional()?;
+                Ok(point.map(|(lat_e7, lon_e7)| Coordinate { lat_e7, lon_e7 }))
             })
             .collect::<Result<_>>()?;
         Ok(Some(coordinates))
     }
+
     pub fn missing_references(&self, id: OsmId) -> Result<Option<Vec<MissingReference>>> {
         let Some(object) = self.get(id)? else {
             return Ok(None);
         };
         let mut missing = vec![];
         for (position, target) in object.references().into_iter().enumerate() {
-            if self.get(target)?.is_none() {
+            if !self.contains(target)? {
                 missing.push(MissingReference { position, target });
             }
         }
         Ok(Some(missing))
     }
+
     /// Traverse a graph with a hard object budget. Typed identities and a visited
     /// set handle repeated members, shared dependencies and cyclic relations.
     pub fn dependencies(&self, root: OsmId, maximum: usize) -> Result<Dependencies> {
@@ -329,77 +479,256 @@ impl Store {
         missing.sort();
         Ok(Dependencies { objects, missing })
     }
-}
-impl Drop for Store {
-    fn drop(&mut self) {
-        // SAFETY: this unique handle has not been closed; the lease drops after it.
-        unsafe { ffi::osmx_close(self.handle.as_ptr()) }
+
+    // ---- internals ----
+
+    fn contains(&self, id: OsmId) -> Result<bool> {
+        let (kind, id) = checked_id(id)?;
+        let sql = [
+            "SELECT 1 FROM nodes WHERE id = ?1",
+            "SELECT 1 FROM ways WHERE id = ?1",
+            "SELECT 1 FROM relations WHERE id = ?1",
+        ][kind as usize];
+        let mut statement = self.connection.prepare_cached(sql)?;
+        Ok(statement.exists([id])?)
+    }
+
+    fn estimate(&self, filter: &TagFilter, key: i64) -> Result<i64> {
+        let (sql, value) = match filter {
+            TagFilter::Equals(_, value) => (COUNT_EQUALS, Some(value.as_str())),
+            TagFilter::Exists(_) => (COUNT_EXISTS, None),
+        };
+        let mut statement = self.connection.prepare_cached(sql)?;
+        Ok(statement.query_row(params![key, value, ESTIMATE_CAP], |row| row.get(0))?)
+    }
+
+    fn estimate_bbox(&self, [west, east, south, north]: [i32; 4]) -> Result<i64> {
+        let mut statement = self.connection.prepare_cached(COUNT_GEO)?;
+        Ok(
+            statement.query_row(params![west, east, south, north, ESTIMATE_CAP], |row| {
+                row.get(0)
+            })?,
+        )
+    }
+
+    /// Whether `id`'s stored bounds intersect `bounds`. Objects without a geo
+    /// row (no resolvable members) never match a bbox.
+    fn intersects(&self, id: OsmId, [west, east, south, north]: [i32; 4]) -> Result<bool> {
+        let (kind, id) = id.parts();
+        let mut statement = self
+            .connection
+            .prepare_cached("SELECT minx, maxx, miny, maxy FROM geo WHERE id = ?1")?;
+        let found = statement
+            .query_row([packed(kind, id)], |row| {
+                Ok([row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?])
+            })
+            .optional()?;
+        Ok(found.is_some_and(|b: [i32; 4]| {
+            b[0] <= east && b[1] >= west && b[2] <= north && b[3] >= south
+        }))
+    }
+
+    /// Unfiltered listing across namespaces from the cursor.
+    fn scan_all(&self, cursor: (i64, i64), limit: usize, out: &mut Vec<Object>) -> Result<()> {
+        for kind in [ObjectKind::Node, ObjectKind::Way, ObjectKind::Relation] {
+            let kind_code = kind as i64;
+            if cursor.0 > kind_code {
+                continue;
+            }
+            let after = if cursor.0 == kind_code { cursor.1 } else { 0 };
+            out.extend(self.scan(kind, after as u64, limit - out.len())?);
+            if out.len() == limit {
+                break;
+            }
+        }
+        Ok(())
+    }
+
+    fn read_nodes(&self, sql: &str, parameters: impl rusqlite::Params) -> Result<Vec<Object>> {
+        let mut statement = self.connection.prepare_cached(sql)?;
+        let mut rows = statement.query(parameters)?;
+        let mut objects = vec![];
+        while let Some(row) = rows.next()? {
+            let id: i64 = row.get(0)?;
+            let version: i64 = row.get(3)?;
+            let location_version =
+                i32::try_from(version).map_err(|_| corrupt("node version out of range"))?;
+            let (tags, metadata) = match row.get_ref(4)?.as_blob_or_null()? {
+                // Payload carries tags and all metadata but the version, which
+                // is the column (shared with payload-less nodes).
+                Some(payload) => {
+                    let mut reader = Reader::new(payload);
+                    let tags = self.decode_tags(&mut reader)?;
+                    let metadata = self.decode_metadata(&mut reader, Some(version))?;
+                    (tags, Some(metadata))
+                }
+                None => (Tags::new(), None),
+            };
+            objects.push(Object::Node(Node {
+                id: NodeId(id),
+                coordinate: Coordinate {
+                    lat_e7: row.get(1)?,
+                    lon_e7: row.get(2)?,
+                },
+                location_version,
+                tags,
+                metadata,
+            }));
+        }
+        Ok(objects)
+    }
+
+    fn read_ways(&self, sql: &str, parameters: impl rusqlite::Params) -> Result<Vec<Object>> {
+        let mut statement = self.connection.prepare_cached(sql)?;
+        let mut rows = statement.query(parameters)?;
+        let mut objects = vec![];
+        while let Some(row) = rows.next()? {
+            let mut refs = Reader::new(row.get_ref(1)?.as_blob()?);
+            let mut nodes = vec![];
+            let mut previous = 0i64;
+            while !refs.is_done() {
+                previous = previous.wrapping_add(refs.svar()?);
+                nodes.push(NodeId(previous));
+            }
+            let mut payload = Reader::new(row.get_ref(2)?.as_blob()?);
+            let tags = self.decode_tags(&mut payload)?;
+            let metadata = self.decode_metadata(&mut payload, None)?;
+            objects.push(Object::Way(Way {
+                id: WayId(row.get(0)?),
+                nodes,
+                tags,
+                metadata: Some(metadata),
+            }));
+        }
+        Ok(objects)
+    }
+
+    fn read_relations(&self, sql: &str, parameters: impl rusqlite::Params) -> Result<Vec<Object>> {
+        let mut statement = self.connection.prepare_cached(sql)?;
+        let mut rows = statement.query(parameters)?;
+        let mut objects = vec![];
+        while let Some(row) = rows.next()? {
+            let mut encoded = Reader::new(row.get_ref(1)?.as_blob()?);
+            let mut members = vec![];
+            let mut previous = 0i64;
+            while !encoded.is_done() {
+                let role_and_kind = encoded.uvar()?;
+                previous = previous.wrapping_add(encoded.svar()?);
+                let role = self.word(role_and_kind >> 2)?.to_owned();
+                members.push(Member {
+                    id: typed((role_and_kind & 3) as i64, previous)?,
+                    role,
+                });
+            }
+            let mut payload = Reader::new(row.get_ref(2)?.as_blob()?);
+            let tags = self.decode_tags(&mut payload)?;
+            let metadata = self.decode_metadata(&mut payload, None)?;
+            objects.push(Object::Relation(Relation {
+                id: RelationId(row.get(0)?),
+                members,
+                tags,
+                metadata: Some(metadata),
+            }));
+        }
+        Ok(objects)
+    }
+
+    fn word(&self, id: u64) -> Result<&str> {
+        usize::try_from(id)
+            .ok()
+            .and_then(|id| self.dict.get(id))
+            .map(String::as_str)
+            .ok_or_else(|| corrupt("dictionary id out of range"))
+    }
+
+    fn decode_tags(&self, reader: &mut Reader) -> Result<Tags> {
+        let count = reader.uvar()?;
+        let mut tags = Tags::new();
+        for _ in 0..count {
+            let key = self.word(reader.uvar()?)?.to_owned();
+            let value = reader.text()?.to_owned();
+            tags.insert(key, value);
+        }
+        Ok(tags)
+    }
+
+    /// `version` is `Some` for nodes, whose version lives in a column.
+    fn decode_metadata(&self, reader: &mut Reader, version: Option<i64>) -> Result<Metadata> {
+        let narrow = |value: u64, what: &str| {
+            u32::try_from(value).map_err(|_| corrupt(&format!("{what} out of range")))
+        };
+        let version = match version {
+            Some(version) => u32::try_from(version).map_err(|_| corrupt("version out of range"))?,
+            None => narrow(reader.uvar()?, "version")?,
+        };
+        let timestamp = reader.uvar()?;
+        let changeset = narrow(reader.uvar()?, "changeset")?;
+        let uid = narrow(reader.uvar()?, "uid")?;
+        Ok(Metadata {
+            version,
+            timestamp,
+            changeset,
+            uid,
+            user: self.users.get(&uid).cloned().unwrap_or_default(),
+        })
     }
 }
-#[derive(Debug, Clone, Copy)]
-#[repr(i32)]
-pub enum ObjectKind {
-    Node = 0,
-    Way = 1,
-    Relation = 2,
+
+fn typed(kind: i64, id: i64) -> Result<OsmId> {
+    Ok(match kind {
+        NODE => OsmId::Node(NodeId(id)),
+        WAY => OsmId::Way(WayId(id)),
+        RELATION => OsmId::Relation(RelationId(id)),
+        _ => return Err(corrupt("invalid object kind")),
+    })
 }
-fn checked_id(id: OsmId) -> Result<(i32, u64)> {
+
+fn unpack(packed: i64) -> Result<OsmId> {
+    typed(packed & 3, packed >> 2)
+}
+
+fn checked_id(id: OsmId) -> Result<(i64, i64)> {
     let (kind, id) = id.parts();
     if id <= 0 {
         return Err(Error::Invalid("snapshot IDs must be positive".into()));
     }
-    Ok((kind as i32, id as u64))
+    Ok((kind, id))
 }
 
-/// Import into a private sibling directory, validate the result, sync it, then
-/// publish it with an atomic rename. Failure leaves the old destination intact.
-/// An already-open Store keeps reading its previous immutable snapshot; drop it
-/// and reopen after publication. Publication is independent of edit journals.
-pub fn import_area(
-    input: impl AsRef<Path>,
-    destination: impl AsRef<Path>,
-    options: ImportOptions,
-) -> Result<ImportReport> {
-    let destination = destination.as_ref();
-    let parent = destination
-        .parent()
-        .filter(|p| !p.as_os_str().is_empty())
-        .unwrap_or(Path::new("."));
-    if destination.file_name().is_none() {
-        return Err(Error::Invalid("destination must be a file".into()));
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Query plans for the tag drivers must be primary-key searches on
+    /// `tag_index`, never table scans; `Equals` must also avoid a sort.
+    #[test]
+    fn tag_drivers_use_the_index() {
+        let directory = tempfile::tempdir().unwrap();
+        let area = directory.path().join("area.sqlite");
+        let fixture = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/fixtures/snapshot.osm");
+        import_area(fixture, &area, ImportOptions::default()).unwrap();
+        let store = Store::open(&area).unwrap();
+        let plan = |sql: &str| -> String {
+            let mut statement = store
+                .connection
+                .prepare(&format!("EXPLAIN QUERY PLAN {sql}"))
+                .unwrap();
+            let rows = statement
+                .query_map(params![0, "cafe", -1, 0], |row| row.get::<_, String>(3))
+                .unwrap();
+            rows.map(|row| row.unwrap()).collect::<Vec<_>>().join("; ")
+        };
+        let equals = plan(TAG_EQUALS);
+        assert!(
+            equals.contains("SEARCH tag_index USING PRIMARY KEY"),
+            "{equals}"
+        );
+        assert!(!equals.contains("TEMP B-TREE"), "{equals}");
+        let exists = plan(TAG_EXISTS);
+        assert!(
+            exists.contains("SEARCH tag_index USING PRIMARY KEY"),
+            "{exists}"
+        );
+        assert!(!exists.contains("SCAN"), "{exists}");
     }
-    let staging = tempfile::Builder::new()
-        .prefix(".osmx-stage-")
-        .tempdir_in(parent)?;
-    let staged_path = staging.path().join("area.osmx");
-    let input = ffi::path(input.as_ref())?;
-    let output = ffi::path(&staged_path)?;
-    let mut error = ffi::NativeString::empty();
-    // SAFETY: CStrings and error output live through the synchronous import.
-    let code = unsafe {
-        ffi::osmx_import(
-            input.as_ptr(),
-            output.as_ptr(),
-            options.map_size,
-            options.sort_pairs,
-            i32::from(options.preserve_untagged_metadata),
-            &mut error.0,
-        )
-    };
-    ffi::status(code, &error)?;
-    let store = Store::open_with_map_size(&staged_path, options.map_size)?;
-    let counts = store.counts()?;
-    drop(store);
-    let file = std::fs::File::open(&staged_path)?;
-    file.sync_all()?;
-    let database_bytes = file.metadata()?.len();
-    drop(file);
-    std::fs::rename(&staged_path, destination)?;
-    // POSIX directory sync makes the new directory entry durable after rename.
-    #[cfg(unix)]
-    std::fs::File::open(parent)?.sync_all()?;
-    Ok(ImportReport {
-        counts,
-        database_bytes,
-    })
 }

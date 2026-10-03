@@ -2,13 +2,19 @@
 name = "osm-framework"
 version = "0.1.0"
 edition = "2024"
-description = "Portable offline OSM data core backed by OSMExpress"
-build = "build.rs"
+description = "Portable offline OSM data core backed by SQLite"
 
 [lib]
 crate-type = ["rlib", "cdylib", "staticlib"]
 
 [dependencies]
+# PBF decoding (pure Rust; flate2 for zlib blobs).
+osmpbf = "0.3.8"
+# OSM XML: the editing API's format and the test fixture's.
+quick-xml = "0.42"
+# `bundled` compiles SQLite from source (with the R-tree module) for every
+# target, so phones do not depend on the platform's SQLite version.
+rusqlite = { version = "0.40", features = ["bundled"] }
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.151"
 thiserror = "2.0.21"
@@ -18,3 +24,7 @@ tempfile = "3.27.0"
 
 [target.'cfg(target_os = "android")'.dependencies]
 jni = "0.22"
+
+[profile.release]
+# Matches the spike's measured configuration (spike/sqlite-b).
+lto = "thin"

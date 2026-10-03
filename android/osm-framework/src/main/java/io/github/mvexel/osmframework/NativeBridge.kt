@@ -7,10 +7,8 @@ package io.github.mvexel.osmframework
  */
 internal object NativeBridge {
     init {
-        // Load dependencies first so the dynamic linker never has to resolve
-        // them from the app's library directory on its own.
-        System.loadLibrary("c++_shared")
-        System.loadLibrary("osmx-mobile")
+        // Self-contained: SQLite is compiled into the Rust library, which
+        // depends only on the platform's libc/libm/libdl.
         System.loadLibrary("osm_framework")
     }
 

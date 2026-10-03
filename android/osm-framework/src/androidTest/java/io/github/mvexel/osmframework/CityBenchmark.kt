@@ -16,7 +16,7 @@ import java.util.concurrent.Executors
  * (see scripts/bench-android.sh). Prints one JSON line tagged OSMFW_BENCH.
  *
  * Peak RSS is the process high-water mark (VmHWM), which includes the test
- * runtime and LMDB's file-backed mapped pages; those are reclaimable but count.
+ * runtime and SQLite's page cache.
  */
 @RunWith(AndroidJUnit4::class)
 class CityBenchmark {
@@ -46,7 +46,7 @@ class CityBenchmark {
         // download would land on.
         val input = File(directory, "city.osm.pbf")
         source.copyTo(input, overwrite = true)
-        val area = File(directory, "city.osmx")
+        val area = File(directory, "city.sqlite")
         val result = JSONObject()
         val worker = Executors.newSingleThreadExecutor()
         try {
