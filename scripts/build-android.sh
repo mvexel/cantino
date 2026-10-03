@@ -1,14 +1,29 @@
 #!/bin/sh
-# The NDK and the Rust target must already be installed; see HANDOFF.md.
+# The NDK and the Rust targets must already be installed; see HANDOFF.md.
+# Usage: scripts/build-android.sh [ABI...]  (default: arm64-v8a x86_64)
+# arm64-v8a runs on phones; x86_64 runs on emulators on x86_64 hosts.
+# Output: target/android/<ABI>/ with the three shared libraries the AAR packages.
 set -eu
 root=$(CDPATH= cd -- "$(dirname "$0")/.." && pwd)
 : "${ANDROID_NDK_ROOT:?Set ANDROID_NDK_ROOT to Android NDK r29}"
 source="${OSMX_SOURCE_DIR:-$root/vendor/OSMExpress}"
-"$source/mobile/build-android.sh"
-export OSMX_LIB_DIR="$source/build-android/artifacts"
-export CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER="$ANDROID_NDK_ROOT/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang"
+toolchain="$ANDROID_NDK_ROOT/toolchains/llvm/prebuilt/linux-x86_64/bin"
+[ "$#" -gt 0 ] || set -- arm64-v8a x86_64
 cd "$root"
-cargo build --release --target aarch64-linux-android
-mkdir -p "$root/target/android/arm64-v8a"
-cp "$root/target/aarch64-linux-android/release/libosm_framework.so" "$root/target/android/arm64-v8a/"
-cp "$OSMX_LIB_DIR/libosmx-mobile.so" "$OSMX_LIB_DIR/libc++_shared.so" "$root/target/android/arm64-v8a/"
+for abi in "$@"; do
+    case "$abi" in
+        arm64-v8a) target=aarch64-linux-android ;;
+        x86_64) target=x86_64-linux-android ;;
+        *) echo "unsupported ABI: $abi" >&2; exit 2 ;;
+    esac
+    "$source/mobile/build-android.sh" "$abi"
+    # Cargo reads the linker from CARGO_TARGET_<TRIPLE>_LINKER.
+    linker_var="CARGO_TARGET_$(echo "$target" | tr 'a-z-' 'A-Z_')_LINKER"
+    env OSMX_LIB_DIR="$source/build-android/$abi/artifacts" \
+        "$linker_var=$toolchain/${target}26-clang" \
+        cargo build --release --target "$target"
+    mkdir -p "$root/target/android/$abi"
+    cp "$root/target/$target/release/libosm_framework.so" "$root/target/android/$abi/"
+    cp "$source/build-android/$abi/artifacts/libosmx-mobile.so" \
+        "$source/build-android/$abi/artifacts/libc++_shared.so" "$root/target/android/$abi/"
+done

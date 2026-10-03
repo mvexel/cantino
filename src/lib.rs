@@ -3,6 +3,8 @@
 //! OSMExpress owns graph storage, PBF/XML import and spatial indexes. This crate
 //! supplies owned Rust objects, safe native lifetimes, staged area publication,
 //! raw-tag queries, dependency reporting and a SliceOSM request adapter.
+#[cfg(target_os = "android")]
+mod android;
 mod ffi;
 mod mobile_api;
 mod model;

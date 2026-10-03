@@ -22,7 +22,7 @@ OSMExpress is the selected backend for this first pass. Its LMDB tables store co
 | --- | --- |
 | Upstream OSMExpress | https://github.com/bdon/OSMExpress |
 | User's fork | https://github.com/mvexel/OSMExpress |
-| Fork implementation branch | `mobile-core`, commit `417e86dbc8319d5aeba60cdeb337fbd646652fa2` |
+| Fork implementation branch | `mobile-core`, commit `1e10945` (local until pushed) |
 | Upstream starting revision | `045a515132e91a3679ce3df27329937c9b8b221a` |
 | Working fork checkout | `/home/mvexel/Documents/Codex/2026-10-03/can-x20/outputs/OSMExpress` |
 | Rust framework checkout | `/home/mvexel/Documents/Codex/2026-10-03/i-want-to-build-a-framework/outputs/osm-framework` |
@@ -98,9 +98,17 @@ export ANDROID_NDK_ROOT=/path/to/android-ndk-r29
 scripts/build-android.sh
 ```
 
-The local NDK used in this session is under `/home/mvexel/Documents/Codex/2026-10-03/can-x20/work/android/android-ndk-r29`. The script cross-compiles the native dependencies and Rust library. The phone package needs all three shared libraries from `target/android/arm64-v8a`: `libosm_framework.so`, `libosmx-mobile.so`, and `libc++_shared.so`. The C header is `include/osm_framework.h`. No JNI adapter, AAR, APK, Gradle integration, or Kotlin API is supplied yet.
+The local NDK used in this session is under `/home/mvexel/Documents/Codex/2026-10-03/can-x20/work/android/android-ndk-r29`. The script cross-compiles the native dependencies and Rust library. The phone package needs all three shared libraries from `target/android/arm64-v8a`: `libosm_framework.so`, `libosmx-mobile.so`, and `libc++_shared.so`. The C header is `include/osm_framework.h`. `scripts/build-android.sh` now builds **arm64-v8a and x86_64** (pass ABIs as arguments to limit it) into `target/android/<ABI>/`.
 
-Android libraries were linked and their target architecture, dependencies and exported framework functions were inspected. They have **not been executed on a phone or emulator**. iOS needs a Mac/Xcode build and runtime proof; access to a Mac was confirmed earlier, but that machine has not been inspected.
+The Android library lives in `android/` (Gradle 9.8 wrapper, AGP 9.4.1, compileSdk 36, minSdk 26). The JDK is pinned in `mise.toml`, because the system Java 25 is a runtime only. The JNI exports are in `src/android.rs` and wrap the same C ABI, so the thread checks and panic containment are shared with iOS. The Kotlin API is `OsmStore` (open/importArea/get/query/close; JSON strings) and `OsmFrameworkException`. Run the instrumented tests with:
+
+```sh
+cd android && mise exec -- ./gradlew :osm-framework:connectedDebugAndroidTest
+```
+
+The local SDK is at `~/Android/Sdk`, with the AVD `osmfw-x86_64` (API 35).
+
+On 2026-10-03 the instrumented tests (import, get, query, Unicode round-trip, malformed-query recovery, rejection of calls from another thread, closed store) passed on a **Pixel 8 (Android 17, arm64)** and the **x86_64 emulator**. iOS needs a Mac/Xcode build and runtime proof; access to a Mac was confirmed earlier, but that machine has not been inspected.
 
 ## Verification evidence
 
@@ -114,6 +122,10 @@ Android libraries were linked and their target architecture, dependencies and ex
 The live request and database are scratch evidence under the continuation chat's `work/live-smoke` directory. They are not a city benchmark or a stable test fixture. The first OSMExpress assessment's pinned-container probe is in that chat's `outputs/osmx-evaluation`; its binary image and the inspected source revision were separate evidence. The current tests compile the fork itself.
 
 Native builds emit warnings from upstream/libosmium and the pinned S2 headers. The compilation succeeds. Those warnings have not been eliminated through broad upstream code changes.
+
+### Lesson: native warnings are not noise
+
+The first run on Android found a real bug. Every `get` returned not-found because the fork's recoverable `CHECK_LMDB` macro declared `int retval = (x)`, and call sites pass their own `retval`. The result is a self-initialized variable, which is undefined behavior. Linux happened to work. Clang `-O3` for Android dropped the success path. The fix is fork commit `978f265`. Linux tests cannot catch this class of bug, so the Android instrumented tests are its regression test.
 
 ## Limits and open work
 
@@ -129,7 +141,7 @@ Native builds emit warnings from upstream/libosmium and the pinned S2 headers. T
 
 ## Next implementation steps
 
-1. Build a minimal Android adapter and run import, lookup and tag query on a device. Keep the Store on one worker thread and verify library packaging and buffer ownership.
+1. ~~Minimal Android adapter on device.~~ Done 2026-10-03 (see above).
 2. Measure a real city extract on that phone: download size, database size, peak memory, import time and query latency. Tune import and query budgets from those results.
 3. Build the same native backend and Rust ABI on the available Mac, then prove Swift lookup on an iOS simulator/device.
 4. Add area download state and background lifecycle around the SliceOSM protocol. Define cancellation, refresh and overlapping-area policies before implementing them.

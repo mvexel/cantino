@@ -1,5 +1,7 @@
 # TODO
 
+Verified 2026-10-03.
+
 Plan of record. Scope and phase definitions: `CLAUDE.md`. Verify each `[x]`
 against the repo before trusting it.
 
@@ -8,13 +10,15 @@ against the repo before trusting it.
 - [x] GitHub repo `mvexel/osm-framework`, pushed
 
 ## 1. Android vertical slice
-- [ ] Android SDK, platform tools, x86_64 emulator image installed locally
-- [ ] `build-android.sh` builds x86_64 alongside arm64-v8a
-- [ ] JNI adapter + Kotlin API (open/close/get/query/import, strings in, JSON out)
-- [ ] Gradle library module (AAR) packaging all three `.so` per ABI
-- [ ] Instrumented test: fixture import, get, query, close on one worker thread
-- [ ] Test green on x86_64 emulator
-- [ ] Test green on physical arm64 phone
+- [x] Android SDK, platform tools, x86_64 emulator image installed locally
+- [x] `build-android.sh` builds x86_64 alongside arm64-v8a
+- [x] JNI adapter + Kotlin API (open/close/get/query/import, strings in, JSON out)
+- [x] Gradle library module packaging all three `.so` per ABI
+- [ ] Strip native libraries in the AAR (AGP can't strip without an SDK-managed NDK; ~29 MB unstripped per ABI)
+- [ ] Publishable AAR (maven-publish), typed Kotlin models instead of JSON strings
+- [x] Instrumented test: fixture import, get, query, close on one worker thread
+- [x] Test green on x86_64 emulator
+- [x] Test green on physical arm64 phone
 
 ## 2. Phone measurement (go/no-go)
 - [ ] Pick city extract, fetch via SliceOSM
