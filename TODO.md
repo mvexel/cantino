@@ -1,9 +1,62 @@
 # TODO
 
-Verified 2026-10-03.
+Plan of record for Cantino. Scope: `CLAUDE.md`. Internal background and
+evidence: `HANDOFF.md`. Developer docs: `README.md`, `docs/guide/`.
+Verify each `[x]` against the repo before trusting it.
 
-Plan of record. Scope and phase definitions: `CLAUDE.md`. Verify each `[x]`
-against the repo before trusting it.
+## Status (verified 2026-10-03)
+
+- **0.1.0 is released**: repo public at https://github.com/mvexel/cantino
+  (Apache-2.0), tag `v0.1.0`, Maven + API docs on https://mvexel.github.io/cantino/
+  (`io.github.mvexel:cantino:0.1.0`). README quickstart builds against the live
+  Maven URL; app runs on the emulator.
+- Android only. Read-only OSM data + opt-in PMTiles basemap, area download
+  lifecycle, café reference app (airplane-mode acceptance passed on a Pixel 8).
+- Checkout: `~/dev/cantino`. Devices used so far: Pixel 8 (`38261FDJH00B4F`),
+  AVD `osmfw-x86_64` (`emulator-5554`). JDK via `mise exec --` in `android/`.
+- Green before any commit: `scripts/check.sh`; `scripts/build-android.sh`;
+  `cd android && mise exec -- ./gradlew :cantino:connectedDebugAndroidTest
+  :cafe-app:testDebugUnitTest :cafe-app:assembleDebug :sample-app:assembleDebug`
+  on phone + emulator (3 tests skip by design: 2 live, CityBenchmark).
+- Release a new version: bump `version` in `Cargo.toml` (single source) +
+  CHANGELOG, `scripts/publish-pages.sh --worktree`, then Martijn pushes
+  `gh-pages` and the tag (outward-facing steps stay with Martijn).
+
+## Next up (in priority order; each item = one agent-sized slice)
+
+1. **0.2 API polish** (details in §7 "0.2 API candidates"). Done when: every
+   candidate is decided (do / won't), the "do" ones ship with KDoc + tests,
+   the quickstart drops its `dropWhile` workaround, CHANGELOG has a 0.2.0
+   section. Must-haves: run identity in `AreaState` (or `state(runId)`),
+   coroutines as an `api` dependency, `Bbox` around a point, way geometry /
+   batch get from Kotlin, a store owner-thread wrapper.
+2. **Download reliability** (§5). Done when: an instrumented test kills the
+   process mid-download (`am kill`/`Process.killProcess`) and mid-commit and
+   the next run resumes or rolls forward with the old area intact; decision
+   recorded on byte-range resume (do it or document why not); basemap fetched
+   in parallel with SliceOSM slicing if it is cheap.
+3. **Import performance & memory** (§2b follow-ups). Done when: cause of
+   in-app 8.2 s vs plain-binary 5.7 s is known (measure on the Pixel, not
+   guessed) and fixed or documented; import peak memory bounded (chunked
+   writes) with a bench showing it stays flat as area grows; decision on
+   dropping `node_way`/`member_rel` (keep if editing needs them — see 6).
+4. **Café app fixes** (§6): opening hours in the area's time zone (tz lookup
+   at download time); exercise relation-café/member UI with a fixture.
+5. **iOS** (§3) — BLOCKED on Martijn: Mac access (ssh host or he runs
+   commands). Then xcframework + Swift wrapper + XCTest on simulator.
+6. **Offline editing + upload** — needs a scope change in `CLAUDE.md` first
+   (currently out of scope). Design notes: edits overlay db ATTACHed to the
+   read-only base (`docs/research/2026-10-03-prebaked-dataset-format.md`),
+   versions are stored for every object.
+7. **Offline routing research** (§8) — not started; research before any code.
+
+## Parked
+- Server-side pre-baked area files (proposal in `docs/research/`); only if
+  on-device import stops meeting budget.
+
+---
+
+# History (chronological log of what was done and decided)
 
 ## 0. Scope and tracking
 - [x] `CLAUDE.md` scope file
@@ -57,10 +110,10 @@ Target onboarding flow (Martijn, 2026-10-03): get location → offer to download
 - [x] Area = raw + basemap, combined state: Ready only when both are published; data, basemap and sidecar publish together via a roll-forward commit journal (`AreaStorage.commit`); basemap or any failure before the commit point leaves the old area (all parts) intact; `AreaState.Basemap(phase, bytes, total)`
 - [x] Area bbox from location: ~10×10 km box centred on the user by default (Martijn 2026-10-03), a caller parameter, never a hard cap — size must not be a bottleneck. Done in the café app (`Geo.AREA_SIZE_KM`, `Geo.squareAround`). Measured 2026-10-03 on the Pixel 8, downtown SLC 10×10 km, live: Ready in 27.4 s (slicing 19.5 s, PBF 7.8 MB in 0.8 s, import 3.2 s → 75.6 MB db, 778k nodes; basemap Extract z0–15 2.4 s: 28 requests, 7.6 MB transferred, 6.5 MB file, 196 tiles). A refresh of the same area: 14.0 s. Far below WorkManager's 10 min limit, so no `setForeground` was needed at this size
 - [x] Android: WorkManager submit/poll/download/cancel → staged import. `AreaManagerTest` against a fake SliceOSM (happy path; 500s while polling → inline + WorkManager retry resuming the same job; cancel mid-download; corrupt PBF; 400 on submit) green on Pixel 8 and emulator
-- [ ] iOS: URLSession background equivalent
+- [ ] iOS: URLSession background equivalent (see Next up → iOS)
 - [x] Failed or cancelled replace keeps old area (tested: cancel mid-download, corrupt PBF, cancel during import, basemap 404 after data, server ignoring Range, invalid Url basemap); cancel after the commit point reports Ready (tested)
 - [ ] Kill/restart mid-download recovers: the job checkpoint resume is tested through a WorkManager retry, not an actual process kill; the commit journal roll-forward after a kill mid-commit is not tested by a real kill either
-- [ ] Download follow-ups: `setForeground` (dataSync foreground service + notification) for big areas vs the 10 min run limit and Doze; byte-range resume of the PBF and of the basemap (a retried run re-downloads data and basemap; keeping a staged import across retries of the same work ID would save the re-import); basemap could be fetched while SliceOSM slices (now sequential); Rust import staging dirs orphaned by a kill mid-import (now inside the per-run staging dir, which the next run deletes). Fixed 2026-10-03: a cancel during the import no longer publishes
+- [ ] Download follow-ups (`setForeground` DONE in 4a282d3 as opt-in ForegroundConfig): byte-range resume of the PBF and of the basemap (a retried run re-downloads data and basemap; keeping a staged import across retries of the same work ID would save the re-import); basemap could be fetched while SliceOSM slices (now sequential); Rust import staging dirs orphaned by a kill mid-import (now inside the per-run staging dir, which the next run deletes). Fixed 2026-10-03: a cancel during the import no longer publishes
 
 ## 6. Café reference app
 `android/cafe-app` (2026-10-03); see HANDOFF.md "Café reference app". Evidence: Pixel 8 screenshots `docs/screenshots/2026-10-03-cafe-*.png`.
@@ -76,14 +129,14 @@ Target onboarding flow (Martijn, 2026-10-03): get location → offer to download
 - [x] API freeze pass (4a282d3): public Kotlin surface audit (internal vs public), naming, KDoc on every public symbol, version 0.1.0
 - [x] Opt-in foreground-service mode (4a282d3) for large area downloads (WorkManager 10-min limit)
 - [x] **Name: Cantino** (Martijn 2026-10-03; story: Cantino planisphere, a smuggled copy of the master map): crate `cantino`, C ABI `cantino_*` (`include/cantino.h`), Kotlin `io.github.mvexel.cantino`, Maven `io.github.mvexel:cantino`, Gradle `:cantino`
-- [ ] GitHub repo rename `mvexel/osm-framework` → `mvexel/cantino` (Martijn), then `git remote set-url origin https://github.com/mvexel/cantino.git`
+- [x] GitHub repo renamed to `mvexel/cantino` (Martijn), remote updated
 - [x] Pre-0.1.0 API fixes (2026-10-03): output types not data classes (AreaInfo, AreaMetadata, BasemapMetadata, ImportReport, PmtilesInfo, AreaState subtypes); File overloads for OsmStore.open/importArea; drop redundant AreaState.Ready.report/snapshotTimestamp; snapshot timestamp as Instant; foreground-service manifest entries not forced on apps that don't download (moved out of the library manifest: app opt-in snippet, runtime check falls back to background with a warning; sample-app strips WorkManager's FOREGROUND_SERVICE)
 - [x] Name research: OSMF policy allows "osm" only descriptively; candidates checked on crates.io/Maven/GitHub
 - (superseded) **Name** before going public (OSMF trademark check + availability; research running) → rename package/artifact/JNI/C prefix/crate/repo
 - [x] Repo goes public, Apache-2.0 (Martijn 2026-10-03); LICENSE + NOTICE (ODbL/Protomaps attribution) prepared
 - [x] Distribution prepared (2026-10-03): `scripts/publish-pages.sh [--worktree]` builds native libs, the release AAR with POM metadata (name, description, url, Apache-2.0, developer, scm) into a GitHub Pages Maven layout + Dokka HTML + landing page (`build/pages`: `/maven/io/github/mvexel/cantino/0.1.0/`, `/api/`, `/index.html`, `.nojekyll`), synced into a local orphan `gh-pages` worktree at `build/gh-pages`
 - [x] **0.1.0 PUBLISHED 2026-10-03** (Martijn): repo renamed to mvexel/cantino and public; gh-pages pushed; tag v0.1.0; Pages live at https://mvexel.github.io/cantino/ (site, /api/, /maven/ all 200). Verified: fresh quickstart project resolves io.github.mvexel:cantino:0.1.0 from the live Maven URL exactly as in README, `clean assembleDebug` green, APK on emulator loads libcantino.so, no crashes. Local checkout moved to ~/dev/cantino
-- [ ] Publish step (Martijn): commit + push `gh-pages`, tag `v0.1.0`, enable Pages, make repo public (commands printed by the script)
+- [x] Publish step (Martijn): gh-pages pushed, tag v0.1.0, Pages enabled, repo public
 - [x] README quickstart (install → download area → query → MapLibre basemap), verified 2026-10-03: code blocks extracted verbatim from README.md into a fresh Gradle 9.8 / AGP 9.4.1 project, only the Maven URL swapped for `file://…/build/pages/maven`; `assembleDebug` green; on the x86_64 emulator `libcantino.so` loaded, live download Ready in ~10 s (136 cafés logged), relaunch in airplane mode: cafés + basemap rendered
 - [x] Guide `docs/guide/`: concepts, downloading (state machine, cancellation, failures, foreground mode, sizes, privacy, permissions), basemaps, querying, performance
 - [x] API reference: Dokka 2.2.0 on `:cantino` (`dokkaGeneratePublicationHtml`, public API only, source links to tag v0.1.0); fixed 4 unresolved KDoc links and added `@property` docs for constructor properties of input types and AreaState subtypes, plus companion docs (only equals/hashCode/toString overrides remain undocumented); published under `/api/` by the Pages script

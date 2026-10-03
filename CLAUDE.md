@@ -10,7 +10,7 @@ OpenStreetMap data for an app-defined area. Shared Rust core over a
 SQLite store (decided 2026-10-03, replacing OSMExpress; see TODO.md); thin Kotlin and Swift adapters.
 Background, evidence and build instructions: `HANDOFF.md`.
 
-## In scope (current milestone: read-only)
+## In scope (0.1.0 released 2026-10-03; next: 0.2, see TODO.md "Next up")
 
 - Import a SliceOSM PBF (or OSM XML) extract into a SQLite area file, publish atomically.
 - Lookup by ID, index-backed tag queries, bbox spatial candidates, dependency reporting.
@@ -32,20 +32,10 @@ Background, evidence and build instructions: `HANDOFF.md`.
 
 ## Plan
 
-Phases, in order. Progress is tracked in `TODO.md` (no GitHub board):
-
-0. Scope + tracking (this file, repo, TODO.md).
-1. Android vertical slice: x86_64 emulator + arm64 phone, instrumented test does
-   fixture import / get / query through JNI.
-2. Phone measurement, go/no-go on OSMExpress: city extract size, db size,
-   peak RSS, import time, query p50/p95. Go/no-go thresholds (city extract,
-   mid-range phone, set 2026-10-03): import < 60 s, peak RSS < 300 MB,
-   db < 3× PBF size, tag query p95 < 200 ms. A miss means revisiting the
-   backend before building further on it.
-3. iOS vertical slice: xcframework, Swift XCTest on simulator (parallel to 2).
-4. Basemap decision record + 2h PMTiles spike.
-5. Area download lifecycle (WorkManager / URLSession background).
-6. Café reference app, airplane-mode acceptance.
+`TODO.md` is the plan of record: "Status", then "Next up" in priority order
+(each item has a done-criterion), then the dated history of decisions and
+evidence. Outward-facing steps (pushing, tagging, publishing, GitHub settings)
+are done by Martijn; agents prepare them and print the commands.
 
 ## Working rules
 

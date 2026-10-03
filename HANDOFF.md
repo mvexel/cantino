@@ -1,6 +1,8 @@
 # Cantino handoff
 
-Updated October 3, 2026. This document is for the next developer continuing Cantino (Android and iOS). The project was called osm-framework until the 2026-10-03 rename; dated research docs, bench records and `spike/` keep the old name. Scope and boundaries are in `CLAUDE.md`, and progress is tracked in `TODO.md`.
+Updated October 3, 2026. This document is for the next developer continuing Cantino (Android and iOS). The project was called osm-framework until the 2026-10-03 rename; dated research docs, bench records and `spike/` keep the old name. Scope and boundaries are in `CLAUDE.md`; the plan of record (status, prioritized "Next up", history) is `TODO.md`.
+
+**0.1.0 is released** (2026-10-03): public repo https://github.com/mvexel/cantino (Apache-2.0), tag `v0.1.0`, Maven repo and Dokka API reference on GitHub Pages at https://mvexel.github.io/cantino/ (`io.github.mvexel:cantino:0.1.0`). Developer-facing docs are `README.md` (quickstart, verified against the live Maven URL) and `docs/guide/`; release notes in `CHANGELOG.md`. Releases are built by `scripts/publish-pages.sh --worktree`; pushing `gh-pages` and the tag is Martijn's step (see `TODO.md` Status).
 
 The core imports an OSM snapshot (PBF or XML) into a single read-only SQLite file, reopens it offline, and answers lookups, tag queries and bbox queries through indexes. One Rust library serves both platforms. Android works end to end on a Pixel 8 and an emulator. iOS is still to be built. Android area downloads (OSM data from SliceOSM plus an opt-in PMTiles basemap, downloaded or extracted on the device) work end to end, and the café reference app (`android/cafe-app`) passes the airplane-mode acceptance scenario on the Pixel 8.
 
@@ -137,7 +139,7 @@ The Kotlin API is `OsmStore` (open, importArea — `File` or path — get, query
 
 ## Verification evidence (2026-10-03)
 
-- 17 Rust integration tests and 2 unit tests pass, along with Clippy, rustfmt and the ctypes C ABI smoke test. The tests also check that XML and PBF imports produce identical objects and that a way crossing the box without inner nodes is returned.
+- 28 Rust integration tests (`tests/core.rs` 19, `tests/basemap.rs` 9) and 19 unit tests pass, along with Clippy, rustfmt and the ctypes C ABI smoke test. The tests also check that XML and PBF imports produce identical objects and that a way crossing the box without inner nodes is returned.
 - Six Android instrumented tests pass on a Pixel 8 (Android 17) and an x86_64 emulator (Android 15). They cover:
   - import, get and query
   - a Unicode round-trip across JNI
@@ -145,7 +147,7 @@ The Kotlin API is `OsmStore` (open, importArea — `File` or path — get, query
   - an invalid query leaving the store usable
   - thread confinement and a closed store
   - untagged-node metadata
-- Area downloads with basemaps (2026-10-03): `AreaManagerTest` (15 tests, the 2 live ones skipped by default) plus the store tests pass on the Pixel 8 and the emulator; the ABI layer of the basemap extract has Rust unit tests (`src/mobile_basemap.rs`, byte-identical to the engine) and a ctypes run in `scripts/mobile-api-smoke.py`.
+- Area downloads with basemaps (2026-10-03): `AreaManagerTest` (19 tests, the 2 live ones skipped by default; includes the foreground-mode tests) plus the store tests pass on the Pixel 8 and the emulator; the ABI layer of the basemap extract has Rust unit tests (`src/mobile_basemap.rs`, byte-identical to the engine) and a ctypes run in `scripts/mobile-api-smoke.py`.
 - The Salt Lake City numbers above are on the Pixel. All café counts (175 total, 15 downtown) match between backends.
 
 ## Risks and open work
@@ -155,4 +157,4 @@ The Kotlin API is `OsmStore` (open, importArea — `File` or path — get, query
 - **Query cost through the AAR is dominated by JNI and JSON** (about 0.08 ms per object). A binary or batched wire format is the lever if this matters.
 - Fonts for the basemap are 14 MB for three stacks; subset them to the ranges needed.
 - Café app: opening hours are evaluated in the device's time zone, not the café's; the relation-café UI path has not run on a device (none in the SLC area); the real-GPS first run is deliberately not exercised by agents.
-- Pending phases are tracked in `TODO.md`: the iOS slice and the iOS download lifecycle.
+- Open work is ranked in `TODO.md` "Next up": 0.2 API polish, download reliability (real process-kill tests, byte-range resume), import performance and memory, café app fixes, iOS (blocked on Mac access), then offline editing (needs a scope change) and offline routing research.
