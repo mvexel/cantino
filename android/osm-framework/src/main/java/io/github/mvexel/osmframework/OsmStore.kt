@@ -1,11 +1,11 @@
 package io.github.mvexel.osmframework
 
+import org.json.JSONArray
+import org.json.JSONObject
+
 /** A framework or native failure. The store remains usable after query errors. */
 class OsmFrameworkException(message: String, cause: Throwable? = null) :
     RuntimeException(message, cause)
-
-/** OSM object namespaces, numbered as in the C ABI. */
-enum class OsmKind(internal val code: Int) { NODE(0), WAY(1), RELATION(2) }
 
 /**
  * An open offline area database.
@@ -18,7 +18,7 @@ enum class OsmKind(internal val code: Int) { NODE(0), WAY(1), RELATION(2) }
  * Only one store may be open per database path in a process (an LMDB rule);
  * reuse the open store instead of opening one per query.
  *
- * Results are JSON strings that own copies of all object data.
+ * Returned objects own copies of their data and outlive the store.
  */
 class OsmStore private constructor(private var handle: Long) : AutoCloseable {
     companion object {
@@ -27,20 +27,26 @@ class OsmStore private constructor(private var handle: Long) : AutoCloseable {
         fun open(path: String): OsmStore = OsmStore(native { NativeBridge.open(path) })
 
         /**
-         * Imports an OSM PBF/XML file into [destination], publishing it atomically.
+         * Imports an OSM PBF/XML file into [destination], publishing it atomically:
+         * a failed import leaves any existing area at [destination] intact.
          * Synchronous disk and CPU work: never call from the main thread.
-         * [optionsJson] may be null for defaults. Returns the import report JSON.
+         * An open store keeps its old snapshot; close and reopen to see a replacement.
          */
         @JvmStatic
-        fun importArea(input: String, destination: String, optionsJson: String? = null): String =
-            native { NativeBridge.importArea(input, destination, optionsJson) }
+        @JvmOverloads
+        fun importArea(input: String, destination: String, options: ImportOptions = ImportOptions()): ImportReport =
+            ImportReport.fromJson(JSONObject(native { NativeBridge.importArea(input, destination, options.toJson()) }))
     }
 
-    /** Object JSON, or null when the object is not in this area. */
-    fun get(kind: OsmKind, id: Long): String? = native { NativeBridge.get(live(), kind.code, id) }
+    /** The object, or null when it is not in this area. */
+    fun get(id: OsmId): OsmObject? =
+        native { NativeBridge.get(live(), id.kind.code, id.id) }?.let { OsmObject.fromJson(JSONObject(it)) }
 
-    /** Runs a JSON query (see include/osm_framework.h); returns a JSON array. */
-    fun query(requestJson: String): String = native { NativeBridge.query(live(), requestJson) }
+    /** Runs [query]; see [Query] for ordering, pagination and spatial semantics. */
+    fun query(query: Query): List<OsmObject> {
+        val results = JSONArray(native { NativeBridge.query(live(), query.toJson()) })
+        return List(results.length()) { OsmObject.fromJson(results.getJSONObject(it)) }
+    }
 
     /** Closes the store. Idempotent; must run on the owner thread. */
     override fun close() {

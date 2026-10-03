@@ -14,8 +14,8 @@ against the repo before trusting it.
 - [x] `build-android.sh` builds x86_64 alongside arm64-v8a
 - [x] JNI adapter + Kotlin API (open/close/get/query/import, strings in, JSON out)
 - [x] Gradle library module packaging all three `.so` per ABI
-- [ ] Strip native libraries in the AAR (AGP can't strip without an SDK-managed NDK; ~29 MB unstripped per ABI)
-- [ ] Publishable AAR (maven-publish), typed Kotlin models instead of JSON strings
+- [x] Strip native libraries in the AAR (SDK-managed NDK; arm64 29 MB → 7.8 MB, AAR 6.3 MB)
+- [x] Publishable AAR (maven-publish to android/build/repo), typed Kotlin models instead of JSON strings
 - [x] Instrumented test: fixture import, get, query, close on one worker thread
 - [x] Test green on x86_64 emulator
 - [x] Test green on physical arm64 phone

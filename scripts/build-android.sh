@@ -5,7 +5,9 @@
 # Output: target/android/<ABI>/ with the three shared libraries the AAR packages.
 set -eu
 root=$(CDPATH= cd -- "$(dirname "$0")/.." && pwd)
-: "${ANDROID_NDK_ROOT:?Set ANDROID_NDK_ROOT to Android NDK r29}"
+# Default to the SDK-managed NDK that Gradle also uses for stripping.
+: "${ANDROID_NDK_ROOT:=${ANDROID_HOME:-$HOME/Android/Sdk}/ndk/29.0.14206865}"
+export ANDROID_NDK_ROOT
 source="${OSMX_SOURCE_DIR:-$root/vendor/OSMExpress}"
 toolchain="$ANDROID_NDK_ROOT/toolchains/llvm/prebuilt/linux-x86_64/bin"
 [ "$#" -gt 0 ] || set -- arm64-v8a x86_64
