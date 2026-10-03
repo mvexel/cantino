@@ -1,0 +1,4 @@
+{"device":"Pixel 8 (Android 17, arm64)","extract":"same SLC PBF as 2026-10-03-slc-pixel8.json","build":"spike/sqlite-b bench binary (standalone, no ART), VACUUM at end",
+ "result":{"bbox_query_p50_ms":0.333,"bbox_query_p95_ms":0.371,"cafes":175,"db_bytes":128512000,"downtown_cafes":15,"get_p50_ms":0.0092,"get_p95_ms":0.0097,"hwm_after_import_bytes":177418240,"import_ms":5728.7,"nodes":1437753,"relations":1473,"ways":207076,"tag_query_cold_ms":1.61,"tag_query_p50_ms":1.10,"tag_query_p95_ms":1.14,
+ "table_mb":{"nodes":34.11,"tag_index":26.13,"node_way":24.43,"ways":20.44,"geo_node":12.49,"geo_rowid":3.83,"member_rel":0.57,"relations":0.38,"geo_parent":0.1,"users":0.04,"dict":0.03}},
+ "verify":"ways 207076/207076 exact (order+repeats), relations 1473/1473, nodes 107685 checked 0 bad"}

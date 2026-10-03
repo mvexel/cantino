@@ -24,11 +24,18 @@ against the repo before trusting it.
 - [x] Pick city extract, fetch via SliceOSM — Salt Lake City bbox (-112.10, 40.70, -111.80, 40.85), 13 MB PBF
 - [x] Measure on Pixel 8 (`scripts/bench-android.sh`, results in `docs/bench/2026-10-03-slc-pixel8.json`)
 - [x] Compare against thresholds: import 5.0 s ✅; peak RSS 425 MB ❌; db 338 MB = 26× ❌; tag query p95 32.6 s ❌
-- [ ] **DECISION (Martijn):** keep OSMExpress + fix our layer, or revisit backend? Blocks phases 3–6.
-- [ ] Proposed (awaiting GO): 2h spike, pure-Rust SQLite store (osmpbf + rusqlite) on the same SLC bench. Kill criteria → stay on OSMExpress if db > 215 MB, Pixel import > 60 s, or tag query p95 > 200 ms
-- [ ] If kept: default `preserve_untagged_metadata=false` (338 → 215 MB)
-- [ ] If kept: tag index table at import (additive LMDB table in fork) → tag queries in ms
-- [ ] If kept: replace 3× size threshold with an absolute per-city budget; re-run bench
+- [x] **DECISION 2026-10-03: SQLite variant B replaces OSMExpress.** Pixel 8: 128.5 MB db, 5.7 s import, 177 MB peak, tag p95 1.1 ms (`docs/bench/2026-10-03-slc-sqlite-b-pixel8.json`). Variant A stopped unfinished.
+- [x] GO 2026-10-03, done: 2h spike, pure-Rust SQLite store (osmpbf + rusqlite) on the same SLC bench. Kill criteria → stay on OSMExpress if db > 215 MB, Pixel import > 60 s, or tag query p95 > 200 ms
+- Parked fallback (not now): server component that pre-bakes area databases for download, removing on-phone import. Revisit only if on-device import fails the budget.
+- [x] Size threshold replaced: absolute budget < 150 MB for this extract (met: 128.5 MB)
+- [x] Pre-baked download format proposal: `docs/research/2026-10-03-prebaked-dataset-format.md` (parked)
+
+## 2b. Migrate core to SQLite (variant B)
+- [ ] Port `spike/sqlite-b` into `src/` behind the existing Rust API (Store, import_area, Query, get, dependencies, way_coordinates), atomic staged publish kept
+- [ ] Remove OSMExpress: submodule, `src/ffi.rs`, build.rs native linking, Docker native build; C ABI + JNI unchanged
+- [ ] Rust integration tests green (adapt OSMExpress-specific ones); Clippy; ABI smoke
+- [ ] Android instrumented tests + city bench green on Pixel 8 and emulator through the AAR
+- [ ] Update HANDOFF/CLAUDE.md; archive the OSMExpress fork notes
 
 ## 3. iOS vertical slice
 - [ ] Inspect Mac (Xcode, toolchain)

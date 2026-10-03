@@ -1,8 +1,8 @@
 # osm-framework
 
 Headless native framework that gives Android and iOS apps offline access to raw
-OpenStreetMap data for an app-defined area. Shared Rust core over an
-OSMExpress (LMDB / Cap'n Proto / S2) backend; thin Kotlin and Swift adapters.
+OpenStreetMap data for an app-defined area. Shared Rust core over a
+SQLite store (decided 2026-10-03, replacing OSMExpress; see TODO.md); thin Kotlin and Swift adapters.
 Background, evidence and build instructions: `HANDOFF.md`.
 
 ## In scope (current milestone: read-only)

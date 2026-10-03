@@ -2,3 +2,6 @@
 /work
 *.osmx
 *.osmx-lock
+spike/*/target
+spike/*/out
+*.sqlite
