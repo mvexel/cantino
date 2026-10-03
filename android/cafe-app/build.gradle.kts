@@ -7,10 +7,10 @@ plugins {
 }
 
 android {
-    namespace = "io.github.mvexel.osmframework.cafe"
+    namespace = "io.github.mvexel.cantino.cafe"
     compileSdk = 36
     defaultConfig {
-        applicationId = "io.github.mvexel.osmframework.cafe"
+        applicationId = "io.github.mvexel.cantino.cafe"
         minSdk = 26
         targetSdk = 36
         versionCode = 1
@@ -43,7 +43,7 @@ val copyBasemapStyleAssets by tasks.registering(Sync::class) {
 tasks.named("preBuild") { dependsOn(copyBasemapStyleAssets) }
 
 dependencies {
-    implementation(project(":osm-framework"))
+    implementation(project(":cantino"))
     implementation("org.maplibre.gl:android-sdk:13.6.1")
     // AreaManager.state() is a Flow; the framework keeps coroutines as an
     // implementation dependency, so the app declares them itself.

@@ -100,7 +100,7 @@ pub fn import_area(
     // stays on one filesystem (and is therefore atomic). `TempDir` removes it
     // on every early return.
     let staging = tempfile::Builder::new()
-        .prefix(".osmfw-stage-")
+        .prefix(".cantino-stage-")
         .tempdir_in(parent)?;
     let build = staging.path().join("build.sqlite");
     let staged = staging.path().join("area.sqlite");

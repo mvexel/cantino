@@ -1,4 +1,4 @@
-use osm_framework::*;
+use cantino::*;
 use std::path::Path;
 
 fn fixture() -> &'static Path {
@@ -191,7 +191,7 @@ fn failed_import_keeps_previous_area_and_cleans_staging() {
             .unwrap()
             .file_name()
             .to_string_lossy()
-            .starts_with(".osmfw-stage-")
+            .starts_with(".cantino-stage-")
     }));
 }
 #[test]

@@ -1,4 +1,4 @@
-//! Offline OSM data core for native mobile frameworks.
+//! Cantino: an offline OpenStreetMap SDK core for native mobile apps.
 //!
 //! An area is one read-only SQLite file built from an OSM snapshot (PBF or
 //! XML) by `import_area` and opened with `Store`. The crate supplies owned

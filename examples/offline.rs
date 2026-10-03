@@ -1,4 +1,4 @@
-use osm_framework::*;
+use cantino::*;
 
 // Desktop harness around the same headless API intended for mobile bindings.
 // Run `cargo run --release --example offline -- import input.osm.pbf area.sqlite`,

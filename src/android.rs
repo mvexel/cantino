@@ -1,4 +1,4 @@
-//! JNI entry points for the Kotlin adapter (`io.github.mvexel.osmframework`).
+//! JNI entry points for the Kotlin adapter (`io.github.mvexel.cantino`).
 //!
 //! These functions deliberately go through the same C ABI as the iOS adapter
 //! (`mobile_api`) instead of calling `Store` directly. That keeps one
@@ -7,8 +7,8 @@
 //! strings and the C ABI's owned UTF-8 buffers.
 //!
 //! Errors surface in Java as `RuntimeException("Rust error: ...")`, which the
-//! Kotlin wrapper rethrows as `OsmFrameworkException`. Store handles cross into
-//! Java as a `long` holding the `FrameworkStore` pointer; the Kotlin class owns
+//! Kotlin wrapper rethrows as `CantinoException`. Store handles cross into
+//! Java as a `long` holding the `CantinoStore` pointer; the Kotlin class owns
 //! it and zeroes it after close so a handle is never closed twice.
 use crate::mobile_api::*;
 use crate::mobile_basemap::*;
@@ -45,7 +45,7 @@ fn take(buffer: *mut c_char) -> Option<String> {
     let value = unsafe { CStr::from_ptr(buffer) }
         .to_string_lossy()
         .into_owned();
-    unsafe { osm_framework_free(buffer) };
+    unsafe { cantino_free(buffer) };
     Some(value)
 }
 
@@ -73,7 +73,7 @@ fn c_string(value: String) -> Result<CString, BridgeError> {
 }
 
 #[unsafe(no_mangle)]
-pub extern "system" fn Java_io_github_mvexel_osmframework_NativeBridge_open<'local>(
+pub extern "system" fn Java_io_github_mvexel_cantino_NativeBridge_open<'local>(
     mut env: EnvUnowned<'local>,
     _class: JClass<'local>,
     path: JString<'local>,
@@ -82,21 +82,21 @@ pub extern "system" fn Java_io_github_mvexel_osmframework_NativeBridge_open<'loc
         let path = c_string(path.try_to_string(env)?)?;
         let mut store = ptr::null_mut();
         // SAFETY: path lives for the call; store is a writable slot.
-        call(|_, error| unsafe { osm_framework_open(path.as_ptr(), &mut store, error) })?;
+        call(|_, error| unsafe { cantino_open(path.as_ptr(), &mut store, error) })?;
         Ok(store as jlong)
     })
     .resolve::<ThrowRuntimeExAndDefault>()
 }
 
 #[unsafe(no_mangle)]
-pub extern "system" fn Java_io_github_mvexel_osmframework_NativeBridge_close<'local>(
+pub extern "system" fn Java_io_github_mvexel_cantino_NativeBridge_close<'local>(
     mut env: EnvUnowned<'local>,
     _class: JClass<'local>,
     handle: jlong,
 ) {
     env.with_env(|_| -> Result<(), BridgeError> {
         // SAFETY: the Kotlin owner passes a live handle and forgets it after this.
-        call(|_, error| unsafe { osm_framework_close(handle as *mut FrameworkStore, error) })?;
+        call(|_, error| unsafe { cantino_close(handle as *mut CantinoStore, error) })?;
         Ok(())
     })
     .resolve::<ThrowRuntimeExAndDefault>()
@@ -104,7 +104,7 @@ pub extern "system" fn Java_io_github_mvexel_osmframework_NativeBridge_close<'lo
 
 /// Returns the object JSON, or Java `null` when the object is absent (status 1).
 #[unsafe(no_mangle)]
-pub extern "system" fn Java_io_github_mvexel_osmframework_NativeBridge_get<'local>(
+pub extern "system" fn Java_io_github_mvexel_cantino_NativeBridge_get<'local>(
     mut env: EnvUnowned<'local>,
     _class: JClass<'local>,
     handle: jlong,
@@ -114,7 +114,7 @@ pub extern "system" fn Java_io_github_mvexel_osmframework_NativeBridge_get<'loca
     env.with_env(|env| -> Result<JString<'local>, BridgeError> {
         // SAFETY: live handle owned by the Kotlin store on this thread.
         let (status, json) = call(|out, error| unsafe {
-            osm_framework_get(handle as *mut FrameworkStore, kind, id, out, error)
+            cantino_get(handle as *mut CantinoStore, kind, id, out, error)
         })?;
         match (status, json) {
             (0, Some(json)) => Ok(JString::from_str(env, json)?),
@@ -125,7 +125,7 @@ pub extern "system" fn Java_io_github_mvexel_osmframework_NativeBridge_get<'loca
 }
 
 #[unsafe(no_mangle)]
-pub extern "system" fn Java_io_github_mvexel_osmframework_NativeBridge_query<'local>(
+pub extern "system" fn Java_io_github_mvexel_cantino_NativeBridge_query<'local>(
     mut env: EnvUnowned<'local>,
     _class: JClass<'local>,
     handle: jlong,
@@ -135,7 +135,7 @@ pub extern "system" fn Java_io_github_mvexel_osmframework_NativeBridge_query<'lo
         let request = c_string(request.try_to_string(env)?)?;
         // SAFETY: live handle; request lives for the call.
         let (_, json) = call(|out, error| unsafe {
-            osm_framework_query(handle as *mut FrameworkStore, request.as_ptr(), out, error)
+            cantino_query(handle as *mut CantinoStore, request.as_ptr(), out, error)
         })?;
         Ok(JString::from_str(env, json.unwrap_or_default())?)
     })
@@ -144,7 +144,7 @@ pub extern "system" fn Java_io_github_mvexel_osmframework_NativeBridge_query<'lo
 
 /// `options` may be Java `null` for default import options.
 #[unsafe(no_mangle)]
-pub extern "system" fn Java_io_github_mvexel_osmframework_NativeBridge_importArea<'local>(
+pub extern "system" fn Java_io_github_mvexel_cantino_NativeBridge_importArea<'local>(
     mut env: EnvUnowned<'local>,
     _class: JClass<'local>,
     input: JString<'local>,
@@ -162,7 +162,7 @@ pub extern "system" fn Java_io_github_mvexel_osmframework_NativeBridge_importAre
         let options = options.as_ref().map_or(ptr::null(), |value| value.as_ptr());
         // SAFETY: all strings live for the call; options may be NULL by contract.
         let (_, report) = call(|out, error| unsafe {
-            osm_framework_import(input.as_ptr(), destination.as_ptr(), options, out, error)
+            cantino_import(input.as_ptr(), destination.as_ptr(), options, out, error)
         })?;
         Ok(JString::from_str(env, report.unwrap_or_default())?)
     })
@@ -180,7 +180,7 @@ fn optional(env: &mut jni::Env, value: &JString) -> Result<Option<CString>, Brid
 
 /// SliceOSM submit request: `{"url","body"}`. `base` may be Java `null`.
 #[unsafe(no_mangle)]
-pub extern "system" fn Java_io_github_mvexel_osmframework_NativeBridge_sliceJobRequest<'local>(
+pub extern "system" fn Java_io_github_mvexel_cantino_NativeBridge_sliceJobRequest<'local>(
     mut env: EnvUnowned<'local>,
     _class: JClass<'local>,
     base: JString<'local>,
@@ -194,7 +194,7 @@ pub extern "system" fn Java_io_github_mvexel_osmframework_NativeBridge_sliceJobR
         let base = base.as_ref().map_or(ptr::null(), |value| value.as_ptr());
         // SAFETY: all strings live for the call; base may be NULL by contract.
         let (_, json) = call(|out, error| unsafe {
-            osm_framework_slice_job_request(base, bbox.as_ptr(), name.as_ptr(), out, error)
+            cantino_slice_job_request(base, bbox.as_ptr(), name.as_ptr(), out, error)
         })?;
         Ok(JString::from_str(env, json.unwrap_or_default())?)
     })
@@ -203,7 +203,7 @@ pub extern "system" fn Java_io_github_mvexel_osmframework_NativeBridge_sliceJobR
 
 /// SliceOSM job from a submit response or a persisted ID: `{"job_id","status_url","download_url"}`.
 #[unsafe(no_mangle)]
-pub extern "system" fn Java_io_github_mvexel_osmframework_NativeBridge_sliceJob<'local>(
+pub extern "system" fn Java_io_github_mvexel_cantino_NativeBridge_sliceJob<'local>(
     mut env: EnvUnowned<'local>,
     _class: JClass<'local>,
     base: JString<'local>,
@@ -214,9 +214,8 @@ pub extern "system" fn Java_io_github_mvexel_osmframework_NativeBridge_sliceJob<
         let response = c_string(response.try_to_string(env)?)?;
         let base = base.as_ref().map_or(ptr::null(), |value| value.as_ptr());
         // SAFETY: strings live for the call; base may be NULL by contract.
-        let (_, json) = call(|out, error| unsafe {
-            osm_framework_slice_job(base, response.as_ptr(), out, error)
-        })?;
+        let (_, json) =
+            call(|out, error| unsafe { cantino_slice_job(base, response.as_ptr(), out, error) })?;
         Ok(JString::from_str(env, json.unwrap_or_default())?)
     })
     .resolve::<ThrowRuntimeExAndDefault>()
@@ -224,7 +223,7 @@ pub extern "system" fn Java_io_github_mvexel_osmframework_NativeBridge_sliceJob<
 
 /// SliceOSM status document → `{"complete","fraction","size_bytes","timestamp"}`.
 #[unsafe(no_mangle)]
-pub extern "system" fn Java_io_github_mvexel_osmframework_NativeBridge_sliceProgress<'local>(
+pub extern "system" fn Java_io_github_mvexel_cantino_NativeBridge_sliceProgress<'local>(
     mut env: EnvUnowned<'local>,
     _class: JClass<'local>,
     status: JString<'local>,
@@ -232,9 +231,8 @@ pub extern "system" fn Java_io_github_mvexel_osmframework_NativeBridge_sliceProg
     env.with_env(|env| -> Result<JString<'local>, BridgeError> {
         let status = c_string(status.try_to_string(env)?)?;
         // SAFETY: status lives for the call.
-        let (_, json) = call(|out, error| unsafe {
-            osm_framework_slice_progress(status.as_ptr(), out, error)
-        })?;
+        let (_, json) =
+            call(|out, error| unsafe { cantino_slice_progress(status.as_ptr(), out, error) })?;
         Ok(JString::from_str(env, json.unwrap_or_default())?)
     })
     .resolve::<ThrowRuntimeExAndDefault>()
@@ -259,7 +257,7 @@ fn json_call<'local>(
 }
 
 #[unsafe(no_mangle)]
-pub extern "system" fn Java_io_github_mvexel_osmframework_NativeBridge_basemapPlanNew<'local>(
+pub extern "system" fn Java_io_github_mvexel_cantino_NativeBridge_basemapPlanNew<'local>(
     mut env: EnvUnowned<'local>,
     _class: JClass<'local>,
     bbox: JString<'local>,
@@ -272,7 +270,7 @@ pub extern "system" fn Java_io_github_mvexel_osmframework_NativeBridge_basemapPl
         let mut plan = ptr::null_mut();
         // SAFETY: bbox lives for the call; plan is a writable slot.
         call(|_, error| unsafe {
-            osm_framework_basemap_plan_new(
+            cantino_basemap_plan_new(
                 bbox.as_ptr(),
                 min_zoom,
                 max_zoom,
@@ -287,7 +285,7 @@ pub extern "system" fn Java_io_github_mvexel_osmframework_NativeBridge_basemapPl
 }
 
 #[unsafe(no_mangle)]
-pub extern "system" fn Java_io_github_mvexel_osmframework_NativeBridge_basemapPlanFirstRequest<
+pub extern "system" fn Java_io_github_mvexel_cantino_NativeBridge_basemapPlanFirstRequest<
     'local,
 >(
     mut env: EnvUnowned<'local>,
@@ -297,7 +295,7 @@ pub extern "system" fn Java_io_github_mvexel_osmframework_NativeBridge_basemapPl
     env.with_env(|env| -> Result<JString<'local>, BridgeError> {
         // SAFETY: live plan handle owned by the Kotlin driver on this thread.
         json_call(env, |out, error| unsafe {
-            osm_framework_basemap_plan_first_request(plan as *mut FrameworkBasemapPlan, out, error)
+            cantino_basemap_plan_first_request(plan as *mut CantinoBasemapPlan, out, error)
         })
     })
     .resolve::<ThrowRuntimeExAndDefault>()
@@ -305,7 +303,7 @@ pub extern "system" fn Java_io_github_mvexel_osmframework_NativeBridge_basemapPl
 
 /// Feeds a directory-phase response (`bytes` copied once out of the JVM heap).
 #[unsafe(no_mangle)]
-pub extern "system" fn Java_io_github_mvexel_osmframework_NativeBridge_basemapPlanFeed<'local>(
+pub extern "system" fn Java_io_github_mvexel_cantino_NativeBridge_basemapPlanFeed<'local>(
     mut env: EnvUnowned<'local>,
     _class: JClass<'local>,
     plan: jlong,
@@ -316,8 +314,8 @@ pub extern "system" fn Java_io_github_mvexel_osmframework_NativeBridge_basemapPl
         let bytes = env.convert_byte_array(&bytes)?;
         // SAFETY: live plan handle; bytes live for the call.
         json_call(env, |out, error| unsafe {
-            osm_framework_basemap_plan_feed(
-                plan as *mut FrameworkBasemapPlan,
+            cantino_basemap_plan_feed(
+                plan as *mut CantinoBasemapPlan,
                 id as u64,
                 bytes.as_ptr(),
                 bytes.len(),
@@ -330,9 +328,7 @@ pub extern "system" fn Java_io_github_mvexel_osmframework_NativeBridge_basemapPl
 }
 
 #[unsafe(no_mangle)]
-pub extern "system" fn Java_io_github_mvexel_osmframework_NativeBridge_basemapPlanOutstanding<
-    'local,
->(
+pub extern "system" fn Java_io_github_mvexel_cantino_NativeBridge_basemapPlanOutstanding<'local>(
     mut env: EnvUnowned<'local>,
     _class: JClass<'local>,
     plan: jlong,
@@ -340,7 +336,7 @@ pub extern "system" fn Java_io_github_mvexel_osmframework_NativeBridge_basemapPl
     env.with_env(|env| -> Result<JString<'local>, BridgeError> {
         // SAFETY: live plan handle on its owner thread.
         json_call(env, |out, error| unsafe {
-            osm_framework_basemap_plan_outstanding(plan as *mut FrameworkBasemapPlan, out, error)
+            cantino_basemap_plan_outstanding(plan as *mut CantinoBasemapPlan, out, error)
         })
     })
     .resolve::<ThrowRuntimeExAndDefault>()
@@ -349,7 +345,7 @@ pub extern "system" fn Java_io_github_mvexel_osmframework_NativeBridge_basemapPl
 /// Consumes the plan (see the header: every call past the handle check) and
 /// returns the assembler handle.
 #[unsafe(no_mangle)]
-pub extern "system" fn Java_io_github_mvexel_osmframework_NativeBridge_basemapPlanIntoAssembler<
+pub extern "system" fn Java_io_github_mvexel_cantino_NativeBridge_basemapPlanIntoAssembler<
     'local,
 >(
     mut env: EnvUnowned<'local>,
@@ -363,8 +359,8 @@ pub extern "system" fn Java_io_github_mvexel_osmframework_NativeBridge_basemapPl
         // SAFETY: live plan handle; the Kotlin owner forgets it after this
         // call; staging lives for the call; assembler is a writable slot.
         call(|_, error| unsafe {
-            osm_framework_basemap_plan_into_assembler(
-                plan as *mut FrameworkBasemapPlan,
+            cantino_basemap_plan_into_assembler(
+                plan as *mut CantinoBasemapPlan,
                 staging.as_ptr(),
                 &mut assembler,
                 error,
@@ -376,7 +372,7 @@ pub extern "system" fn Java_io_github_mvexel_osmframework_NativeBridge_basemapPl
 }
 
 #[unsafe(no_mangle)]
-pub extern "system" fn Java_io_github_mvexel_osmframework_NativeBridge_basemapPlanFree<'local>(
+pub extern "system" fn Java_io_github_mvexel_cantino_NativeBridge_basemapPlanFree<'local>(
     mut env: EnvUnowned<'local>,
     _class: JClass<'local>,
     plan: jlong,
@@ -384,7 +380,7 @@ pub extern "system" fn Java_io_github_mvexel_osmframework_NativeBridge_basemapPl
     env.with_env(|_| -> Result<(), BridgeError> {
         // SAFETY: live (or zero) plan handle, freed once by its Kotlin owner.
         call(|_, error| unsafe {
-            osm_framework_basemap_plan_free(plan as *mut FrameworkBasemapPlan, error)
+            cantino_basemap_plan_free(plan as *mut CantinoBasemapPlan, error)
         })?;
         Ok(())
     })
@@ -392,9 +388,7 @@ pub extern "system" fn Java_io_github_mvexel_osmframework_NativeBridge_basemapPl
 }
 
 #[unsafe(no_mangle)]
-pub extern "system" fn Java_io_github_mvexel_osmframework_NativeBridge_basemapAsmWriteRange<
-    'local,
->(
+pub extern "system" fn Java_io_github_mvexel_cantino_NativeBridge_basemapAsmWriteRange<'local>(
     mut env: EnvUnowned<'local>,
     _class: JClass<'local>,
     assembler: jlong,
@@ -405,8 +399,8 @@ pub extern "system" fn Java_io_github_mvexel_osmframework_NativeBridge_basemapAs
         let bytes = env.convert_byte_array(&bytes)?;
         // SAFETY: live assembler handle on its owner thread; bytes live for the call.
         call(|_, error| unsafe {
-            osm_framework_basemap_asm_write_range(
-                assembler as *mut FrameworkBasemapAssembler,
+            cantino_basemap_asm_write_range(
+                assembler as *mut CantinoBasemapAssembler,
                 id as u64,
                 bytes.as_ptr(),
                 bytes.len(),
@@ -419,7 +413,7 @@ pub extern "system" fn Java_io_github_mvexel_osmframework_NativeBridge_basemapAs
 }
 
 #[unsafe(no_mangle)]
-pub extern "system" fn Java_io_github_mvexel_osmframework_NativeBridge_basemapAsmWriteRangeFile<
+pub extern "system" fn Java_io_github_mvexel_cantino_NativeBridge_basemapAsmWriteRangeFile<
     'local,
 >(
     mut env: EnvUnowned<'local>,
@@ -432,8 +426,8 @@ pub extern "system" fn Java_io_github_mvexel_osmframework_NativeBridge_basemapAs
         let path = c_string(path.try_to_string(env)?)?;
         // SAFETY: live assembler handle on its owner thread; path lives for the call.
         call(|_, error| unsafe {
-            osm_framework_basemap_asm_write_range_file(
-                assembler as *mut FrameworkBasemapAssembler,
+            cantino_basemap_asm_write_range_file(
+                assembler as *mut CantinoBasemapAssembler,
                 id as u64,
                 path.as_ptr(),
                 error,
@@ -445,9 +439,7 @@ pub extern "system" fn Java_io_github_mvexel_osmframework_NativeBridge_basemapAs
 }
 
 #[unsafe(no_mangle)]
-pub extern "system" fn Java_io_github_mvexel_osmframework_NativeBridge_basemapAsmRemaining<
-    'local,
->(
+pub extern "system" fn Java_io_github_mvexel_cantino_NativeBridge_basemapAsmRemaining<'local>(
     mut env: EnvUnowned<'local>,
     _class: JClass<'local>,
     assembler: jlong,
@@ -455,20 +447,14 @@ pub extern "system" fn Java_io_github_mvexel_osmframework_NativeBridge_basemapAs
     env.with_env(|env| -> Result<JString<'local>, BridgeError> {
         // SAFETY: live assembler handle on its owner thread.
         json_call(env, |out, error| unsafe {
-            osm_framework_basemap_asm_remaining(
-                assembler as *mut FrameworkBasemapAssembler,
-                out,
-                error,
-            )
+            cantino_basemap_asm_remaining(assembler as *mut CantinoBasemapAssembler, out, error)
         })
     })
     .resolve::<ThrowRuntimeExAndDefault>()
 }
 
 #[unsafe(no_mangle)]
-pub extern "system" fn Java_io_github_mvexel_osmframework_NativeBridge_basemapAsmProgress<
-    'local,
->(
+pub extern "system" fn Java_io_github_mvexel_cantino_NativeBridge_basemapAsmProgress<'local>(
     mut env: EnvUnowned<'local>,
     _class: JClass<'local>,
     assembler: jlong,
@@ -476,18 +462,14 @@ pub extern "system" fn Java_io_github_mvexel_osmframework_NativeBridge_basemapAs
     env.with_env(|env| -> Result<JString<'local>, BridgeError> {
         // SAFETY: live assembler handle on its owner thread.
         json_call(env, |out, error| unsafe {
-            osm_framework_basemap_asm_progress(
-                assembler as *mut FrameworkBasemapAssembler,
-                out,
-                error,
-            )
+            cantino_basemap_asm_progress(assembler as *mut CantinoBasemapAssembler, out, error)
         })
     })
     .resolve::<ThrowRuntimeExAndDefault>()
 }
 
 #[unsafe(no_mangle)]
-pub extern "system" fn Java_io_github_mvexel_osmframework_NativeBridge_basemapAsmFinish<'local>(
+pub extern "system" fn Java_io_github_mvexel_cantino_NativeBridge_basemapAsmFinish<'local>(
     mut env: EnvUnowned<'local>,
     _class: JClass<'local>,
     assembler: jlong,
@@ -497,8 +479,8 @@ pub extern "system" fn Java_io_github_mvexel_osmframework_NativeBridge_basemapAs
         let output = c_string(output.try_to_string(env)?)?;
         // SAFETY: live assembler handle on its owner thread; output lives for the call.
         call(|_, error| unsafe {
-            osm_framework_basemap_asm_finish(
-                assembler as *mut FrameworkBasemapAssembler,
+            cantino_basemap_asm_finish(
+                assembler as *mut CantinoBasemapAssembler,
                 output.as_ptr(),
                 error,
             )
@@ -509,7 +491,7 @@ pub extern "system" fn Java_io_github_mvexel_osmframework_NativeBridge_basemapAs
 }
 
 #[unsafe(no_mangle)]
-pub extern "system" fn Java_io_github_mvexel_osmframework_NativeBridge_basemapAsmFree<'local>(
+pub extern "system" fn Java_io_github_mvexel_cantino_NativeBridge_basemapAsmFree<'local>(
     mut env: EnvUnowned<'local>,
     _class: JClass<'local>,
     assembler: jlong,
@@ -517,7 +499,7 @@ pub extern "system" fn Java_io_github_mvexel_osmframework_NativeBridge_basemapAs
     env.with_env(|_| -> Result<(), BridgeError> {
         // SAFETY: live (or zero) assembler handle, freed once by its Kotlin owner.
         call(|_, error| unsafe {
-            osm_framework_basemap_asm_free(assembler as *mut FrameworkBasemapAssembler, error)
+            cantino_basemap_asm_free(assembler as *mut CantinoBasemapAssembler, error)
         })?;
         Ok(())
     })
@@ -526,7 +508,7 @@ pub extern "system" fn Java_io_github_mvexel_osmframework_NativeBridge_basemapAs
 
 /// Validates a local PMTiles file and describes its header (any thread).
 #[unsafe(no_mangle)]
-pub extern "system" fn Java_io_github_mvexel_osmframework_NativeBridge_basemapInfo<'local>(
+pub extern "system" fn Java_io_github_mvexel_cantino_NativeBridge_basemapInfo<'local>(
     mut env: EnvUnowned<'local>,
     _class: JClass<'local>,
     path: JString<'local>,
@@ -535,7 +517,7 @@ pub extern "system" fn Java_io_github_mvexel_osmframework_NativeBridge_basemapIn
         let path = c_string(path.try_to_string(env)?)?;
         // SAFETY: path lives for the call.
         json_call(env, |out, error| unsafe {
-            osm_framework_basemap_info(path.as_ptr(), out, error)
+            cantino_basemap_info(path.as_ptr(), out, error)
         })
     })
     .resolve::<ThrowRuntimeExAndDefault>()

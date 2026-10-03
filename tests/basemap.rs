@@ -12,11 +12,11 @@ use std::collections::{BTreeMap, HashMap, VecDeque};
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-use osm_framework::basemap::format::{
+use cantino::basemap::format::{
     Compression, Entry, HEADER_LEN, Header, decode_directory, encode_directory,
 };
-use osm_framework::basemap::tile_id::{id_to_zxy, zxy_to_id};
-use osm_framework::basemap::{BBox, ByteRange, ExtractPlan, Step, TilePlan};
+use cantino::basemap::tile_id::{id_to_zxy, zxy_to_id};
+use cantino::basemap::{BBox, ByteRange, ExtractPlan, Step, TilePlan};
 
 // ---------------------------------------------------------------- helpers --
 

@@ -5,18 +5,18 @@
 //! feeds the responses back. Two owned handles model the two phases:
 //!
 //! ```text
-//! plan_new ─▶ FrameworkBasemapPlan
+//! plan_new ─▶ CantinoBasemapPlan
 //!   plan_first_request → ByteRange JSON          (always id 0, 16 KiB)
 //!   plan_feed(id, bytes) → Step JSON             ({"fetch":[…]} | "wait" | {"tiles_ready":{…}})
 //!   plan_outstanding → [ByteRange…]              (requests issued and not fed yet)
-//! plan_into_assembler(plan, staging) ─▶ FrameworkBasemapAssembler   (plan consumed)
+//! plan_into_assembler(plan, staging) ─▶ CantinoBasemapAssembler   (plan consumed)
 //!   asm_write_range(id, bytes) / asm_write_range_file(id, path)
 //!   asm_remaining → [ByteRange…], asm_progress → Progress JSON
 //!   asm_finish(output)                           (header last, fsync, atomic rename)
 //! plan_free / asm_free                           (dropping an unfinished assembler deletes its staging file)
 //! ```
 //!
-//! Ownership and threading follow `FrameworkStore` exactly: a handle belongs
+//! Ownership and threading follow `CantinoStore` exactly: a handle belongs
 //! to the thread that created it (an assembler to the thread that called
 //! `plan_into_assembler`), every call including `*_free` must come from that
 //! thread, and a call from any other thread is rejected with an error instead
@@ -51,10 +51,10 @@ impl<T> Confined<T> {
     }
 }
 
-/// Planning handle (`FrameworkBasemapPlan *` in the header).
-pub type FrameworkBasemapPlan = Confined<ExtractPlan>;
-/// Download/assembly handle (`FrameworkBasemapAssembler *` in the header).
-pub type FrameworkBasemapAssembler = Confined<Assembler>;
+/// Planning handle (`CantinoBasemapPlan *` in the header).
+pub type CantinoBasemapPlan = Confined<ExtractPlan>;
+/// Download/assembly handle (`CantinoBasemapAssembler *` in the header).
+pub type CantinoBasemapAssembler = Confined<Assembler>;
 
 /// Borrows a live handle after checking it is non-NULL and on its thread.
 ///
@@ -120,12 +120,12 @@ fn zoom(value: i32, what: &str) -> Result<Option<u8>> {
 /// # Safety
 /// `bbox` is a live UTF-8 string; output slots obey the header contract.
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn osm_framework_basemap_plan_new(
+pub unsafe extern "C" fn cantino_basemap_plan_new(
     bbox: *const c_char,
     min_zoom: i32,
     max_zoom: i32,
     overfetch: f64,
-    plan: *mut *mut FrameworkBasemapPlan,
+    plan: *mut *mut CantinoBasemapPlan,
     error: *mut *mut c_char,
 ) -> i32 {
     clear(plan);
@@ -151,8 +151,8 @@ pub unsafe extern "C" fn osm_framework_basemap_plan_new(
 /// # Safety
 /// `plan` is a live handle on its owner thread; output slots obey the header.
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn osm_framework_basemap_plan_first_request(
-    plan: *mut FrameworkBasemapPlan,
+pub unsafe extern "C" fn cantino_basemap_plan_first_request(
+    plan: *mut CantinoBasemapPlan,
     out: *mut *mut c_char,
     error: *mut *mut c_char,
 ) -> i32 {
@@ -171,8 +171,8 @@ pub unsafe extern "C" fn osm_framework_basemap_plan_first_request(
 /// `plan` is a live handle on its owner thread; `bytes` is readable for
 /// `len` bytes (NULL allowed when `len` is 0); output slots obey the header.
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn osm_framework_basemap_plan_feed(
-    plan: *mut FrameworkBasemapPlan,
+pub unsafe extern "C" fn cantino_basemap_plan_feed(
+    plan: *mut CantinoBasemapPlan,
     id: u64,
     bytes: *const u8,
     len: usize,
@@ -191,10 +191,10 @@ pub unsafe extern "C" fn osm_framework_basemap_plan_feed(
 /// Writes the requests issued and not yet fed, as a JSON array of ByteRange.
 ///
 /// # Safety
-/// As for `osm_framework_basemap_plan_first_request`.
+/// As for `cantino_basemap_plan_first_request`.
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn osm_framework_basemap_plan_outstanding(
-    plan: *mut FrameworkBasemapPlan,
+pub unsafe extern "C" fn cantino_basemap_plan_outstanding(
+    plan: *mut CantinoBasemapPlan,
     out: *mut *mut c_char,
     error: *mut *mut c_char,
 ) -> i32 {
@@ -218,10 +218,10 @@ pub unsafe extern "C" fn osm_framework_basemap_plan_outstanding(
 /// `plan` is a live handle; `staging` a live UTF-8 path; output slots obey
 /// the header contract.
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn osm_framework_basemap_plan_into_assembler(
-    plan: *mut FrameworkBasemapPlan,
+pub unsafe extern "C" fn cantino_basemap_plan_into_assembler(
+    plan: *mut CantinoBasemapPlan,
     staging: *const c_char,
-    assembler: *mut *mut FrameworkBasemapAssembler,
+    assembler: *mut *mut CantinoBasemapAssembler,
     error: *mut *mut c_char,
 ) -> i32 {
     clear(assembler);
@@ -247,8 +247,8 @@ pub unsafe extern "C" fn osm_framework_basemap_plan_into_assembler(
 /// # Safety
 /// `plan` is NULL or a live handle, freed at most once.
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn osm_framework_basemap_plan_free(
-    plan: *mut FrameworkBasemapPlan,
+pub unsafe extern "C" fn cantino_basemap_plan_free(
+    plan: *mut CantinoBasemapPlan,
     error: *mut *mut c_char,
 ) -> i32 {
     protect(error, || {
@@ -272,8 +272,8 @@ pub unsafe extern "C" fn osm_framework_basemap_plan_free(
 /// `assembler` is a live handle on its owner thread; `bytes` readable for
 /// `len` bytes (NULL allowed when 0).
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn osm_framework_basemap_asm_write_range(
-    assembler: *mut FrameworkBasemapAssembler,
+pub unsafe extern "C" fn cantino_basemap_asm_write_range(
+    assembler: *mut CantinoBasemapAssembler,
     id: u64,
     bytes: *const u8,
     len: usize,
@@ -296,8 +296,8 @@ pub unsafe extern "C" fn osm_framework_basemap_asm_write_range(
 /// `assembler` is a live handle on its owner thread; `path` a live UTF-8
 /// string.
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn osm_framework_basemap_asm_write_range_file(
-    assembler: *mut FrameworkBasemapAssembler,
+pub unsafe extern "C" fn cantino_basemap_asm_write_range_file(
+    assembler: *mut CantinoBasemapAssembler,
     id: u64,
     path: *const c_char,
     error: *mut *mut c_char,
@@ -317,8 +317,8 @@ pub unsafe extern "C" fn osm_framework_basemap_asm_write_range_file(
 /// `assembler` is a live handle on its owner thread; output slots obey the
 /// header contract.
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn osm_framework_basemap_asm_remaining(
-    assembler: *mut FrameworkBasemapAssembler,
+pub unsafe extern "C" fn cantino_basemap_asm_remaining(
+    assembler: *mut CantinoBasemapAssembler,
     out: *mut *mut c_char,
     error: *mut *mut c_char,
 ) -> i32 {
@@ -332,10 +332,10 @@ pub unsafe extern "C" fn osm_framework_basemap_asm_remaining(
 /// Writes `{"ranges_done","ranges_total","bytes_done","bytes_total"}`.
 ///
 /// # Safety
-/// As for `osm_framework_basemap_asm_remaining`.
+/// As for `cantino_basemap_asm_remaining`.
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn osm_framework_basemap_asm_progress(
-    assembler: *mut FrameworkBasemapAssembler,
+pub unsafe extern "C" fn cantino_basemap_asm_progress(
+    assembler: *mut CantinoBasemapAssembler,
     out: *mut *mut c_char,
     error: *mut *mut c_char,
 ) -> i32 {
@@ -354,8 +354,8 @@ pub unsafe extern "C" fn osm_framework_basemap_asm_progress(
 /// `assembler` is a live handle on its owner thread; `output` a live UTF-8
 /// path.
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn osm_framework_basemap_asm_finish(
-    assembler: *mut FrameworkBasemapAssembler,
+pub unsafe extern "C" fn cantino_basemap_asm_finish(
+    assembler: *mut CantinoBasemapAssembler,
     output: *const c_char,
     error: *mut *mut c_char,
 ) -> i32 {
@@ -372,8 +372,8 @@ pub unsafe extern "C" fn osm_framework_basemap_asm_finish(
 /// # Safety
 /// `assembler` is NULL or a live handle, freed at most once.
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn osm_framework_basemap_asm_free(
-    assembler: *mut FrameworkBasemapAssembler,
+pub unsafe extern "C" fn cantino_basemap_asm_free(
+    assembler: *mut CantinoBasemapAssembler,
     error: *mut *mut c_char,
 ) -> i32 {
     protect(error, || {
@@ -390,7 +390,7 @@ pub unsafe extern "C" fn osm_framework_basemap_asm_free(
 
 // ------------------------------------------------------------ inspection --
 
-/// What `osm_framework_basemap_info` reports about a local archive.
+/// What `cantino_basemap_info` reports about a local archive.
 #[derive(serde::Serialize)]
 struct ArchiveInfo {
     spec_version: u8,
@@ -418,7 +418,7 @@ struct ArchiveInfo {
 /// # Safety
 /// `path` is a live UTF-8 string; output slots obey the header contract.
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn osm_framework_basemap_info(
+pub unsafe extern "C" fn cantino_basemap_info(
     path: *const c_char,
     out: *mut *mut c_char,
     error: *mut *mut c_char,
@@ -480,12 +480,12 @@ pub unsafe extern "C" fn osm_framework_basemap_info(
 #[cfg(test)]
 mod tests {
     //! The ABI driven the way an adapter drives it: raw pointers, JSON out,
-    //! buffers freed through `osm_framework_free`, against the committed
+    //! buffers freed through `cantino_free`, against the committed
     //! Protomaps fixture. The result must be byte-identical to driving the
     //! Rust engine directly.
     use super::*;
     use crate::basemap::{ByteRange, Step};
-    use crate::mobile_api::osm_framework_free;
+    use crate::mobile_api::cantino_free;
     use std::ffi::{CStr, CString};
     use std::path::{Path, PathBuf};
     use std::ptr::null_mut;
@@ -514,7 +514,7 @@ mod tests {
         let take = |p: *mut c_char| {
             (!p.is_null()).then(|| {
                 let s = unsafe { CStr::from_ptr(p) }.to_str().unwrap().to_owned();
-                unsafe { osm_framework_free(p) };
+                unsafe { cantino_free(p) };
                 s
             })
         };
@@ -531,7 +531,7 @@ mod tests {
             let msg = unsafe { CStr::from_ptr(err) }
                 .to_string_lossy()
                 .into_owned();
-            unsafe { osm_framework_free(err) };
+            unsafe { cantino_free(err) };
             panic!("status {status}: {msg}");
         }
         assert!(err.is_null());
@@ -543,27 +543,27 @@ mod tests {
 
     const BBOX: &str = r#"{"west":-112.085,"south":40.835,"east":-112.07,"north":40.842}"#;
 
-    fn new_plan(max_zoom: i32) -> *mut FrameworkBasemapPlan {
+    fn new_plan(max_zoom: i32) -> *mut CantinoBasemapPlan {
         let bbox = c(BBOX);
         let mut plan = null_mut();
         let mut err = null_mut();
         let status = unsafe {
-            osm_framework_basemap_plan_new(bbox.as_ptr(), -1, max_zoom, 0.05, &mut plan, &mut err)
+            cantino_basemap_plan_new(bbox.as_ptr(), -1, max_zoom, 0.05, &mut plan, &mut err)
         };
         ok(status, err);
         plan
     }
 
     /// Drives the directory phase through the ABI; returns the plan, ready.
-    fn plan_until_ready(src: &[u8], plan: *mut FrameworkBasemapPlan) {
+    fn plan_until_ready(src: &[u8], plan: *mut CantinoBasemapPlan) {
         let first: ByteRange = ok_json(call(|o, e| unsafe {
-            osm_framework_basemap_plan_first_request(plan, o, e)
+            cantino_basemap_plan_first_request(plan, o, e)
         }));
         let mut queue = vec![first];
         while let Some(r) = queue.pop() {
             let body = serve(src, r);
             let step: Step = ok_json(call(|o, e| unsafe {
-                osm_framework_basemap_plan_feed(plan, r.id, body.as_ptr(), body.len(), o, e)
+                cantino_basemap_plan_feed(plan, r.id, body.as_ptr(), body.len(), o, e)
             }));
             match step {
                 Step::Fetch(more) => queue.extend(more),
@@ -572,7 +572,7 @@ mod tests {
             }
         }
         let outstanding: Vec<ByteRange> = ok_json(call(|o, e| unsafe {
-            osm_framework_basemap_plan_outstanding(plan, o, e)
+            cantino_basemap_plan_outstanding(plan, o, e)
         }));
         assert!(outstanding.is_empty());
     }
@@ -606,18 +606,13 @@ mod tests {
         let mut err = null_mut();
         ok(
             unsafe {
-                osm_framework_basemap_plan_into_assembler(
-                    plan,
-                    staging.as_ptr(),
-                    &mut asm,
-                    &mut err,
-                )
+                cantino_basemap_plan_into_assembler(plan, staging.as_ptr(), &mut asm, &mut err)
             },
             err,
         );
         // plan is consumed now.
         let remaining: Vec<ByteRange> = ok_json(call(|o, e| unsafe {
-            osm_framework_basemap_asm_remaining(asm, o, e)
+            cantino_basemap_asm_remaining(asm, o, e)
         }));
         assert!(!remaining.is_empty());
         // Alternate the two write paths: bytes and file.
@@ -625,38 +620,27 @@ mod tests {
             let body = serve(&src, *r);
             let status = if i % 2 == 0 {
                 unsafe {
-                    osm_framework_basemap_asm_write_range(
-                        asm,
-                        r.id,
-                        body.as_ptr(),
-                        body.len(),
-                        &mut err,
-                    )
+                    cantino_basemap_asm_write_range(asm, r.id, body.as_ptr(), body.len(), &mut err)
                 }
             } else {
                 let tmp = dir.path().join(format!("range-{}", r.id));
                 std::fs::write(&tmp, body).unwrap();
                 let path = c(tmp.to_str().unwrap());
-                unsafe {
-                    osm_framework_basemap_asm_write_range_file(asm, r.id, path.as_ptr(), &mut err)
-                }
+                unsafe { cantino_basemap_asm_write_range_file(asm, r.id, path.as_ptr(), &mut err) }
             };
             ok(status, err);
         }
         let progress: crate::basemap::Progress = ok_json(call(|o, e| unsafe {
-            osm_framework_basemap_asm_progress(asm, o, e)
+            cantino_basemap_asm_progress(asm, o, e)
         }));
         assert_eq!(progress.ranges_done, progress.ranges_total);
         let out = dir.path().join("out.pmtiles");
         let out_c = c(out.to_str().unwrap());
         ok(
-            unsafe { osm_framework_basemap_asm_finish(asm, out_c.as_ptr(), &mut err) },
+            unsafe { cantino_basemap_asm_finish(asm, out_c.as_ptr(), &mut err) },
             err,
         );
-        ok(
-            unsafe { osm_framework_basemap_asm_free(asm, &mut err) },
-            err,
-        );
+        ok(unsafe { cantino_basemap_asm_free(asm, &mut err) }, err);
 
         assert_eq!(
             std::fs::read(&out).unwrap(),
@@ -665,7 +649,7 @@ mod tests {
         assert!(!dir.path().join("out.part").exists());
 
         let info: serde_json::Value = ok_json(call(|o, e| unsafe {
-            osm_framework_basemap_info(out_c.as_ptr(), o, e)
+            cantino_basemap_info(out_c.as_ptr(), o, e)
         }));
         assert_eq!(info["spec_version"], 3);
         assert_eq!(info["max_zoom"], 14);
@@ -678,31 +662,28 @@ mod tests {
         let plan = new_plan(-1) as usize;
         // Another thread may not use or free the plan.
         std::thread::spawn(move || {
-            let plan = plan as *mut FrameworkBasemapPlan;
-            let r = call(|o, e| unsafe { osm_framework_basemap_plan_first_request(plan, o, e) });
+            let plan = plan as *mut CantinoBasemapPlan;
+            let r = call(|o, e| unsafe { cantino_basemap_plan_first_request(plan, o, e) });
             assert_eq!(r.0, -1);
             assert!(r.2.unwrap().contains("different thread"));
-            let r = call(|_, e| unsafe { osm_framework_basemap_plan_free(plan, e) });
+            let r = call(|_, e| unsafe { cantino_basemap_plan_free(plan, e) });
             assert_eq!(r.0, -1);
         })
         .join()
         .unwrap();
-        let plan = plan as *mut FrameworkBasemapPlan;
+        let plan = plan as *mut CantinoBasemapPlan;
         // Wrong id and garbage are rejected; the plan stays usable.
-        let r = call(|o, e| unsafe {
-            osm_framework_basemap_plan_feed(plan, 7, [1u8].as_ptr(), 1, o, e)
-        });
+        let r = call(|o, e| unsafe { cantino_basemap_plan_feed(plan, 7, [1u8].as_ptr(), 1, o, e) });
         assert_eq!(r.0, -1);
         assert!(r.1.is_none());
-        let r =
-            call(|o, e| unsafe { osm_framework_basemap_plan_feed(plan, 0, null_mut(), 0, o, e) });
+        let r = call(|o, e| unsafe { cantino_basemap_plan_feed(plan, 0, null_mut(), 0, o, e) });
         assert_eq!(r.0, -1, "short header");
         // into_assembler before tiles_ready fails and consumes the plan.
         let dir = tempfile::tempdir().unwrap();
         let staging = c(dir.path().join("x.part").to_str().unwrap());
         let mut asm = null_mut();
         let r = call(|_, e| unsafe {
-            osm_framework_basemap_plan_into_assembler(plan, staging.as_ptr(), &mut asm, e)
+            cantino_basemap_plan_into_assembler(plan, staging.as_ptr(), &mut asm, e)
         });
         assert_eq!(r.0, -1);
         assert!(r.2.unwrap().contains("not ready"));
@@ -710,23 +691,22 @@ mod tests {
         // Bad arguments to plan_new.
         let mut p = null_mut();
         let bad = c(r#"{"west":1}"#);
-        let r = call(|_, e| unsafe {
-            osm_framework_basemap_plan_new(bad.as_ptr(), -1, 15, 0.05, &mut p, e)
-        });
+        let r =
+            call(|_, e| unsafe { cantino_basemap_plan_new(bad.as_ptr(), -1, 15, 0.05, &mut p, e) });
         assert_eq!(r.0, -1);
         assert!(p.is_null());
         let bbox = c(BBOX);
         let r = call(|_, e| unsafe {
-            osm_framework_basemap_plan_new(bbox.as_ptr(), -1, 40, 0.05, &mut p, e)
+            cantino_basemap_plan_new(bbox.as_ptr(), -1, 40, 0.05, &mut p, e)
         });
         assert_eq!(r.0, -1);
         // Freeing NULL is a no-op.
         assert_eq!(
-            unsafe { osm_framework_basemap_plan_free(null_mut(), null_mut()) },
+            unsafe { cantino_basemap_plan_free(null_mut(), null_mut()) },
             0
         );
         assert_eq!(
-            unsafe { osm_framework_basemap_asm_free(null_mut(), null_mut()) },
+            unsafe { cantino_basemap_asm_free(null_mut(), null_mut()) },
             0
         );
     }
@@ -743,48 +723,40 @@ mod tests {
         let mut err = null_mut();
         ok(
             unsafe {
-                osm_framework_basemap_plan_into_assembler(
-                    plan,
-                    staging.as_ptr(),
-                    &mut asm,
-                    &mut err,
-                )
+                cantino_basemap_plan_into_assembler(plan, staging.as_ptr(), &mut asm, &mut err)
             },
             err,
         );
         let out = c(dir.path().join("y.pmtiles").to_str().unwrap());
-        let r = call(|_, e| unsafe { osm_framework_basemap_asm_finish(asm, out.as_ptr(), e) });
+        let r = call(|_, e| unsafe { cantino_basemap_asm_finish(asm, out.as_ptr(), e) });
         assert_eq!(r.0, -1, "ranges missing");
         // Too long a body (a server ignoring Range) is rejected.
         let remaining: Vec<ByteRange> = ok_json(call(|o, e| unsafe {
-            osm_framework_basemap_asm_remaining(asm, o, e)
+            cantino_basemap_asm_remaining(asm, o, e)
         }));
         let whole = dir.path().join("whole");
         std::fs::write(&whole, &src).unwrap();
         let whole_c = c(whole.to_str().unwrap());
         let r = call(|_, e| unsafe {
-            osm_framework_basemap_asm_write_range_file(asm, remaining[0].id, whole_c.as_ptr(), e)
+            cantino_basemap_asm_write_range_file(asm, remaining[0].id, whole_c.as_ptr(), e)
         });
         assert_eq!(r.0, -1);
         assert!(r.2.unwrap().contains("ignore the Range"));
         assert!(staging_path.exists());
-        ok(
-            unsafe { osm_framework_basemap_asm_free(asm, &mut err) },
-            err,
-        );
+        ok(unsafe { cantino_basemap_asm_free(asm, &mut err) }, err);
         assert!(!staging_path.exists());
 
         // info: truncated archive and non-PMTiles file.
         let truncated = dir.path().join("t.pmtiles");
         std::fs::write(&truncated, &src[..src.len() - 10]).unwrap();
         let t = c(truncated.to_str().unwrap());
-        let r = call(|o, e| unsafe { osm_framework_basemap_info(t.as_ptr(), o, e) });
+        let r = call(|o, e| unsafe { cantino_basemap_info(t.as_ptr(), o, e) });
         assert_eq!(r.0, -1);
         assert!(r.2.unwrap().contains("truncated"));
-        let r = call(|o, e| unsafe { osm_framework_basemap_info(whole_c.as_ptr(), o, e) });
+        let r = call(|o, e| unsafe { cantino_basemap_info(whole_c.as_ptr(), o, e) });
         assert_eq!(r.0, 0);
         std::fs::write(&truncated, b"<html>not found</html>").unwrap();
-        let r = call(|o, e| unsafe { osm_framework_basemap_info(t.as_ptr(), o, e) });
+        let r = call(|o, e| unsafe { cantino_basemap_info(t.as_ptr(), o, e) });
         assert_eq!(r.0, -1);
     }
 }

@@ -6,10 +6,10 @@ plugins {
 }
 
 android {
-    namespace = "io.github.mvexel.osmframework.sample"
+    namespace = "io.github.mvexel.cantino.sample"
     compileSdk = 36
     defaultConfig {
-        applicationId = "io.github.mvexel.osmframework.sample"
+        applicationId = "io.github.mvexel.cantino.sample"
         minSdk = 26
         targetSdk = 36
         versionCode = 1
@@ -39,6 +39,6 @@ tasks.named("preBuild") { dependsOn(checkBasemapAssets) }
 
 dependencies {
     // Linked only; the café features that use it come in phase 6.
-    implementation(project(":osm-framework"))
+    implementation(project(":cantino"))
     implementation("org.maplibre.gl:android-sdk:13.6.1")
 }

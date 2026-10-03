@@ -1,6 +1,11 @@
-# osm-framework
+# Cantino
 
-Headless native framework that gives Android and iOS apps offline access to raw
+Cantino — an offline OpenStreetMap SDK. (In 1502 Alberto Cantino smuggled a
+copy of Portugal's secret master map out of Lisbon: a copy of the master map
+you carry away.) "OpenStreetMap" is only used descriptively, never as part of
+the product name (OSMF trademark policy). Formerly `osm-framework`.
+
+Headless native SDK that gives Android and iOS apps offline access to raw
 OpenStreetMap data for an app-defined area. Shared Rust core over a
 SQLite store (decided 2026-10-03, replacing OSMExpress; see TODO.md); thin Kotlin and Swift adapters.
 Background, evidence and build instructions: `HANDOFF.md`.

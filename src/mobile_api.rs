@@ -9,7 +9,7 @@ use std::{
     thread::ThreadId,
 };
 
-pub struct FrameworkStore {
+pub struct CantinoStore {
     store: Store,
     thread: ThreadId,
 }
@@ -44,7 +44,7 @@ pub(crate) unsafe fn text<'a>(input: *const c_char) -> Result<&'a str> {
         .to_str()
         .map_err(|_| Error::Invalid("argument must be UTF-8".into()))
 }
-unsafe fn handle<'a>(input: *mut FrameworkStore) -> Result<&'a FrameworkStore> {
+unsafe fn handle<'a>(input: *mut CantinoStore) -> Result<&'a CantinoStore> {
     // SAFETY: the caller supplies NULL or a live handle returned by open.
     let handle =
         unsafe { input.as_ref() }.ok_or_else(|| Error::Invalid("null store handle".into()))?;
@@ -69,9 +69,9 @@ pub(crate) unsafe fn output(slot: *mut *mut c_char, value: &impl serde::Serializ
 /// # Safety
 /// `path` must be NUL-terminated; output pointers must be NULL or writable slots.
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn osm_framework_open(
+pub unsafe extern "C" fn cantino_open(
     path: *const c_char,
-    store: *mut *mut FrameworkStore,
+    store: *mut *mut CantinoStore,
     error: *mut *mut c_char,
 ) -> i32 {
     if !store.is_null() {
@@ -84,7 +84,7 @@ pub unsafe extern "C" fn osm_framework_open(
             return Err(Error::Invalid("null store output".into()));
         }
         let path = unsafe { text(path)? };
-        let handle = Box::new(FrameworkStore {
+        let handle = Box::new(CantinoStore {
             store: Store::open(path)?,
             thread: std::thread::current().id(),
         });
@@ -97,10 +97,7 @@ pub unsafe extern "C" fn osm_framework_open(
 /// # Safety
 /// `store` must be a live handle returned by open; call close once on its owner thread.
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn osm_framework_close(
-    store: *mut FrameworkStore,
-    error: *mut *mut c_char,
-) -> i32 {
+pub unsafe extern "C" fn cantino_close(store: *mut CantinoStore, error: *mut *mut c_char) -> i32 {
     protect(error, || {
         unsafe {
             handle(store)?;
@@ -112,7 +109,7 @@ pub unsafe extern "C" fn osm_framework_close(
 /// # Safety
 /// `value` must be NULL or a buffer returned by this framework ABI, freed once.
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn osm_framework_free(value: *mut c_char) {
+pub unsafe extern "C" fn cantino_free(value: *mut c_char) {
     if !value.is_null() {
         unsafe {
             drop(CString::from_raw(value));
@@ -122,8 +119,8 @@ pub unsafe extern "C" fn osm_framework_free(value: *mut c_char) {
 /// # Safety
 /// Handle and output pointers must obey the ownership contract in the header.
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn osm_framework_get(
-    store: *mut FrameworkStore,
+pub unsafe extern "C" fn cantino_get(
+    store: *mut CantinoStore,
     kind: i32,
     id: i64,
     out: *mut *mut c_char,
@@ -151,8 +148,8 @@ pub unsafe extern "C" fn osm_framework_get(
 /// # Safety
 /// `request` must be a live NUL-terminated UTF-8 JSON query for this call.
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn osm_framework_query(
-    store: *mut FrameworkStore,
+pub unsafe extern "C" fn cantino_query(
+    store: *mut CantinoStore,
     request: *const c_char,
     out: *mut *mut c_char,
     error: *mut *mut c_char,
@@ -171,7 +168,7 @@ pub unsafe extern "C" fn osm_framework_query(
 /// # Safety
 /// Paths must be live NUL-terminated UTF-8 strings; output slots must be writable.
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn osm_framework_import(
+pub unsafe extern "C" fn cantino_import(
     input: *const c_char,
     destination: *const c_char,
     options: *const c_char,
@@ -221,7 +218,7 @@ fn slice_service(base: *const c_char) -> Result<slice::Service> {
 /// `base` is NULL or a live UTF-8 string; `bbox` (`{"west","south","east","north"}`)
 /// and `name` are live UTF-8 strings; output slots obey the header contract.
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn osm_framework_slice_job_request(
+pub unsafe extern "C" fn cantino_slice_job_request(
     base: *const c_char,
     bbox: *const c_char,
     name: *const c_char,
@@ -246,9 +243,9 @@ pub unsafe extern "C" fn osm_framework_slice_job_request(
 /// of a job ID the adapter persisted, since the ID is re-validated here.
 ///
 /// # Safety
-/// As for `osm_framework_slice_job_request`.
+/// As for `cantino_slice_job_request`.
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn osm_framework_slice_job(
+pub unsafe extern "C" fn cantino_slice_job(
     base: *const c_char,
     response: *const c_char,
     out: *mut *mut c_char,
@@ -272,7 +269,7 @@ pub unsafe extern "C" fn osm_framework_slice_job(
 /// # Safety
 /// `status` is a live UTF-8 string; output slots obey the header contract.
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn osm_framework_slice_progress(
+pub unsafe extern "C" fn cantino_slice_progress(
     status: *const c_char,
     out: *mut *mut c_char,
     error: *mut *mut c_char,

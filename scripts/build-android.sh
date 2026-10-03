@@ -2,7 +2,7 @@
 # Cross-compiles the Rust core (with its bundled SQLite) for Android.
 # Usage: scripts/build-android.sh [ABI...]  (default: arm64-v8a x86_64)
 # arm64-v8a runs on phones; x86_64 runs on emulators on x86_64 hosts.
-# Output: target/android/<ABI>/libosm_framework.so, the only native library the
+# Output: target/android/<ABI>/libcantino.so, the only native library the
 # AAR packages. Requires the Rust targets (rustup target add
 # aarch64-linux-android x86_64-linux-android --toolchain 1.99.0) and NDK r29.
 set -eu
@@ -32,5 +32,5 @@ for abi in "$@"; do
     # Remove libraries from the OSMExpress era so the AAR cannot package them.
     rm -rf "$out"
     mkdir -p "$out"
-    cp "$root/target/$target/release/libosm_framework.so" "$out/"
+    cp "$root/target/$target/release/libcantino.so" "$out/"
 done

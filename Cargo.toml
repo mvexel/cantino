@@ -1,8 +1,8 @@
 [package]
-name = "osm-framework"
+name = "cantino"
 version = "0.1.0"
 edition = "2024"
-description = "Portable offline OSM data core backed by SQLite"
+description = "Cantino: an offline OpenStreetMap SDK core (SQLite area store, C ABI) for mobile apps"
 
 [lib]
 crate-type = ["rlib", "cdylib", "staticlib"]

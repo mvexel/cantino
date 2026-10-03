@@ -1,12 +1,12 @@
 # Changelog
 
-All notable changes to osm-framework. Versions follow semantic versioning;
+All notable changes to Cantino (formerly osm-framework). Versions follow semantic versioning;
 before 1.0 a minor version may break the API.
 
 ## 0.1.0 — first release
 
-Android library `io.github.mvexel:osm-framework:0.1.0` (AAR, minSdk 26,
-arm64-v8a and x86_64) over a Rust core with a C ABI (`include/osm_framework.h`).
+Android library `io.github.mvexel:cantino:0.1.0` (AAR, minSdk 26,
+arm64-v8a and x86_64) over a Rust core with a C ABI (`include/cantino.h`, prefix `cantino_`).
 
 - **Offline OSM store** (`OsmStore`): import an OSM PBF or XML extract into a
   SQLite area database, published atomically; lookup by ID; index-backed tag
@@ -33,7 +33,10 @@ arm64-v8a and x86_64) over a Rust core with a C ABI (`include/osm_framework.h`).
 - **Area metadata**: SliceOSM snapshot timestamp (data age), bbox, import
   report, basemap source and transfer statistics.
 - Kotlin explicit API mode: the public surface is deliberate and documented
-  (KDoc on every public symbol); `OsmFramework.VERSION`.
+  (KDoc on every public symbol); `Cantino.VERSION`; errors are `CantinoException`.
+- **Area file format**: SQLite `application_id` 0x434E544E ("CNTN"),
+  `user_version` (FORMAT_VERSION) 1. Pre-release builds wrote "OSMF"
+  (0x4F534D46); those files are rejected and must be re-imported.
 - Café reference app (`android/cafe-app`) demonstrating the full offline flow
   in airplane mode.
 

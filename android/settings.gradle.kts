@@ -12,7 +12,7 @@ dependencyResolutionManagement {
         mavenCentral()
     }
 }
-rootProject.name = "osm-framework-android"
-include(":osm-framework")
+rootProject.name = "cantino-android"
+include(":cantino")
 include(":sample-app")
 include(":cafe-app")

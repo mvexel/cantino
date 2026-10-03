@@ -167,7 +167,7 @@ impl Store {
         )?;
         if application_id != schema::APPLICATION_ID || version != schema::FORMAT_VERSION {
             return Err(Error::Invalid(format!(
-                "not an osm-framework area of format {} (application_id {application_id:#x}, \
+                "not a Cantino area of format {} (application_id {application_id:#x}, \
                  version {version}); re-import it",
                 schema::FORMAT_VERSION
             )));

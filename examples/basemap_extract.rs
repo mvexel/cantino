@@ -10,7 +10,7 @@
 use std::sync::{Mutex, mpsc};
 use std::time::{Duration, Instant};
 
-use osm_framework::basemap::{BBox, ByteRange, ExtractPlan, Step};
+use cantino::basemap::{BBox, ByteRange, ExtractPlan, Step};
 
 const THREADS: usize = 4;
 

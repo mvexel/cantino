@@ -10,4 +10,4 @@ cargo clippy --all-targets -- -D warnings
 cargo test
 # `cargo test` builds the library's cdylib in target/debug as well.
 cargo build --lib
-python3 scripts/mobile-api-smoke.py target/debug/libosm_framework.so
+python3 scripts/mobile-api-smoke.py target/debug/libcantino.so

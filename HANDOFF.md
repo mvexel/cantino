@@ -1,12 +1,12 @@
-# Offline OSM mobile framework handoff
+# Cantino handoff
 
-Updated October 3, 2026. This document is for the next developer continuing the Android and iOS framework. Scope and boundaries are in `CLAUDE.md`, and progress is tracked in `TODO.md`.
+Updated October 3, 2026. This document is for the next developer continuing Cantino (Android and iOS). The project was called osm-framework until the 2026-10-03 rename; dated research docs, bench records and `spike/` keep the old name. Scope and boundaries are in `CLAUDE.md`, and progress is tracked in `TODO.md`.
 
 The core imports an OSM snapshot (PBF or XML) into a single read-only SQLite file, reopens it offline, and answers lookups, tag queries and bbox queries through indexes. One Rust library serves both platforms. Android works end to end on a Pixel 8 and an emulator. iOS is still to be built. Android area downloads (OSM data from SliceOSM plus an opt-in PMTiles basemap, downloaded or extracted on the device) work end to end, and the café reference app (`android/cafe-app`) passes the airplane-mode acceptance scenario on the Pixel 8.
 
 ## Product goals
 
-The framework is a headless native framework for app makers who need OpenStreetMap data while offline. Applications define their download area and obtain live extracts from SliceOSM. The framework retains the raw OSM graph and displays an offline basemap: a separate PMTiles extract rendered with MapLibre Native.
+Cantino is an offline OpenStreetMap SDK: a headless native library for app makers who need OpenStreetMap data while offline. Applications define their download area and obtain live extracts from SliceOSM. It retains the raw OSM graph and displays an offline basemap: a separate PMTiles extract rendered with MapLibre Native.
 
 The reference application finds cafés in a city area. The acceptance scenario has these steps:
 
@@ -42,7 +42,7 @@ The parked server-side option is pre-baked area files for download. Its format p
 ```text
 Android Kotlin (OsmStore, Models.kt)        iOS Swift (pending)
         |  JNI (src/android.rs)                |  C header
-        +-------- C ABI: include/osm_framework.h, owned JSON buffers --------+
+        +-------- C ABI: include/cantino.h, owned JSON buffers --------+
                                    |
                           Rust core (src/)
                  import.rs  input.rs  store.rs  encoding.rs
@@ -62,7 +62,7 @@ Ownership and threading:
 - A Store is one read-only connection that belongs to its creating thread.
 - The C ABI checks the calling thread and returns an error instead of misbehaving. Several Stores may open the same file.
 - Errors and panics become status codes and never unwind into the caller.
-- Free framework buffers with `osm_framework_free`.
+- Free framework buffers with `cantino_free`.
 
 ## Query semantics
 
@@ -88,16 +88,16 @@ The toolchain is pinned to Rust **1.99.0**. Neither Docker nor a C++ toolchain i
 
 ### Android area downloads
 
-`AreaManager` (Kotlin, `android/osm-framework`) runs the SliceOSM lifecycle in WorkManager: `download(areaId, bbox, name, basemap = BasemapSource.None)` enqueues unique work per area (REPLACE), `cancel(areaId)`, `state(areaId): Flow<AreaState>`, `dataFile(areaId)`, `basemapFile(areaId)`, `publishedArea(areaId)`. The SliceOSM protocol (request body, URLs, job-ID validation, progress) is in Rust (`src/slice.rs`, C ABI `osm_framework_slice_*`) so iOS reuses it; Kotlin does only HTTP (`HttpURLConnection`) and scheduling.
+`AreaManager` (Kotlin, `android/cantino`) runs the SliceOSM lifecycle in WorkManager: `download(areaId, bbox, name, basemap = BasemapSource.None)` enqueues unique work per area (REPLACE), `cancel(areaId)`, `state(areaId): Flow<AreaState>`, `dataFile(areaId)`, `basemapFile(areaId)`, `publishedArea(areaId)`. The SliceOSM protocol (request body, URLs, job-ID validation, progress) is in Rust (`src/slice.rs`, C ABI `cantino_slice_*`) so iOS reuses it; Kotlin does only HTTP (`HttpURLConnection`) and scheduling.
 
 - **States:** Idle → Queued → Submitting → Slicing → Downloading → Importing → (Basemap) → Ready, or Failed / Cancelled. `Basemap(phase, bytes, total)` with phase DOWNLOAD (Url), DIRECTORIES or TILES (Extract). Importing now writes into a staging directory; nothing is published before the final commit.
-- **Basemap (opt-in):** `BasemapSource.None` (default, data only) | `Url(pmtilesUrl)` (plain download of a ready PMTiles file, then validated as PMTiles v3 by `osm_framework_basemap_info`) | `Extract(planetUrl, maxZoom = 15, overfetch = 0.05)` (on-device extract with HTTP range requests). `ProtomapsBuilds.latestUrl()` HEADs `build.protomaps.com/YYYYMMDD.pmtiles` from today back 7 days, for demos only: Protomaps discourages hotlinking and builds expire after about a week, so production apps mirror a build (any host with range support). The basemap is published at `filesDir/osm-areas/<areaId>.pmtiles`; `AreaInfo.basemapFile` and `AreaInfo.pmtilesUrl` (`pmtiles://file:///…` for a MapLibre vector source). A refresh with `None` removes an earlier basemap (refresh = full replace).
-- **Extract driver:** the Rust engine (`src/basemap`, C ABI `osm_framework_basemap_*` in `src/mobile_basemap.rs`) plans and assembles; `BasemapExtract` (Kotlin) fetches. Plan and assembler handles are thread-confined like stores, so all native calls of one extract run on one private thread; HTTP runs on `Dispatchers.IO`, 4 requests in parallel (`AreaConfig.basemapParallelism`). Directory responses cross JNI as `byte[]`; tile ranges are streamed to `range-<id>.part` files and handed over by path (`asm_write_range_file`), so tile data never sits in the heap. A range answer must be 206 with a matching `Content-Range` and exact length; a 200 (server ignored Range) fails permanently without reading the body.
-- **Files:** published `filesDir/osm-areas/<areaId>.sqlite`, `<areaId>.pmtiles` and the `<areaId>.json` sidecar (SliceOSM snapshot timestamp, bbox, import report, basemap source/size/tiles/requests, publishing work ID). The next version is built in `filesDir/osm-areas/.staging/<areaId>/<workId>/` (same file system, so parts move by rename). Download scratch (PBF, range files, job checkpoint) lives in `noBackupFilesDir/osm-area-downloads/<areaId>/`.
+- **Basemap (opt-in):** `BasemapSource.None` (default, data only) | `Url(pmtilesUrl)` (plain download of a ready PMTiles file, then validated as PMTiles v3 by `cantino_basemap_info`) | `Extract(planetUrl, maxZoom = 15, overfetch = 0.05)` (on-device extract with HTTP range requests). `ProtomapsBuilds.latestUrl()` HEADs `build.protomaps.com/YYYYMMDD.pmtiles` from today back 7 days, for demos only: Protomaps discourages hotlinking and builds expire after about a week, so production apps mirror a build (any host with range support). The basemap is published at `filesDir/cantino-areas/<areaId>.pmtiles`; `AreaInfo.basemapFile` and `AreaInfo.pmtilesUrl` (`pmtiles://file:///…` for a MapLibre vector source). A refresh with `None` removes an earlier basemap (refresh = full replace).
+- **Extract driver:** the Rust engine (`src/basemap`, C ABI `cantino_basemap_*` in `src/mobile_basemap.rs`) plans and assembles; `BasemapExtract` (Kotlin) fetches. Plan and assembler handles are thread-confined like stores, so all native calls of one extract run on one private thread; HTTP runs on `Dispatchers.IO`, 4 requests in parallel (`AreaConfig.basemapParallelism`). Directory responses cross JNI as `byte[]`; tile ranges are streamed to `range-<id>.part` files and handed over by path (`asm_write_range_file`), so tile data never sits in the heap. A range answer must be 206 with a matching `Content-Range` and exact length; a 200 (server ignored Range) fails permanently without reading the body.
+- **Files:** published `filesDir/cantino-areas/<areaId>.sqlite`, `<areaId>.pmtiles` and the `<areaId>.json` sidecar (SliceOSM snapshot timestamp, bbox, import report, basemap source/size/tiles/requests, publishing work ID). The next version is built in `filesDir/cantino-areas/.staging/<areaId>/<workId>/` (same file system, so parts move by rename). Download scratch (PBF, range files, job checkpoint) lives in `noBackupFilesDir/cantino-area-downloads/<areaId>/`.
 - **Publish guarantee:** an area is Ready only when the OSM data and the requested basemap are both published. Three files cannot be renamed atomically together, so `AreaStorage.commit` uses a roll-forward journal: under a per-area lock, a last cancellation check, then `<areaId>.commit` is written durably (**the commit point**), then basemap, data and sidecar are renamed into place and the journal deleted. Any failure or cancel before the commit point leaves the old area (data + basemap + sidecar) untouched and the new data unpublished; after it, the new version is published completely, and a process that dies mid-rename is finished by the next `recover()` (every reader and every run calls it). Readers in this process take the same lock, so they never see a half-renamed area. Not covered: another process, or code opening the files directly, during the milliseconds of renames (the sidecar's size checks then report metadata as unknown).
 - **Cancellation** is honored until the commit point, including during the native import (it cannot be interrupted; its staged result is discarded when it returns). The final check runs under the lock and also reads WorkManager's own record of the run, because `cancelUniqueWork` marks the work CANCELLED before the coroutine is cancelled. Once the commit point has passed, cancel is ignored: the run finishes and `state()` reports Ready, since a finished run's state is decided by the published sidecar's work ID, not by WorkManager's CANCELLED.
 - **Foreground mode (opt-in, `AreaConfig.foreground = ForegroundConfig(...)`):** the worker calls `setForeground` (dataSync type, progress notification with a cancel action, channel/title/icon from the app) so a run is not cut at WorkManager's 10-minute limit. Best effort: where Android refuses (background start on 12+, missing permission) the run logs and continues as background work. The library manifest declares FOREGROUND_SERVICE, FOREGROUND_SERVICE_DATA_SYNC and the SystemForegroundService type; POST_NOTIFICATIONS is the app's (denied = notification hidden, download unaffected). Tested by `foregroundModeRunsTheDownloadAsAForegroundService` (service listed as a running foreground service mid-run).
-- **Public API (0.1.0):** the module builds in Kotlin explicit API mode; everything else is `internal`. Version comes from `Cargo.toml` into the Maven publication and `OsmFramework.VERSION` (generated source). See `CHANGELOG.md`.
+- **Public API (0.1.0):** the module builds in Kotlin explicit API mode; everything else is `internal`. Version comes from `Cargo.toml` into the Maven publication and `Cantino.VERSION` (generated source). See `CHANGELOG.md`.
 - **Retries:** transient errors (IO, 5xx, 408, 429, truncated ranges) retry inline, then through WorkManager backoff. A restarted run resumes polling its checkpointed job instead of resubmitting; a run that died after its commit point succeeds at once. Other 4xx, import failures, invalid PMTiles and servers ignoring Range are final. Downloads (PBF and basemap) restart from byte 0.
 - **Tests:** `AreaManagerTest` uses a fake SliceOSM + basemap host (MockWebServer 5.4.0; 5.5.0 needs compileSdk 37) that also serves the fixture PMTiles with range support. Covered: None unchanged, Url published + validated, invalid Url file, Extract byte-identical to the engine run in-process over the same bytes, server ignoring Range, basemap 404 after a successful data part, cancel during import, cancel after the commit point, latest-build lookup. `AreaTestHooks` (internal, null in production) block at the import and commit points so tests can cancel there. The live tests are skipped unless `-Pandroid.testInstrumentationRunnerArguments.live=true`; they log per-state timings under the `AreaLive` tag. Live on the Pixel 8 (downtown SLC, Extract z0–15 from the 2026-10-03 build): Ready in 6.3 s, of which the basemap took 2.5 s; 24 requests, 1.93 MB transferred, 1.01 MB file, 16 tiles.
 - The library manifest adds INTERNET and ACCESS_NETWORK_STATE; WorkManager adds WAKE_LOCK, RECEIVE_BOOT_COMPLETED and FOREGROUND_SERVICE. The sample app still removes INTERNET.
@@ -106,15 +106,15 @@ The toolchain is pinned to Rust **1.99.0**. Neither Docker nor a C++ toolchain i
 
 ```sh
 rustup target add aarch64-linux-android x86_64-linux-android --toolchain 1.99.0
-scripts/build-android.sh    # → target/android/{arm64-v8a,x86_64}/libosm_framework.so
-cd android && mise exec -- ./gradlew :osm-framework:connectedDebugAndroidTest
-mise exec -- ./gradlew :osm-framework:publishReleasePublicationToLocalRepository  # AAR → android/build/repo
+scripts/build-android.sh    # → target/android/{arm64-v8a,x86_64}/libcantino.so
+cd android && mise exec -- ./gradlew :cantino:connectedDebugAndroidTest
+mise exec -- ./gradlew :cantino:publishReleasePublicationToLocalRepository  # AAR → android/build/repo
 ANDROID_SERIAL=<device> scripts/bench-android.sh CITY.osm.pbf                   # city benchmark JSON
 ```
 
 Local setup:
 
-- **SDK:** `~/Android/Sdk`, with NDK `29.0.14206865` (SDK-managed, also used by Gradle to strip libraries). The emulator image is AVD `osmfw-x86_64` (API 35).
+- **SDK:** `~/Android/Sdk`, with NDK `29.0.14206865` (SDK-managed, also used by Gradle to strip libraries). The emulator image is AVD `osmfw-x86_64` (API 35; local name, predates the rename).
 - **JDK:** pinned in `mise.toml`, because the system Java 25 has no `javac`.
 - **Build:** Gradle 9.8 wrapper and AGP 9.4.1, with compileSdk 36 and minSdk 26.
 
@@ -124,10 +124,10 @@ The Kotlin API is `OsmStore` (open, importArea, get, query, close) with typed mo
 
 ### Café reference app
 
-`android/cafe-app` (package `io.github.mvexel.osmframework.cafe`) is the phase-6 reference app; `android/sample-app` stays the minimal offline-basemap demo. Plain Android views built in code, MapLibre Native 13.6.1, no Play Services, no AppCompat/Compose.
+`android/cafe-app` (package `io.github.mvexel.cantino.cafe`) is the phase-6 reference app; `android/sample-app` stays the minimal offline-basemap demo. Plain Android views built in code, MapLibre Native 13.6.1, no Play Services, no AppCompat/Compose.
 
 - **First run:** location permission → one fix from `LocationManager` (fused/network/GPS, 30 s timeout) → offer dialog: ~10×10 km around the fix, map data + basemap, plus one privacy line (the bbox ≈ the user's location goes to SliceOSM and the PMTiles host) → `AreaManager.download("cafe-area", Geo.squareAround(fix), basemap = Extract(ProtomapsBuilds.latestUrl(), 15))` → progress screen (phase, bytes with total when known, fraction only when SliceOSM reports one, per-phase durations; also logged under tag `CafeDownload`) → map. Denied or no fix: type "lat,lon" or pick the SLC downtown preset. Failure: Retry (the framework keeps the previous area), or back to the map. "Refresh area" re-downloads the same bbox. Area size is `Geo.AREA_SIZE_KM` (a default, not a cap).
-- **Debug location override** (debuggable builds only, sticky in prefs, cleared with `--ez clear_debug_location true`): `adb shell am start -S -n io.github.mvexel.osmframework.cafe/.MainActivity --ef lat 40.7608 --ef lon -111.8910`. Use it for every automated run so the tester's real location is never sent to SliceOSM/Protomaps. `--ez show_when_locked true` (debug only) lets the screens show over a secure lock screen for adb screenshots.
+- **Debug location override** (debuggable builds only, sticky in prefs, cleared with `--ez clear_debug_location true`): `adb shell am start -S -n io.github.mvexel.cantino.cafe/.MainActivity --ef lat 40.7608 --ef lon -111.8910`. Use it for every automated run so the tester's real location is never sent to SliceOSM/Protomaps. `--ez show_when_locked true` (debug only) lets the screens show over a secure lock screen for adb screenshots.
 - **Map:** the area's PMTiles through the sample app's offline style (copied from `sample-app/build-assets` by the `copyBasemapStyleAssets` task, without `slc.pmtiles`; run `scripts/basemap-assets.sh` first). Cafés are a GeoJSON source built from `OsmStore.query(amenity=cafe, area bbox)` (paged); ways and relations are placed at the mean of their resolvable node coordinates (`CafeLoader.representativePoint`, an app-level choice, not exact geometry). Colour = open now / closed now / unknown. Tap a dot → detail. "List" shows the nearby list sorted by distance from the debug override, else a fresh last-known fix inside the area, else the area centre.
 - **Filters:** outdoor seating Yes / No / Unknown (`yes`, `no`, plus seating-kind values like `sidewalk`, `garden` = yes; missing or anything else = Unknown with the raw value) and "now" Open / Closed / Unknown. Each choice shows its count; Unknown is never folded into Open or Closed.
 - **Opening hours** (`OpeningHours.kt`, app only, 14 JVM tests in `cafe-app/src/test`): own small parser for a strict subset: weekday lists/ranges (wrapping), `PH`, `HH:MM-HH:MM` lists including past-midnight ranges, `off`/`closed`, `24/7`, normal `;` and additional `,` rules. Anything else is Unknown with a reason (month/date, SH, week, nth weekday, sunrise/sunset, `+`, `||`, comments, `unknown`, days without times, typos). PH is evaluated both ways; if the answer differs it is Unknown. StreetComplete's `osm-opening-hours` was considered and not used: it parses only, and the evaluation (the hard part) would still be ours. On the SLC area 104 of 106 present values evaluate. Times use the device clock and zone.

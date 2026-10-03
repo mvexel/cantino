@@ -31,7 +31,7 @@
 //!
 //! The header's `application_id` and `user_version` identify the format so a
 //! foreign or older file fails at open instead of returning garbage.
-pub(crate) const APPLICATION_ID: i32 = 0x4F53_4D46; // "OSMF"
+pub(crate) const APPLICATION_ID: i32 = 0x434E_544E; // "CNTN"
 pub(crate) const FORMAT_VERSION: i32 = 1;
 
 /// Object kind codes. They match the C ABI's `kind` argument and order the
