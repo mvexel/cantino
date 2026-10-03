@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Cantino</title>
+<meta name="description" content="Cantino, an offline OpenStreetMap SDK for Android.">
+<style>
+  :root { color-scheme: light dark; --fg: #1d1d1f; --muted: #5f6368; --bg: #fbfaf7; --code: #efede8; --link: #0b57d0; }
+  @media (prefers-color-scheme: dark) { :root { --fg: #e8e6e3; --muted: #a8a49c; --bg: #161616; --code: #262624; --link: #8ab4f8; } }
+  body { margin: 0; background: var(--bg); color: var(--fg); font: 16px/1.55 system-ui, sans-serif; }
+  main { max-width: 44rem; margin: 0 auto; padding: 2.5rem 16px; }
+  h1 { margin: 0 0 .25rem; font-size: 2rem; }
+  p.tag { margin: 0 0 1.5rem; color: var(--muted); }
+  a { color: var(--link); }
+  pre { background: var(--code); padding: .9rem 1rem; border-radius: 6px; overflow-x: auto; font-size: .9rem; }
+  ul { padding-left: 1.2rem; }
+  footer { margin-top: 2.5rem; color: var(--muted); font-size: .85rem; }
+</style>
+</head>
+<body>
+<main>
+<h1>Cantino</h1>
+<p class="tag">An offline OpenStreetMap SDK for Android. Version 0.1.0.</p>
+<p>Download OpenStreetMap data and an optional PMTiles basemap for an area your app
+chooses, keep them on the device, and query them with no network. In 1502 Alberto
+Cantino smuggled a copy of Portugal's secret master map out of Lisbon; this is a copy
+of the master map you carry away.</p>
+<ul>
+  <li><a href="https://github.com/mvexel/cantino">Source, README and quickstart</a></li>
+  <li><a href="https://github.com/mvexel/cantino/tree/main/docs/guide">Guide</a></li>
+  <li><a href="api/">API reference</a></li>
+  <li><a href="maven/io/github/mvexel/cantino/">Maven repository</a>
+      (<a href="https://github.com/mvexel/cantino/blob/main/CHANGELOG.md">changelog</a>)</li>
+</ul>
+<pre><code>// settings.gradle.kts
+dependencyResolutionManagement {
+    repositories {
+        google()
+        mavenCentral()
+        maven { url = uri("https://mvexel.github.io/cantino/maven") }
+    }
+}
+
+// app/build.gradle.kts
+dependencies {
+    implementation("io.github.mvexel:cantino:0.1.0")
+}</code></pre>
+<footer>Apache-2.0. Map data &copy; OpenStreetMap contributors (ODbL); apps that show it must say so.
+"OpenStreetMap" is used descriptively; Cantino is not affiliated with the OpenStreetMap Foundation.</footer>
+</main>
+</body>
+</html>

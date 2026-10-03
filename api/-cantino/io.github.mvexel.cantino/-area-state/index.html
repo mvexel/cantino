@@ -1,0 +1,290 @@
+<!DOCTYPE html>
+<html class="no-js" lang="en">
+<head>
+    <meta name="viewport" content="width=device-width, initial-scale=1" charset="UTF-8">
+    <title>AreaState</title>
+    <link href="../../../images/logo-icon.svg" rel="icon" type="image/svg">
+        <script>var pathToRoot = "../../../";</script>
+    <script>document.documentElement.classList.replace("no-js", "js");</script>
+    <script>const storage = localStorage.getItem("dokka-dark-mode")
+      if (storage == null) {
+        const osDarkSchemePreferred = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches
+        if (osDarkSchemePreferred === true) {
+          document.getElementsByTagName("html")[0].classList.add("theme-dark")
+        }
+      } else {
+        const savedDarkMode = JSON.parse(storage)
+        if (savedDarkMode === true) {
+          document.getElementsByTagName("html")[0].classList.add("theme-dark")
+        }
+      }
+    </script>
+<script type="text/javascript" src="../../../scripts/sourceset_dependencies.js" async="async"></script>
+<link href="../../../styles/style.css" rel="Stylesheet">
+<link href="../../../styles/main.css" rel="Stylesheet">
+<link href="../../../styles/prism.css" rel="Stylesheet">
+<link href="../../../styles/logo-styles.css" rel="Stylesheet">
+<link href="../../../ui-kit/ui-kit.min.css" rel="Stylesheet">
+<script type="text/javascript" src="../../../scripts/safe-local-storage_blocking.js"></script>
+<script type="text/javascript" src="../../../scripts/navigation-loader.js" async="async"></script>
+<script type="text/javascript" src="../../../scripts/platform-content-handler.js" async="async"></script>
+<script type="text/javascript" src="../../../scripts/main.js" defer="defer"></script>
+<script type="text/javascript" src="../../../scripts/prism.js" async="async"></script>
+<script type="text/javascript" src="../../../ui-kit/ui-kit.min.js" defer="defer"></script>
+</head>
+<body>
+<div class="root">
+    <header class="navigation theme-dark" id="navigation-wrapper" role="banner">
+            <a class="library-name--link" href="../../../index.html" tabindex="1">
+                    Cantino
+            </a>
+        <button class="navigation-controls--btn navigation-controls--btn_toc ui-kit_mobile-only" id="toc-toggle"
+                type="button">Toggle table of contents
+        </button>
+        <div class="navigation-controls--break ui-kit_mobile-only"></div>
+        <div class="library-version" id="library-version">
+0.1.0        </div>
+        <div class="navigation-controls">
+        <ul class="filter-section filter-section_loading" id="filter-section" aria-label="Target filter">
+                <button class="platform-tag platform-selector jvm-like" data-active="" aria-pressed="true"
+                        data-filter=":cantino/release">release</button>
+            <div class="dropdown filter-section--dropdown" data-role="dropdown" id="filter-section-dropdown">
+                <button class="button button_dropdown filter-section--dropdown-toggle" role="combobox"
+                        data-role="dropdown-toggle"
+                        aria-controls="platform-tags-listbox"
+                        aria-haspopup="listbox"
+                        aria-expanded="false"
+                        aria-label="Toggle source sets"
+                ></button>
+                <ul role="listbox" id="platform-tags-listbox" class="dropdown--list" data-role="dropdown-listbox" aria-label="Target filter">
+                    <div class="dropdown--header"><span>Target filter</span>
+                        <button class="button" data-role="dropdown-toggle" aria-label="Close target filter">
+                            <i class="ui-kit-icon ui-kit-icon_cross"></i>
+                        </button>
+                    </div>
+                        <li role="option" class="dropdown--option platform-selector-option jvm-like" tabindex="0">
+                            <label class="checkbox">
+                                <input type="checkbox" class="checkbox--input" id=":cantino/release"
+                                       data-filter=":cantino/release"/>
+                                <span class="checkbox--icon"></span>
+                                release
+                            </label>
+                        </li>
+                </ul>
+                <div class="dropdown--overlay"></div>
+            </div>
+        </ul>
+            <button class="navigation-controls--btn navigation-controls--btn_theme" id="theme-toggle-button"
+                    type="button">Switch theme
+            </button>
+            <div class="navigation-controls--btn navigation-controls--btn_search" id="searchBar" role="button">Search in
+                API
+            </div>
+        </div>
+    </header>
+    <div id="container">
+        <nav id="leftColumn" class="sidebar" data-item-type="SECTION" data-item-config='{"defaultSize": 280, "minSize": 200, "maxSize": 400}'>
+            <a class="toc--skip-link" href="#main">Skip to content</a>
+            <div class="dropdown theme-dark_mobile" data-role="dropdown" id="toc-dropdown">
+                <ul role="listbox" id="toc-listbox" class="dropdown--list dropdown--list_toc-list"
+                    data-role="dropdown-listbox" aria-label="Table of contents">
+                    <div class="dropdown--header">
+                            <span>
+                                    Cantino
+                            </span>
+                        <button class="button" data-role="dropdown-toggle" aria-label="Close table of contents">
+                            <i class="ui-kit-icon ui-kit-icon_cross"></i>
+                        </button>
+                    </div>
+                    <div class="sidebar--inner" id="sideMenu"></div>
+                </ul>
+                <div class="dropdown--overlay"></div>
+            </div>
+        </nav>
+        <div id="resizer" class="resizer" data-item-type="BAR"></div>
+        <div id="main" data-item-type="SECTION" role="main">
+<div class="main-content" data-page-type="classlike" id="content" pageIds="Cantino::io.github.mvexel.cantino/AreaState///PointingToDeclaration//703280004">
+  <div class="breadcrumbs"><a href="../../../index.html">Cantino</a><span class="delimiter">/</span><a href="../index.html">io.github.mvexel.cantino</a><span class="delimiter">/</span><span class="current">AreaState</span></div>
+  <div class="cover ">
+    <h1 class="cover"><span>Area</span><wbr></wbr><span><span>State</span></span></h1>
+    <div class="platform-hinted " data-platform-hinted="data-platform-hinted"><div class="content sourceset-dependent-content" data-active="" data-togglable=":cantino/release"><div class="symbol monospace"><span class="token keyword">sealed </span><span class="token keyword">interface </span><a href="index.html">AreaState</a><span class="source-link-wrapper"><span class="source-link" data-element-type="source-link">(<a href="https://github.com/mvexel/cantino/blob/v0.1.0/android/cantino/src/main/java/io/github/mvexel/cantino/AreaModels.kt#L356">source</a>)</span></span></div><p class="paragraph">Lifecycle of one area's download, as observed through <a href="../-area-manager/state.html">AreaManager.state</a>. Sealed: a <code class="lang-kotlin">when</code> over it is exhaustive.</p><div class="sample-container"><pre><code class="block lang-kotlin" theme="idea">Idle ─download()→ Queued ─constraints met→ Submitting → Slicing → Downloading → Importing ─┬────────→ Ready<br>                    ↑            │              │            │             │          └→ Basemap ┘<br>                    └─ transient failure (backoff, same SliceOSM job resumed)┘    (opt-in, BasemapSource)<br>any non-final state ─cancel()→ Cancelled      permanent failure / retries exhausted → Failed</code></pre><span class="copy-tooltip"><div class="copy-popup-wrapper popup-to-left"><span class="copy-popup-icon"></span><span>Content copied to clipboard</span></div><span class="copy-icon"></span></span></div><p class="paragraph">Invariant for every state: the previously published area (OSM data, basemap and metadata; see <a href="../-area-manager/published-area.html">AreaManager.publishedArea</a>) stays intact and openable until one short commit step publishes the replacement, all parts together. Only a run that reaches <a href="-ready/index.html">Ready</a> replaces it; <a href="-failed/index.html">Failed</a> and <a href="-cancelled/index.html">Cancelled</a> runs publish nothing. WorkManager prunes finished work after about a day; the state then falls back to <a href="-idle/index.html">Idle</a> carrying the published area.</p><h4 class="tableheader">Inheritors</h4><div class="table"><div class="table-row table-row_content" data-filterable-current=":cantino/release" data-filterable-set=":cantino/release"><div class="main-subrow keyValue "><div class=""><span class="inline-flex"><div><a href="-idle/index.html">Idle</a></div></span></div><div></div></div></div><div class="table-row table-row_content" data-filterable-current=":cantino/release" data-filterable-set=":cantino/release"><div class="main-subrow keyValue "><div class=""><span class="inline-flex"><div><a href="-queued/index.html">Queued</a></div></span></div><div></div></div></div><div class="table-row table-row_content" data-filterable-current=":cantino/release" data-filterable-set=":cantino/release"><div class="main-subrow keyValue "><div class=""><span class="inline-flex"><div><a href="-submitting/index.html">Submitting</a></div></span></div><div></div></div></div><div class="table-row table-row_content" data-filterable-current=":cantino/release" data-filterable-set=":cantino/release"><div class="main-subrow keyValue "><div class=""><span class="inline-flex"><div><a href="-slicing/index.html">Slicing</a></div></span></div><div></div></div></div><div class="table-row table-row_content" data-filterable-current=":cantino/release" data-filterable-set=":cantino/release"><div class="main-subrow keyValue "><div class=""><span class="inline-flex"><div><a href="-downloading/index.html">Downloading</a></div></span></div><div></div></div></div><div class="table-row table-row_content" data-filterable-current=":cantino/release" data-filterable-set=":cantino/release"><div class="main-subrow keyValue "><div class=""><span class="inline-flex"><div><a href="-importing/index.html">Importing</a></div></span></div><div></div></div></div><div class="table-row table-row_content" data-filterable-current=":cantino/release" data-filterable-set=":cantino/release"><div class="main-subrow keyValue "><div class=""><span class="inline-flex"><div><a href="-basemap/index.html">Basemap</a></div></span></div><div></div></div></div><div class="table-row table-row_content" data-filterable-current=":cantino/release" data-filterable-set=":cantino/release"><div class="main-subrow keyValue "><div class=""><span class="inline-flex"><div><a href="-ready/index.html">Ready</a></div></span></div><div></div></div></div><div class="table-row table-row_content" data-filterable-current=":cantino/release" data-filterable-set=":cantino/release"><div class="main-subrow keyValue "><div class=""><span class="inline-flex"><div><a href="-failed/index.html">Failed</a></div></span></div><div></div></div></div><div class="table-row table-row_content" data-filterable-current=":cantino/release" data-filterable-set=":cantino/release"><div class="main-subrow keyValue "><div class=""><span class="inline-flex"><div><a href="-cancelled/index.html">Cancelled</a></div></span></div><div></div></div></div></div></div></div>
+  </div>
+  <div class="tabbedcontent">
+    <div class="tabs-section" tabs-section="tabs-section"><button class="section-tab" data-active="" data-togglable="CONSTRUCTOR,TYPE,PROPERTY,FUNCTION">Members</button></div>
+    <div class="tabs-section-body">
+      <div data-togglable="TYPE">
+        <h2 class="tableheader">Types</h2>
+        <div class="table"><a data-name="-825867519%2FClasslikes%2F703280004" anchor-label="Basemap" id="-825867519%2FClasslikes%2F703280004" data-filterable-set=":cantino/release"></a>
+          <div class="table-row table-row_content" data-filterable-current=":cantino/release" data-filterable-set=":cantino/release">
+            <div class="main-subrow keyValue ">
+              <div class=""><span class="inline-flex">
+                  <div><a href="-basemap/index.html"><span><span>Basemap</span></span></a></div>
+<span class="anchor-wrapper"><span class="anchor-icon" pointing-to="-825867519%2FClasslikes%2F703280004"></span>
+                    <div class="copy-popup-wrapper "><span class="copy-popup-icon"></span><span>Link copied to clipboard</span></div>
+                  </span></span></div>
+              <div>
+                <div class="title">
+                  <div class="platform-hinted " data-platform-hinted="data-platform-hinted"><div class="content sourceset-dependent-content" data-active="" data-togglable=":cantino/release"><div class="symbol monospace"><span class="token keyword">class </span><a href="-basemap/index.html">Basemap</a> : <a href="index.html">AreaState</a></div><div class="brief "><p class="paragraph">Downloading the basemap (<a href="../-basemap-source/-url/index.html">BasemapSource.Url</a> or <a href="../-basemap-source/-extract/index.html">BasemapSource.Extract</a>) after the OSM data was imported (staged, not yet published). <span data-unresolved-link="io.github.mvexel.cantino/AreaState.Basemap//#io.github.mvexel.cantino.BasemapPhase#kotlin.Long#kotlin.Long?/PointingToCallableParameters(1)/">bytes</span> is the progress in <span data-unresolved-link="io.github.mvexel.cantino/AreaState.Basemap//#io.github.mvexel.cantino.BasemapPhase#kotlin.Long#kotlin.Long?/PointingToCallableParameters(0)/">phase</span>; <span data-unresolved-link="io.github.mvexel.cantino/AreaState.Basemap//#io.github.mvexel.cantino.BasemapPhase#kotlin.Long#kotlin.Long?/PointingToCallableParameters(2)/">totalBytes</span> is null while unknown (directory phase, or a server sending no length).</p></div></div></div>
+                </div>
+              </div>
+            </div>
+          </div>
+<a data-name="-981422437%2FClasslikes%2F703280004" anchor-label="Cancelled" id="-981422437%2FClasslikes%2F703280004" data-filterable-set=":cantino/release"></a>
+          <div class="table-row table-row_content" data-filterable-current=":cantino/release" data-filterable-set=":cantino/release">
+            <div class="main-subrow keyValue ">
+              <div class=""><span class="inline-flex">
+                  <div><a href="-cancelled/index.html"><span><span>Cancelled</span></span></a></div>
+<span class="anchor-wrapper"><span class="anchor-icon" pointing-to="-981422437%2FClasslikes%2F703280004"></span>
+                    <div class="copy-popup-wrapper "><span class="copy-popup-icon"></span><span>Link copied to clipboard</span></div>
+                  </span></span></div>
+              <div>
+                <div class="title">
+                  <div class="platform-hinted " data-platform-hinted="data-platform-hinted"><div class="content sourceset-dependent-content" data-active="" data-togglable=":cantino/release"><div class="symbol monospace"><span class="token keyword">data </span><span class="token keyword">object </span><a href="-cancelled/index.html">Cancelled</a> : <a href="index.html">AreaState</a></div><div class="brief "><p class="paragraph">Cancelled by <a href="../-area-manager/cancel.html">AreaManager.cancel</a> before publishing began: nothing of this run was published. (A run replaced by a newer <a href="../-area-manager/download.html">AreaManager.download</a> of the same area is not reported: the state follows the new run.)</p></div></div></div>
+                </div>
+              </div>
+            </div>
+          </div>
+<a data-name="-1233877262%2FClasslikes%2F703280004" anchor-label="Downloading" id="-1233877262%2FClasslikes%2F703280004" data-filterable-set=":cantino/release"></a>
+          <div class="table-row table-row_content" data-filterable-current=":cantino/release" data-filterable-set=":cantino/release">
+            <div class="main-subrow keyValue ">
+              <div class=""><span class="inline-flex">
+                  <div><a href="-downloading/index.html"><span><span>Downloading</span></span></a></div>
+<span class="anchor-wrapper"><span class="anchor-icon" pointing-to="-1233877262%2FClasslikes%2F703280004"></span>
+                    <div class="copy-popup-wrapper "><span class="copy-popup-icon"></span><span>Link copied to clipboard</span></div>
+                  </span></span></div>
+              <div>
+                <div class="title">
+                  <div class="platform-hinted " data-platform-hinted="data-platform-hinted"><div class="content sourceset-dependent-content" data-active="" data-togglable=":cantino/release"><div class="symbol monospace"><span class="token keyword">class </span><a href="-downloading/index.html">Downloading</a> : <a href="index.html">AreaState</a></div><div class="brief "><p class="paragraph">Downloading the OSM data (PBF).</p></div></div></div>
+                </div>
+              </div>
+            </div>
+          </div>
+<a data-name="-661472807%2FClasslikes%2F703280004" anchor-label="Failed" id="-661472807%2FClasslikes%2F703280004" data-filterable-set=":cantino/release"></a>
+          <div class="table-row table-row_content" data-filterable-current=":cantino/release" data-filterable-set=":cantino/release">
+            <div class="main-subrow keyValue ">
+              <div class=""><span class="inline-flex">
+                  <div><a href="-failed/index.html"><span><span>Failed</span></span></a></div>
+<span class="anchor-wrapper"><span class="anchor-icon" pointing-to="-661472807%2FClasslikes%2F703280004"></span>
+                    <div class="copy-popup-wrapper "><span class="copy-popup-icon"></span><span>Link copied to clipboard</span></div>
+                  </span></span></div>
+              <div>
+                <div class="title">
+                  <div class="platform-hinted " data-platform-hinted="data-platform-hinted"><div class="content sourceset-dependent-content" data-active="" data-togglable=":cantino/release"><div class="symbol monospace"><span class="token keyword">class </span><a href="-failed/index.html">Failed</a> : <a href="index.html">AreaState</a></div><div class="brief "><p class="paragraph">Gave up. <span data-unresolved-link="io.github.mvexel.cantino/AreaState.Failed//#kotlin.String#kotlin.Boolean/PointingToCallableParameters(0)/">message</span> is a developer-facing description (not localized). <span data-unresolved-link="io.github.mvexel.cantino/AreaState.Failed//#kotlin.String#kotlin.Boolean/PointingToCallableParameters(1)/">retryable</span> is true for transient causes (network, server) that exhausted their retries: calling <a href="../-area-manager/download.html">AreaManager.download</a> again later may succeed. False means the request or the data is bad.</p></div></div></div>
+                </div>
+              </div>
+            </div>
+          </div>
+<a data-name="-1998453918%2FClasslikes%2F703280004" anchor-label="Idle" id="-1998453918%2FClasslikes%2F703280004" data-filterable-set=":cantino/release"></a>
+          <div class="table-row table-row_content" data-filterable-current=":cantino/release" data-filterable-set=":cantino/release">
+            <div class="main-subrow keyValue ">
+              <div class=""><span class="inline-flex">
+                  <div><a href="-idle/index.html"><span><span>Idle</span></span></a></div>
+<span class="anchor-wrapper"><span class="anchor-icon" pointing-to="-1998453918%2FClasslikes%2F703280004"></span>
+                    <div class="copy-popup-wrapper "><span class="copy-popup-icon"></span><span>Link copied to clipboard</span></div>
+                  </span></span></div>
+              <div>
+                <div class="title">
+                  <div class="platform-hinted " data-platform-hinted="data-platform-hinted"><div class="content sourceset-dependent-content" data-active="" data-togglable=":cantino/release"><div class="symbol monospace"><span class="token keyword">class </span><a href="-idle/index.html">Idle</a> : <a href="index.html">AreaState</a></div><div class="brief "><p class="paragraph">No download is known.</p></div></div></div>
+                </div>
+              </div>
+            </div>
+          </div>
+<a data-name="-1344516273%2FClasslikes%2F703280004" anchor-label="Importing" id="-1344516273%2FClasslikes%2F703280004" data-filterable-set=":cantino/release"></a>
+          <div class="table-row table-row_content" data-filterable-current=":cantino/release" data-filterable-set=":cantino/release">
+            <div class="main-subrow keyValue ">
+              <div class=""><span class="inline-flex">
+                  <div><a href="-importing/index.html"><span><span>Importing</span></span></a></div>
+<span class="anchor-wrapper"><span class="anchor-icon" pointing-to="-1344516273%2FClasslikes%2F703280004"></span>
+                    <div class="copy-popup-wrapper "><span class="copy-popup-icon"></span><span>Link copied to clipboard</span></div>
+                  </span></span></div>
+              <div>
+                <div class="title">
+                  <div class="platform-hinted " data-platform-hinted="data-platform-hinted"><div class="content sourceset-dependent-content" data-active="" data-togglable=":cantino/release"><div class="symbol monospace"><span class="token keyword">data </span><span class="token keyword">object </span><a href="-importing/index.html">Importing</a> : <a href="index.html">AreaState</a></div><div class="brief "><p class="paragraph">Importing into SQLite, into a staging file: nothing is published yet. The native import itself cannot be interrupted, but a cancel during it is honored when it returns (the staged import is discarded).</p></div></div></div>
+                </div>
+              </div>
+            </div>
+          </div>
+<a data-name="-1641386653%2FClasslikes%2F703280004" anchor-label="Queued" id="-1641386653%2FClasslikes%2F703280004" data-filterable-set=":cantino/release"></a>
+          <div class="table-row table-row_content" data-filterable-current=":cantino/release" data-filterable-set=":cantino/release">
+            <div class="main-subrow keyValue ">
+              <div class=""><span class="inline-flex">
+                  <div><a href="-queued/index.html"><span><span>Queued</span></span></a></div>
+<span class="anchor-wrapper"><span class="anchor-icon" pointing-to="-1641386653%2FClasslikes%2F703280004"></span>
+                    <div class="copy-popup-wrapper "><span class="copy-popup-icon"></span><span>Link copied to clipboard</span></div>
+                  </span></span></div>
+              <div>
+                <div class="title">
+                  <div class="platform-hinted " data-platform-hinted="data-platform-hinted"><div class="content sourceset-dependent-content" data-active="" data-togglable=":cantino/release"><div class="symbol monospace"><span class="token keyword">class </span><a href="-queued/index.html">Queued</a> : <a href="index.html">AreaState</a></div><div class="brief "><p class="paragraph">Enqueued and waiting: for network/storage constraints, or for a backoff after a transient failure.</p></div></div></div>
+                </div>
+              </div>
+            </div>
+          </div>
+<a data-name="917906441%2FClasslikes%2F703280004" anchor-label="Ready" id="917906441%2FClasslikes%2F703280004" data-filterable-set=":cantino/release"></a>
+          <div class="table-row table-row_content" data-filterable-current=":cantino/release" data-filterable-set=":cantino/release">
+            <div class="main-subrow keyValue ">
+              <div class=""><span class="inline-flex">
+                  <div><a href="-ready/index.html"><span><span>Ready</span></span></a></div>
+<span class="anchor-wrapper"><span class="anchor-icon" pointing-to="917906441%2FClasslikes%2F703280004"></span>
+                    <div class="copy-popup-wrapper "><span class="copy-popup-icon"></span><span>Link copied to clipboard</span></div>
+                  </span></span></div>
+              <div>
+                <div class="title">
+                  <div class="platform-hinted " data-platform-hinted="data-platform-hinted"><div class="content sourceset-dependent-content" data-active="" data-togglable=":cantino/release"><div class="symbol monospace"><span class="token keyword">class </span><a href="-ready/index.html">Ready</a> : <a href="index.html">AreaState</a></div><div class="brief "><p class="paragraph">Published: OSM data and, if requested, the basemap. Open <span data-unresolved-link="io.github.mvexel.cantino/AreaState.Ready//#io.github.mvexel.cantino.AreaInfo/PointingToCallableParameters(0)/">area</span>'s <a href="../-area-info/data-file.html">AreaInfo.dataFile</a> with <a href="../-osm-store/-companion/open.html">OsmStore.open</a>; already-open stores keep the old snapshot. A cancel that arrives once publishing has begun is ignored and the run still ends here. The import report and snapshot timestamp are in <span data-unresolved-link="io.github.mvexel.cantino/AreaState.Ready//#io.github.mvexel.cantino.AreaInfo/PointingToCallableParameters(0)/">area</span>'s <a href="../-area-info/metadata.html">AreaInfo.metadata</a>.</p></div></div></div>
+                </div>
+              </div>
+            </div>
+          </div>
+<a data-name="2077388445%2FClasslikes%2F703280004" anchor-label="Slicing" id="2077388445%2FClasslikes%2F703280004" data-filterable-set=":cantino/release"></a>
+          <div class="table-row table-row_content" data-filterable-current=":cantino/release" data-filterable-set=":cantino/release">
+            <div class="main-subrow keyValue ">
+              <div class=""><span class="inline-flex">
+                  <div><a href="-slicing/index.html"><span><span>Slicing</span></span></a></div>
+<span class="anchor-wrapper"><span class="anchor-icon" pointing-to="2077388445%2FClasslikes%2F703280004"></span>
+                    <div class="copy-popup-wrapper "><span class="copy-popup-icon"></span><span>Link copied to clipboard</span></div>
+                  </span></span></div>
+              <div>
+                <div class="title">
+                  <div class="platform-hinted " data-platform-hinted="data-platform-hinted"><div class="content sourceset-dependent-content" data-active="" data-togglable=":cantino/release"><div class="symbol monospace"><span class="token keyword">class </span><a href="-slicing/index.html">Slicing</a> : <a href="index.html">AreaState</a></div><div class="brief "><p class="paragraph">SliceOSM is cutting the extract.</p></div></div></div>
+                </div>
+              </div>
+            </div>
+          </div>
+<a data-name="324198576%2FClasslikes%2F703280004" anchor-label="Submitting" id="324198576%2FClasslikes%2F703280004" data-filterable-set=":cantino/release"></a>
+          <div class="table-row table-row_content" data-filterable-current=":cantino/release" data-filterable-set=":cantino/release">
+            <div class="main-subrow keyValue ">
+              <div class=""><span class="inline-flex">
+                  <div><a href="-submitting/index.html"><span><span>Submitting</span></span></a></div>
+<span class="anchor-wrapper"><span class="anchor-icon" pointing-to="324198576%2FClasslikes%2F703280004"></span>
+                    <div class="copy-popup-wrapper "><span class="copy-popup-icon"></span><span>Link copied to clipboard</span></div>
+                  </span></span></div>
+              <div>
+                <div class="title">
+                  <div class="platform-hinted " data-platform-hinted="data-platform-hinted"><div class="content sourceset-dependent-content" data-active="" data-togglable=":cantino/release"><div class="symbol monospace"><span class="token keyword">data </span><span class="token keyword">object </span><a href="-submitting/index.html">Submitting</a> : <a href="index.html">AreaState</a></div><div class="brief "><p class="paragraph">Submitting the job to SliceOSM, or re-attaching to the job of an interrupted run.</p></div></div></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+    <div class="footer">
+        <div class="footer--container">
+            <a href="#content" id="go-to-top-link" class="footer--button footer--button_go-to-top"></a>
+            <div class="footer--content">
+                <div>
+                    <span>Generated by </span>
+                    <a class="footer--link footer--link_external" href="https://github.com/Kotlin/dokka">
+                        Dokka
+                    </a>
+                    <div>Cantino 0.1.0. Map data © OpenStreetMap contributors (ODbL).</div>
+                </div>
+            </div>
+        </div>
+    </div>
+        </div>
+    </div>
+</div>
+</body>
+</html>
