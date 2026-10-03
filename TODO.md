@@ -21,9 +21,13 @@ against the repo before trusting it.
 - [x] Test green on physical arm64 phone
 
 ## 2. Phone measurement (go/no-go)
-- [ ] Pick city extract, fetch via SliceOSM
-- [ ] Measure: download size, db size, peak RSS, import time, query p50/p95
-- [ ] Compare against thresholds in `CLAUDE.md`, record go/no-go
+- [x] Pick city extract, fetch via SliceOSM — Salt Lake City bbox (-112.10, 40.70, -111.80, 40.85), 13 MB PBF
+- [x] Measure on Pixel 8 (`scripts/bench-android.sh`, results in `docs/bench/2026-10-03-slc-pixel8.json`)
+- [x] Compare against thresholds: import 5.0 s ✅; peak RSS 425 MB ❌; db 338 MB = 26× ❌; tag query p95 32.6 s ❌
+- [ ] **DECISION (Martijn):** keep OSMExpress + fix our layer, or revisit backend? Blocks phases 3–6.
+- [ ] If kept: default `preserve_untagged_metadata=false` (338 → 215 MB)
+- [ ] If kept: tag index table at import (additive LMDB table in fork) → tag queries in ms
+- [ ] If kept: replace 3× size threshold with an absolute per-city budget; re-run bench
 
 ## 3. iOS vertical slice
 - [ ] Inspect Mac (Xcode, toolchain)

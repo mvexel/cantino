@@ -1,0 +1,4 @@
+{"device":"Pixel 8 (Android 17, arm64)","extract":"SliceOSM bbox -112.10,40.70,-111.80,40.85, snapshot 2026-10-03T19:32:51Z","options":"defaults (preserve_untagged_metadata=true)",
+ "result":{"pbf_bytes":13080614,"db_bytes":337797120,"nodes":1437753,"ways":207076,"relations":1473,"import_ms":5032.9,"rss_before_bytes":127115264,"hwm_after_import_bytes":425316352,"cafes":175,"downtown_cafes":15,"tag_query_cold_ms":16082.1,"tag_query_p50_ms":16859.3,"tag_query_p95_ms":32612.1,"bbox_query_p50_ms":332.6,"bbox_query_p95_ms":350.0,"get_p50_ms":0.097,"get_p95_ms":0.128,"hwm_final_bytes":430809088},
+ "desktop_table_breakdown_mb":{"default":{"locations":43.5,"nodes":142.9,"ways":82.8,"relations":2.2,"cell_node":17.0,"node_way":44.2,"other":1.1,"file":337.8},
+                               "preserve_untagged_metadata=false":{"nodes":19.9,"file":214.8}}}
