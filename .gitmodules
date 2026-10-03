@@ -1,0 +1,4 @@
+[submodule "vendor/OSMExpress"]
+	path = vendor/OSMExpress
+	url = https://github.com/mvexel/OSMExpress.git
+	branch = mobile-core

@@ -1,0 +1,17 @@
+[package]
+name = "osm-framework"
+version = "0.1.0"
+edition = "2024"
+description = "Portable offline OSM data core backed by OSMExpress"
+build = "build.rs"
+
+[lib]
+crate-type = ["rlib", "cdylib", "staticlib"]
+
+[dependencies]
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.151"
+thiserror = "2.0.21"
+tempfile = "3.27.0"
+
+[dev-dependencies]
