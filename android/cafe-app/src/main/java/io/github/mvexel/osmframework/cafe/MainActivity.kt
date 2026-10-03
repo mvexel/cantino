@@ -372,7 +372,7 @@ class MainActivity : Activity() {
         fun update(state: AreaState) {
             when (state) {
                 is AreaState.Queued -> {
-                    phase(if (state.attempt == 0) "Waiting for network" else "Waiting to retry (attempt ${state.attempt + 1})")
+                    phase(if (state.previousRuns == 0) "Waiting for network" else "Waiting to retry (attempt ${state.previousRuns + 1})")
                     indeterminate("Queued in WorkManager (needs a connection and free storage).")
                 }
                 AreaState.Submitting -> { phase("Requesting the extract (SliceOSM)"); indeterminate("") }
@@ -384,7 +384,7 @@ class MainActivity : Activity() {
                 }
                 is AreaState.Downloading -> {
                     phase("Downloading OSM data")
-                    bytes(state.bytes, state.total)
+                    bytes(state.bytes, state.totalBytes)
                 }
                 AreaState.Importing -> { phase("Importing into the offline database"); indeterminate("Building indexes on the device.") }
                 is AreaState.Basemap -> {
@@ -395,7 +395,7 @@ class MainActivity : Activity() {
                             BasemapPhase.TILES -> "Basemap: downloading tiles"
                         },
                     )
-                    bytes(state.bytes, state.total)
+                    bytes(state.bytes, state.totalBytes)
                 }
                 is AreaState.Ready, is AreaState.Failed, AreaState.Cancelled, is AreaState.Idle -> Unit
             }
@@ -409,7 +409,7 @@ class MainActivity : Activity() {
             val metadata = area.metadata
             Log.i(
                 TIMING_TAG,
-                "ready in $total ms; data db ${area.file.length()} B; pmtiles ${area.basemapFile?.length()} B; " +
+                "ready in $total ms; data db ${area.dataFile.length()} B; pmtiles ${area.basemapFile?.length()} B; " +
                     "counts ${metadata?.report?.counts}; basemap ${metadata?.basemap}; snapshot ${metadata?.snapshotTimestamp}; bbox ${metadata?.bbox}",
             )
         }

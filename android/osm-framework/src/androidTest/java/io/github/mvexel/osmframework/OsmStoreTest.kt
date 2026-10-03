@@ -28,7 +28,7 @@ class OsmStoreTest {
         val area = File(directory, "area.sqlite")
         // Keep untagged-node metadata so node 1's metadata can be checked.
         val report = OsmStore.importArea(input.path, area.path, ImportOptions(preserveUntaggedMetadata = true))
-        assertEquals(Counts(4, 2, 1), report.counts)
+        assertEquals(ObjectCounts(4, 2, 1), report.counts)
         assertTrue(report.databaseBytes > 0)
         return area
     }
@@ -46,7 +46,7 @@ class OsmStoreTest {
     fun importGetQueryCloseOnOneWorkerThread() = onWorker {
         OsmStore.open(importFixture().path).use { store ->
             val node = store.get(OsmId(OsmKind.NODE, 1)) as OsmObject.Node
-            assertEquals(Metadata(3, node.metadata!!.timestamp, 123, 7, "Mapper"), node.metadata)
+            assertEquals(ObjectMetadata(3, node.metadata!!.timestampSeconds, 123, 7, "Mapper"), node.metadata)
             assertEquals(400_000_000, node.latE7)
             assertEquals(-111.0, node.lon, 0.0)
             assertNull(store.get(OsmId(OsmKind.NODE, 99)))
@@ -58,7 +58,7 @@ class OsmStoreTest {
             assertEquals(1, store.query(Query(tags = listOf(TagFilter.Equals("name", "Café Test")))).size)
 
             val way = store.get(OsmId(OsmKind.WAY, 1)) as OsmObject.Way
-            assertEquals(listOf(1L, 2L, 1L), way.nodes) // order and repeats preserved
+            assertEquals(listOf(1L, 2L, 1L), way.nodeIds) // order and repeats preserved
             val relation = store.get(OsmId(OsmKind.RELATION, 1)) as OsmObject.Relation
             assertEquals(
                 listOf(OsmObject.Member(OsmId(OsmKind.WAY, 1), "outer"), OsmObject.Member(OsmId(OsmKind.NODE, 99), "label")),

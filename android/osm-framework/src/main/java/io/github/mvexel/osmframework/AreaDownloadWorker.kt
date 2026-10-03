@@ -1,9 +1,16 @@
 package io.github.mvexel.osmframework
 
+import android.app.Notification
+import android.app.NotificationChannel
+import android.app.NotificationManager
 import android.content.Context
+import android.content.pm.ServiceInfo
+import android.graphics.drawable.Icon
 import android.os.SystemClock
+import android.util.Log
 import androidx.work.CoroutineWorker
 import androidx.work.Data
+import androidx.work.ForegroundInfo
 import androidx.work.WorkManager
 import androidx.work.WorkerParameters
 import androidx.work.workDataOf
@@ -53,9 +60,13 @@ import org.json.JSONObject
  *   `Result.retry()` (WorkManager backoff, checkpoint kept). Permanent
  *   failures end the work as failed and clear the checkpoint. A retried run
  *   repeats the data download and import (the staged result is not kept).
- * - **Execution limit.** WorkManager stops a run after 10 minutes; the slicing
- *   wait is capped below that and a stopped run resumes from the checkpoint.
- *   A large basemap extract can exceed the limit (see TODO: setForeground).
+ * - **Execution limit.** WorkManager stops a background run after 10
+ *   minutes; the slicing wait is capped below that and a stopped run resumes
+ *   from the checkpoint. A large area can exceed the limit in its download,
+ *   import or basemap: [AreaConfig.foreground] runs the worker as a
+ *   foreground service instead ([Foreground]), which has no such limit.
+ *   Starting it is best effort: where Android refuses (background start on
+ *   12+), the run continues as background work.
  */
 internal class AreaDownloadWorker(context: Context, parameters: WorkerParameters) :
     CoroutineWorker(context, parameters) {
@@ -65,10 +76,12 @@ internal class AreaDownloadWorker(context: Context, parameters: WorkerParameters
         val config = request.config
         val storage = AreaStorage(applicationContext)
         val http = SliceHttp(config.connectTimeoutMillis, config.readTimeoutMillis)
+        foreground = config.foreground?.let { Foreground(it, request) }
+        foreground?.update(this, PHASE_SUBMITTING, force = true)
         storage.prepare(request.areaId)
         // A commit of this very run may have passed its commit point before
         // the process died: then the area is published and the run is done.
-        storage.published(request.areaId)?.metadata?.takeIf { it.workId == id.toString() }?.let { metadata ->
+        storage.published(request.areaId)?.metadata?.takeIf { it.workId == id }?.let { metadata ->
             storage.clearCheckpoint(request.areaId, id)
             return Result.success(workDataOf(KEY_METADATA to metadata.toJson().toString()))
         }
@@ -110,7 +123,7 @@ internal class AreaDownloadWorker(context: Context, parameters: WorkerParameters
                 System.currentTimeMillis(),
                 importReport,
                 basemap,
-                id.toString(),
+                id,
             )
             storage.writeStagedMetadata(request.areaId, id, metadata)
             publish(request, storage, hasBasemap = basemap != null)
@@ -192,7 +205,7 @@ internal class AreaDownloadWorker(context: Context, parameters: WorkerParameters
                 } catch (error: OsmFrameworkException) {
                     throw DownloadFailure.Permanent("basemap ${source.url} is not a valid PMTiles v3 archive: ${error.message}", error)
                 }
-                BasemapMetadata("url", source.url, output.length(), info.addressedTiles, info.minZoom, info.maxZoom, 1, bytes)
+                BasemapMetadata(BasemapKind.URL, source.url, output.length(), info.addressedTiles, info.minZoom, info.maxZoom, 1, bytes)
             }
             is BasemapSource.Extract -> {
                 report(PHASE_BASEMAP, bytes = 0, basemapPhase = BasemapPhase.DIRECTORIES)
@@ -206,7 +219,7 @@ internal class AreaDownloadWorker(context: Context, parameters: WorkerParameters
                 )
                 val info = withContext(Dispatchers.IO) { PmtilesInfo.read(output) }
                 BasemapMetadata(
-                    "extract",
+                    BasemapKind.EXTRACT,
                     source.planetUrl,
                     output.length(),
                     stats.addressedTiles,
@@ -310,15 +323,115 @@ internal class AreaDownloadWorker(context: Context, parameters: WorkerParameters
         bytes: Long = 0,
         total: Long? = null,
         basemapPhase: BasemapPhase? = null,
-    ) = setProgress(
-        workDataOf(
-            KEY_PHASE to phase,
-            KEY_FRACTION to (fraction ?: Double.NaN),
-            KEY_BYTES to bytes,
-            KEY_TOTAL to (total ?: -1L),
-            KEY_BASEMAP_PHASE to basemapPhase?.name,
-        ),
-    )
+    ) {
+        setProgress(
+            workDataOf(
+                KEY_PHASE to phase,
+                KEY_FRACTION to (fraction ?: Double.NaN),
+                KEY_BYTES to bytes,
+                KEY_TOTAL to (total ?: -1L),
+                KEY_BASEMAP_PHASE to basemapPhase?.name,
+            ),
+        )
+        foreground?.update(this, phase, fraction, bytes, total)
+    }
+
+    /** Set at the start of [doWork] when the run is in foreground mode. */
+    @Volatile private var foreground: Foreground? = null
+
+    /**
+     * Foreground mode of one run ([AreaConfig.foreground]): promotes the
+     * worker to a `dataSync` foreground service and keeps its notification
+     * in step with the progress.
+     *
+     * Best effort by design. `setForeground` fails where Android forbids
+     * starting a foreground service (from the background on API 31+:
+     * ForegroundServiceStartNotAllowedException, an IllegalStateException;
+     * a missing manifest type or permission: SecurityException). The run then
+     * goes on as background work, exactly as without foreground mode, and
+     * does not try again: a failed download because of a notification would
+     * be worse than a slower one.
+     *
+     * Notification updates are throttled to one per [NOTIFICATION_INTERVAL_MILLIS]
+     * (the system drops faster updates anyway). Each update goes through
+     * `setForeground`, which is WorkManager's way to change the notification
+     * of a foreground worker. When the run ends, WorkManager stops the
+     * service and removes the notification.
+     */
+    private inner class Foreground(private val settings: ForegroundConfig, private val request: DownloadRequest) {
+        private val notificationId = "osm-area-download:${request.areaId}".hashCode()
+        @Volatile private var lastUpdate = 0L
+        @Volatile private var failed = false
+
+        suspend fun update(
+            worker: CoroutineWorker,
+            phase: String,
+            fraction: Double? = null,
+            bytes: Long = 0,
+            total: Long? = null,
+            force: Boolean = false,
+        ) {
+            if (failed) return
+            val now = SystemClock.elapsedRealtime()
+            if (!force && now - lastUpdate < NOTIFICATION_INTERVAL_MILLIS) return
+            lastUpdate = now
+            val info = ForegroundInfo(notificationId, notification(phase, fraction, bytes, total), ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC)
+            try {
+                worker.setForeground(info)
+                AreaTestHooks.onForeground?.invoke(notificationId)
+            } catch (cancelled: CancellationException) {
+                throw cancelled // also an IllegalStateException: never swallow it
+            } catch (error: IllegalStateException) {
+                giveUp(error)
+            } catch (error: SecurityException) {
+                giveUp(error)
+            }
+        }
+
+        private fun giveUp(error: Exception) {
+            failed = true
+            Log.w(TAG, "foreground mode unavailable for ${request.areaId}; continuing in the background", error)
+        }
+
+        private fun notification(phase: String, fraction: Double?, bytes: Long, total: Long?): Notification {
+            val context = applicationContext
+            val manager = context.getSystemService(NotificationManager::class.java)
+            if (manager.getNotificationChannel(settings.channelId) == null) {
+                manager.createNotificationChannel(
+                    NotificationChannel(settings.channelId, settings.channelName, NotificationManager.IMPORTANCE_LOW),
+                )
+            }
+            val icon = request.foregroundIcon
+                ?.let { context.resources.getIdentifier(it, null, null) }
+                ?.takeIf { it != 0 }
+                ?: android.R.drawable.stat_sys_download
+            // Numbers only: the title is the app's (localized) text.
+            val (percent, text) = when {
+                phase == PHASE_SLICING && fraction != null -> (fraction * 100).toInt().coerceIn(0, 100) to "${(fraction * 100).toInt()} %"
+                (phase == PHASE_DOWNLOADING || phase == PHASE_BASEMAP) && total != null && total > 0 ->
+                    (bytes * 100 / total).toInt().coerceIn(0, 100) to "${megabytes(bytes)} / ${megabytes(total)} MB"
+                phase == PHASE_DOWNLOADING || phase == PHASE_BASEMAP -> null to "${megabytes(bytes)} MB"
+                else -> null to null
+            }
+            return Notification.Builder(context, settings.channelId)
+                .setSmallIcon(icon)
+                .setContentTitle(settings.title)
+                .apply { if (text != null) setContentText(text) }
+                .setProgress(100, percent ?: 0, percent == null)
+                .setOngoing(true)
+                .setOnlyAlertOnce(true)
+                .setCategory(Notification.CATEGORY_PROGRESS)
+                .apply {
+                    settings.cancelLabel?.let { label ->
+                        val cancel = WorkManager.getInstance(context).createCancelPendingIntent(id)
+                        addAction(Notification.Action.Builder(Icon.createWithResource(context, android.R.drawable.ic_delete), label, cancel).build())
+                    }
+                }
+                .build()
+        }
+
+        private fun megabytes(bytes: Long) = "%.1f".format(java.util.Locale.ROOT, bytes / 1e6)
+    }
 
     private fun failed(message: String?, retryable: Boolean) =
         Result.failure(workDataOf(KEY_MESSAGE to (message ?: "download failed"), KEY_RETRYABLE to retryable))
@@ -330,6 +443,8 @@ internal class AreaDownloadWorker(context: Context, parameters: WorkerParameters
         val name: String,
         val config: AreaConfig,
         val basemap: BasemapSource = BasemapSource.None,
+        /** Resource name of [ForegroundConfig.smallIcon] (IDs are not stable across app versions). */
+        val foregroundIcon: String? = null,
     ) {
         fun toData(): Data = Data.Builder()
             .putString(KEY_AREA, areaId)
@@ -345,8 +460,18 @@ internal class AreaDownloadWorker(context: Context, parameters: WorkerParameters
             .putInt("max_runs", config.maxRunAttempts)
             .putLong("backoff", config.backoffDelayMillis)
             .putBoolean("preserve_untagged_metadata", config.importOptions.preserveUntaggedMetadata)
-            .putInt("cache_mb", config.importOptions.cacheMb)
+            .putInt("cache_mb", config.importOptions.cacheMiB)
             .putInt("basemap_parallelism", config.basemapParallelism)
+            .apply {
+                config.foreground?.let { foreground ->
+                    putBoolean("fg", true)
+                    putString("fg_channel_id", foreground.channelId)
+                    putString("fg_channel_name", foreground.channelName)
+                    putString("fg_title", foreground.title)
+                    putString("fg_icon", foregroundIcon)
+                    putString("fg_cancel_label", foreground.cancelLabel)
+                }
+            }
             .apply {
                 when (basemap) {
                     BasemapSource.None -> putString("basemap_kind", "none")
@@ -378,9 +503,21 @@ internal class AreaDownloadWorker(context: Context, parameters: WorkerParameters
                         backoffDelayMillis = data.getLong("backoff", defaults.backoffDelayMillis),
                         importOptions = ImportOptions(
                             data.getBoolean("preserve_untagged_metadata", false),
-                            data.getInt("cache_mb", ImportOptions().cacheMb),
+                            data.getInt("cache_mb", ImportOptions().cacheMiB),
                         ),
                         basemapParallelism = data.getInt("basemap_parallelism", defaults.basemapParallelism),
+                        // smallIcon is resolved from foregroundIcon at run time; the ID here is unused.
+                        foreground = if (data.getBoolean("fg", false)) {
+                            val fallback = ForegroundConfig()
+                            ForegroundConfig(
+                                channelId = data.getString("fg_channel_id") ?: fallback.channelId,
+                                channelName = data.getString("fg_channel_name") ?: fallback.channelName,
+                                title = data.getString("fg_title") ?: fallback.title,
+                                cancelLabel = data.getString("fg_cancel_label"),
+                            )
+                        } else {
+                            null
+                        },
                     ),
                     basemap = when (data.getString("basemap_kind")) {
                         "url" -> BasemapSource.Url(requireNotNull(data.getString("basemap_url")))
@@ -391,6 +528,7 @@ internal class AreaDownloadWorker(context: Context, parameters: WorkerParameters
                         )
                         else -> BasemapSource.None
                     },
+                    foregroundIcon = data.getString("fg_icon"),
                 )
             }
         }
@@ -414,5 +552,7 @@ internal class AreaDownloadWorker(context: Context, parameters: WorkerParameters
         const val PHASE_IMPORTING = "importing"
         const val PHASE_BASEMAP = "basemap"
         const val PROGRESS_INTERVAL_MILLIS = 250L
+        const val NOTIFICATION_INTERVAL_MILLIS = 1_000L
+        const val TAG = "AreaDownloadWorker"
     }
 }

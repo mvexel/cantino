@@ -5,6 +5,7 @@ import android.system.ErrnoException
 import android.system.Os
 import android.system.OsConstants
 import android.util.Log
+import androidx.annotation.VisibleForTesting
 import org.json.JSONException
 import org.json.JSONObject
 import java.io.File
@@ -68,7 +69,7 @@ internal class AreaStorage(context: Context) {
     private val stagingRoot = File(areas, ".staging")
     private val downloads = File(context.noBackupFilesDir, "osm-area-downloads")
 
-    fun areaFile(areaId: String) = File(areas, "$areaId.sqlite")
+    fun dataFile(areaId: String) = File(areas, "$areaId.sqlite")
 
     fun basemapFile(areaId: String) = File(areas, "$areaId.pmtiles")
 
@@ -198,7 +199,7 @@ internal class AreaStorage(context: Context) {
         } else {
             basemapFile(areaId).delete()
         }
-        moveIfPresent(stagedArea(areaId, workId), areaFile(areaId))
+        moveIfPresent(stagedArea(areaId, workId), dataFile(areaId))
         moveIfPresent(stagedInfo(areaId, workId), infoFile(areaId))
         syncDirectory(areas)
         journalFile(areaId).delete()
@@ -235,7 +236,7 @@ internal class AreaStorage(context: Context) {
      */
     fun published(areaId: String): AreaInfo? {
         recover(areaId)
-        val file = areaFile(areaId)
+        val file = dataFile(areaId)
         if (!file.isFile) return null
         val basemap = basemapFile(areaId).takeIf { it.isFile }
         val metadata = try {
@@ -244,10 +245,14 @@ internal class AreaStorage(context: Context) {
             null
         } catch (_: JSONException) {
             null
+        } catch (_: IllegalArgumentException) {
+            null // malformed work ID
+        } catch (_: NoSuchElementException) {
+            null // unknown basemap kind
         }
         val consistent = metadata != null &&
             metadata.report.databaseBytes == file.length() &&
-            metadata.basemap?.bytes == basemap?.length()
+            metadata.basemap?.fileBytes == basemap?.length()
         return AreaInfo(areaId, file, metadata?.takeIf { consistent }, basemap)
     }
 
@@ -324,12 +329,17 @@ internal class AreaStorage(context: Context) {
 /**
  * Test-only hooks into the download path (null in production). They run
  * blocking code at points where a real device would be slow, so
- * instrumented tests can cancel at exactly those points.
+ * instrumented tests can cancel at exactly those points. Internal, so not
+ * part of the public API; the module's own androidTest sources see it.
  */
+@VisibleForTesting
 internal object AreaTestHooks {
     /** Runs right after the (uninterruptible) native import returned, standing in for a long import. */
     @Volatile var afterImport: (() -> Unit)? = null
 
     /** Runs inside the commit, right after the commit point. */
     @Volatile var afterCommitPoint: (() -> Unit)? = null
+
+    /** Runs after each successful `setForeground` of a run in foreground mode, with the notification ID. */
+    @Volatile var onForeground: ((Int) -> Unit)? = null
 }

@@ -243,7 +243,7 @@ internal class SliceHttp(private val connectTimeoutMillis: Int, private val read
 
     private companion object {
         val CONTENT_RANGE = Regex("""bytes (\d+)-(\d+)/(\d+|\*)""")
-        const val USER_AGENT = "osm-framework-android/0.1.0"
+        const val USER_AGENT = "osm-framework-android/${OsmFramework.VERSION}"
     }
 }
 

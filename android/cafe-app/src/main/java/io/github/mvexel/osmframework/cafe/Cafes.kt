@@ -89,12 +89,12 @@ object CafeLoader {
     /** Node: its coordinate. Way: mean of its nodes. Relation: mean over node members and way members' nodes (one level). */
     fun representativePoint(store: OsmStore, obj: OsmObject): LatLon? = when (obj) {
         is OsmObject.Node -> LatLon(obj.lat, obj.lon)
-        is OsmObject.Way -> mean(obj.nodes.distinct().mapNotNull { nodeLocation(store, it) })
+        is OsmObject.Way -> mean(obj.nodeIds.distinct().mapNotNull { nodeLocation(store, it) })
         is OsmObject.Relation -> mean(
             obj.members.flatMap { member ->
                 when (member.id.kind) {
                     OsmKind.NODE -> listOfNotNull(nodeLocation(store, member.id.id))
-                    OsmKind.WAY -> (store.get(member.id) as? OsmObject.Way)?.nodes.orEmpty().distinct()
+                    OsmKind.WAY -> (store.get(member.id) as? OsmObject.Way)?.nodeIds.orEmpty().distinct()
                         .mapNotNull { nodeLocation(store, it) }
                     // Nested relations are not followed: a café is rarely one.
                     OsmKind.RELATION -> emptyList()

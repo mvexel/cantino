@@ -2,8 +2,27 @@
 <!-- Merged into every app that uses the library. Area downloads (AreaManager)
      need the network; ACCESS_NETWORK_STATE lets WorkManager hold a download
      until a connection is available. Apps that never download can remove them
-     with tools:node="remove" (the offline basemap sample app does). -->
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+     with tools:node="remove" (the offline basemap sample app does).
+
+     Foreground mode (AreaConfig.foreground, opt-in) runs the download worker
+     as a dataSync foreground service through WorkManager's
+     SystemForegroundService, which needs the two FOREGROUND_SERVICE
+     permissions and the service type (required on API 34+). Apps that never
+     enable foreground mode can remove all three with tools:node="remove".
+     POST_NOTIFICATIONS (API 33+) is the app's to declare and request: without
+     it the download still runs in the foreground, only the notification is
+     hidden from the shade. -->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+
+    <application>
+        <service
+            android:name="androidx.work.impl.foreground.SystemForegroundService"
+            android:foregroundServiceType="dataSync"
+            tools:node="merge" />
+    </application>
 </manifest>

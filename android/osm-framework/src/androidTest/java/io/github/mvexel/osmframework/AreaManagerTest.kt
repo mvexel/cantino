@@ -1,5 +1,6 @@
 package io.github.mvexel.osmframework
 
+import android.app.ActivityManager
 import android.util.Log
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
@@ -68,29 +69,31 @@ class AreaManagerTest {
     fun stopServer() {
         AreaTestHooks.afterImport = null
         AreaTestHooks.afterCommitPoint = null
+        AreaTestHooks.onForeground = null
         server.close()
     }
 
-    private fun manager() = AreaManager(
-        target,
-        AreaConfig(
-            sliceBaseUrl = server.url("/").toString(),
-            pollIntervalMillis = 100,
-            inlineRetries = 3,
-            inlineRetryDelayMillis = 50,
-            backoffDelayMillis = 10_000, // WorkManager's minimum
-        ),
+    private fun config() = AreaConfig(
+        sliceBaseUrl = server.url("/").toString(),
+        pollIntervalMillis = 100,
+        inlineRetries = 3,
+        inlineRetryDelayMillis = 50,
+        backoffDelayMillis = 10_000, // WorkManager's minimum
     )
+
+    private fun manager() = AreaManager(target, config())
 
     @Test
     fun happyPathPublishesAreaWithSnapshotTimestamp() {
+        val foregroundCalls = AtomicInteger()
+        AreaTestHooks.onForeground = { foregroundCalls.incrementAndGet() }
         val manager = manager()
         assertEquals(AreaState.Idle(null), runBlocking { manager.state(areaId).first() })
         val states = Recorder(manager, areaId)
         manager.download(areaId, bbox, "café test")
         val ready = states.await { it is AreaState.Ready } as AreaState.Ready
 
-        assertEquals(Counts(4, 2, 1), ready.report.counts)
+        assertEquals(ObjectCounts(4, 2, 1), ready.report.counts)
         assertEquals(FakeSlice.TIMESTAMP, ready.snapshotTimestamp)
         // SliceOSM order is south, west, north, east; the name is passed through.
         val body = JSONObject(slice.submitBodies.single())
@@ -99,7 +102,7 @@ class AreaManagerTest {
         assertTrue(AreaState.Importing in states.seen)
         assertTrue(states.seen.any { it is AreaState.Slicing && it.fraction == 0.5 })
 
-        assertEquals(listOf("Café Test"), cafeNames(manager.areaFile(areaId)!!))
+        assertEquals(listOf("Café Test"), cafeNames(manager.dataFile(areaId)!!))
         val published = manager.publishedArea(areaId)!!
         assertEquals(ready.area, published)
         assertEquals(bbox, published.metadata!!.bbox)
@@ -109,6 +112,35 @@ class AreaManagerTest {
         assertEquals(null, published.metadata!!.basemap)
         assertFalse(File(target.filesDir, "osm-areas/$areaId.pmtiles").exists())
         assertEquals(0, slice.basemapRequests.get())
+        assertEquals("foreground mode is opt-in", 0, foregroundCalls.get())
+        assertNoStagingLeft()
+        states.close()
+    }
+
+    /**
+     * Foreground mode: the run promotes itself to WorkManager's
+     * SystemForegroundService. Checked twice: the worker's setForeground
+     * calls succeeded (hook), and while the run is inside it (blocked right
+     * after the import) the system lists the service as a running foreground
+     * service of this app. After the run the service is gone.
+     */
+    @Test
+    fun foregroundModeRunsTheDownloadAsAForegroundService() {
+        val notificationIds = Collections.synchronizedList(mutableListOf<Int>())
+        AreaTestHooks.onForeground = { notificationIds += it }
+        var foregroundDuringRun: Boolean? = null
+        AreaTestHooks.afterImport = { foregroundDuringRun = foregroundServiceRunning() }
+        val manager = AreaManager(target, config().copy(foreground = ForegroundConfig(title = "Test download")))
+        val states = Recorder(manager, areaId)
+        manager.download(areaId, bbox)
+        val ready = states.await { it is AreaState.Ready || it is AreaState.Failed }
+        assertTrue("$ready", ready is AreaState.Ready)
+
+        assertEquals(true, foregroundDuringRun)
+        assertTrue("setForeground was never called", notificationIds.isNotEmpty())
+        assertEquals(setOf("osm-area-download:$areaId".hashCode()), notificationIds.toSet())
+        assertEquals(listOf("Café Test"), cafeNames(manager.dataFile(areaId)!!))
+        waitUntil { !foregroundServiceRunning() }
         assertNoStagingLeft()
         states.close()
     }
@@ -125,8 +157,8 @@ class AreaManagerTest {
         val ready = states.await(60) { it is AreaState.Ready }
         assertTrue(ready is AreaState.Ready)
         assertEquals("job must be resumed, not resubmitted", 1, slice.submits.get())
-        assertTrue(states.seen.any { it is AreaState.Queued && it.attempt == 1 })
-        assertEquals(listOf("Café Test"), cafeNames(manager.areaFile(areaId)!!))
+        assertTrue(states.seen.any { it is AreaState.Queued && it.previousRuns == 1 })
+        assertEquals(listOf("Café Test"), cafeNames(manager.dataFile(areaId)!!))
         states.close()
     }
 
@@ -158,7 +190,7 @@ class AreaManagerTest {
         assertFalse(failed.retryable)
         assertTrue(failed.message, failed.message.startsWith("import failed"))
         assertEquals(1, slice.downloads.get())
-        assertEquals(listOf("Old Café"), cafeNames(manager.areaFile(areaId)!!))
+        assertEquals(listOf("Old Café"), cafeNames(manager.dataFile(areaId)!!))
         // The old area's files and metadata are still what was published before.
         assertOldAreaIntact(manager, before)
         assertNoStagingLeft()
@@ -176,7 +208,7 @@ class AreaManagerTest {
         assertTrue(failed.message, failed.message.contains("HTTP 400"))
         assertEquals(1, slice.submits.get())
         assertEquals(0, slice.polls.get())
-        assertEquals(null, manager.areaFile(areaId))
+        assertEquals(null, manager.dataFile(areaId))
         states.close()
     }
 
@@ -200,7 +232,7 @@ class AreaManagerTest {
         Log.i("AreaLive", "total %.0f ms, final $ready".format(total))
         assertTrue("$ready", ready is AreaState.Ready)
         ready as AreaState.Ready
-        val cafes = cafeNames(ready.area.file)
+        val cafes = cafeNames(ready.area.dataFile)
         Log.i("AreaLive", "snapshot ${ready.snapshotTimestamp}, ${ready.report}, ${cafes.size} cafés: $cafes")
         assertNotNull(ready.snapshotTimestamp)
         assertTrue(ready.report.counts.nodes > 0)
@@ -219,15 +251,15 @@ class AreaManagerTest {
         val ready = states.await { it is AreaState.Ready } as AreaState.Ready
 
         val area = ready.area
-        assertEquals(listOf("Café Test"), cafeNames(area.file))
+        assertEquals(listOf("Café Test"), cafeNames(area.dataFile))
         assertEquals(File(target.filesDir, "osm-areas/$areaId.pmtiles"), area.basemapFile)
         assertArrayEquals(pmtiles, area.basemapFile!!.readBytes())
         assertEquals("pmtiles://file://${area.basemapFile!!.absolutePath}", area.pmtilesUrl)
         assertTrue(area.pmtilesUrl!!.startsWith("pmtiles://file:///"))
         val basemap = area.metadata!!.basemap!!
-        assertEquals("url", basemap.kind)
+        assertEquals(BasemapKind.URL, basemap.kind)
         assertEquals(url, basemap.sourceUrl)
-        assertEquals(pmtiles.size.toLong(), basemap.bytes)
+        assertEquals(pmtiles.size.toLong(), basemap.fileBytes)
         assertEquals(22L, basemap.addressedTiles)
         assertEquals(12 to 15, basemap.minZoom to basemap.maxZoom)
         assertEquals(area, manager.publishedArea(areaId))
@@ -272,16 +304,16 @@ class AreaManagerTest {
         val expected = referenceExtract(pmtiles, sub, maxZoom = 15)
         assertArrayEquals(expected, file.readBytes())
         val info = PmtilesInfo.read(file)
-        assertEquals(listOf(-112.085, 40.835, -112.07, 40.842), info.bounds)
+        assertEquals(Bbox(-112.085, 40.835, -112.07, 40.842), info.bounds)
         assertEquals(12 to 15, info.minZoom to info.maxZoom)
         val basemap = ready.area.metadata!!.basemap!!
-        assertEquals("extract", basemap.kind)
+        assertEquals(BasemapKind.EXTRACT, basemap.kind)
         assertEquals(info.addressedTiles, basemap.addressedTiles)
         assertTrue(info.addressedTiles in 1 until 22)
         // Every request was a range request, and the sidecar counts them.
         assertEquals(basemap.requests, slice.basemapRequests.get().toLong())
         assertTrue(slice.rangeHeaders.all { it.startsWith("bytes=") })
-        assertEquals(listOf("Café Test"), cafeNames(ready.area.file))
+        assertEquals(listOf("Café Test"), cafeNames(ready.area.dataFile))
         assertNoStagingLeft()
         states.close()
     }
@@ -373,8 +405,8 @@ class AreaManagerTest {
         val ready = states.await { it is AreaState.Ready || it == AreaState.Cancelled }
         assertTrue("$ready", ready is AreaState.Ready)
         ready as AreaState.Ready
-        assertEquals(workId.toString(), ready.area.metadata!!.workId)
-        assertEquals(listOf("Café Test"), cafeNames(manager.areaFile(areaId)!!))
+        assertEquals(workId, ready.area.metadata!!.workId)
+        assertEquals(listOf("Café Test"), cafeNames(manager.dataFile(areaId)!!))
         assertFalse(AreaState.Cancelled in states.seen)
         waitUntil { stagingDirs().isEmpty() }
         states.close()
@@ -423,7 +455,7 @@ class AreaManagerTest {
         val basemap = ready.area.metadata!!.basemap!!
         val info = PmtilesInfo.read(ready.area.basemapFile!!)
         Log.i("AreaLive", "basemap $basemap; file ${info.fileBytes} B, z${info.minZoom}-${info.maxZoom}, ${info.addressedTiles} tiles")
-        Log.i("AreaLive", "data ${ready.report}; ${cafeNames(ready.area.file).size} cafés")
+        Log.i("AreaLive", "data ${ready.report}; ${cafeNames(ready.area.dataFile).size} cafés")
         assertTrue(info.addressedTiles > 0)
         states.close()
     }
@@ -450,8 +482,8 @@ class AreaManagerTest {
         storage.stagedBasemap(areaId, oldRun).writeBytes(oldBasemap)
         val metadata = AreaMetadata(
             Bbox(-111.1, 39.9, -110.9, 40.1), "old", "2026-01-01T00:00:00Z", 1L, report,
-            BasemapMetadata("url", "http://old.example/x.pmtiles", oldBasemap.size.toLong(), 22, 12, 15, 1, oldBasemap.size.toLong()),
-            oldRun.toString(),
+            BasemapMetadata(BasemapKind.URL, "http://old.example/x.pmtiles", oldBasemap.size.toLong(), 22, 12, 15, 1, oldBasemap.size.toLong()),
+            oldRun,
         )
         storage.writeStagedMetadata(areaId, oldRun, metadata)
         storage.commit(areaId, oldRun, hasBasemap = true) {}
@@ -463,8 +495,17 @@ class AreaManagerTest {
     /** Data, basemap and sidecar are exactly the ones [publishOldArea] published. */
     private fun assertOldAreaIntact(manager: AreaManager, before: Pair<AreaInfo, ByteArray>) {
         assertEquals(before.first, manager.publishedArea(areaId))
-        assertEquals(listOf("Old Café"), cafeNames(manager.areaFile(areaId)!!))
+        assertEquals(listOf("Old Café"), cafeNames(manager.dataFile(areaId)!!))
         assertArrayEquals(before.second, manager.basemapFile(areaId)!!.readBytes())
+    }
+
+    /** WorkManager's foreground service is running in the foreground (own services are always visible). */
+    private fun foregroundServiceRunning(): Boolean {
+        val activities = target.getSystemService(ActivityManager::class.java)
+        @Suppress("DEPRECATION")
+        return activities.getRunningServices(100).any {
+            it.service.className == "androidx.work.impl.foreground.SystemForegroundService" && it.foreground
+        }
     }
 
     private fun stagingDirs(): List<File> =

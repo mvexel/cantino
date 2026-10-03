@@ -28,16 +28,18 @@ import java.util.concurrent.atomic.AtomicLong
  * published, and a refresh replaces both (a refresh with [None] removes a
  * previous basemap, since it would describe a different download).
  */
-sealed interface BasemapSource {
+public sealed interface BasemapSource {
     /** No basemap. */
-    data object None : BasemapSource
+    public data object None : BasemapSource
 
     /**
      * A ready-made PMTiles file for this area, downloaded as is (for example
      * one an app developer hosts per city). Validated as PMTiles v3 (magic,
-     * version, sections within the file) before it is published.
+     * version, sections within the file) before it is published; anything
+     * else fails the download (non-retryable). The constructor throws
+     * [IllegalArgumentException] unless [url] is http(s).
      */
-    data class Url(val url: String) : BasemapSource {
+    public data class Url(val url: String) : BasemapSource {
         init {
             requireHttp(url)
         }
@@ -56,8 +58,11 @@ sealed interface BasemapSource {
      * planet build. Production apps should mirror a build to their own
      * storage/CDN: Protomaps discourages hotlinking and builds expire after
      * about a week.
+     *
+     * The constructor throws [IllegalArgumentException] unless [planetUrl] is
+     * http(s), [maxZoom] is 0..31 and [overfetch] is finite and >= 0.
      */
-    data class Extract(val planetUrl: String, val maxZoom: Int = 15, val overfetch: Double = 0.05) : BasemapSource {
+    public data class Extract(val planetUrl: String, val maxZoom: Int = 15, val overfetch: Double = 0.05) : BasemapSource {
         init {
             requireHttp(planetUrl)
             require(maxZoom in 0..31) { "maxZoom must be 0..31: $maxZoom" }
@@ -79,17 +84,21 @@ sealed interface BasemapSource {
  * production apps. Ship your own mirror (e.g. an R2/S3 bucket with range
  * support) and pass its URL to [BasemapSource.Extract] instead.
  */
-object ProtomapsBuilds {
-    const val BASE_URL = "https://build.protomaps.com/"
+public object ProtomapsBuilds {
+    /** Where Protomaps publishes its daily builds. */
+    public const val BASE_URL: String = "https://build.protomaps.com/"
 
     /**
      * HEADs the builds of [today] (UTC) and up to [maxAgeDays] days back and
-     * returns the URL of the newest one that exists. Throws
-     * [java.io.IOException] if none does or the server cannot be reached.
+     * returns the URL of the newest one that exists (at most `maxAgeDays + 1`
+     * HEAD requests, newest first; network I/O on [Dispatchers.IO], so any
+     * caller context is fine). Throws [java.io.IOException] if none exists
+     * or the server cannot be reached. [baseUrl] is for tests and mirrors
+     * with the same naming.
      */
     @JvmStatic
     @JvmOverloads
-    suspend fun latestUrl(
+    public suspend fun latestUrl(
         today: LocalDate = LocalDate.now(ZoneOffset.UTC),
         maxAgeDays: Int = 7,
         baseUrl: String = BASE_URL,
@@ -109,7 +118,7 @@ object ProtomapsBuilds {
 }
 
 /** Progress phase of [AreaState.Basemap]. */
-enum class BasemapPhase {
+public enum class BasemapPhase {
     /** [BasemapSource.Url]: downloading the file. */
     DOWNLOAD,
 
@@ -121,31 +130,41 @@ enum class BasemapPhase {
 }
 
 /**
- * Header facts of a local PMTiles file, from the Rust validator
- * (`osm_framework_basemap_info`). [bounds] is west, south, east, north.
+ * Header facts of a local PMTiles v3 file, from the Rust validator
+ * (`osm_framework_basemap_info`). Useful to check a basemap the app ships or
+ * downloads itself, or to fit the map camera to [bounds].
+ *
+ * @property minZoom Lowest zoom level.
+ * @property maxZoom Highest zoom level.
+ * @property bounds Area covered according to the header, in degrees
+ *   (for a world archive west > east is possible near the antimeridian).
+ * @property addressedTiles Tiles addressable (run lengths expanded).
+ * @property tileEntries Directory entries.
+ * @property tileContents Distinct tile blobs (deduplicated).
+ * @property fileBytes Size of the file.
  */
-data class PmtilesInfo(
+public data class PmtilesInfo(
     val minZoom: Int,
     val maxZoom: Int,
-    val bounds: List<Double>,
+    val bounds: Bbox,
     val addressedTiles: Long,
     val tileEntries: Long,
     val tileContents: Long,
     val fileBytes: Long,
 ) {
-    companion object {
+    public companion object {
         /**
          * Validates [file] as PMTiles v3 (magic, version, every section inside
          * the file) and reads its header. Throws [OsmFrameworkException] if it
-         * is not one. Any thread.
+         * is missing or not one. Synchronous file I/O (small reads); any thread.
          */
         @JvmStatic
-        fun read(file: File): PmtilesInfo = JSONObject(native { NativeBridge.basemapInfo(file.path) }).let { json ->
+        public fun read(file: File): PmtilesInfo = JSONObject(native { NativeBridge.basemapInfo(file.path) }).let { json ->
             val b = json.getJSONArray("bounds")
             PmtilesInfo(
                 minZoom = json.getInt("min_zoom"),
                 maxZoom = json.getInt("max_zoom"),
-                bounds = List(4) { b.getDouble(it) },
+                bounds = Bbox(b.getDouble(0), b.getDouble(1), b.getDouble(2), b.getDouble(3)),
                 addressedTiles = json.getLong("addressed_tiles"),
                 tileEntries = json.getLong("tile_entries"),
                 tileContents = json.getLong("tile_contents"),

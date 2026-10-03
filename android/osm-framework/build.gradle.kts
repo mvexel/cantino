@@ -6,6 +6,21 @@ plugins {
     `maven-publish`
 }
 
+// One version for the whole framework: the Rust crate's (../../Cargo.toml).
+// The AAR publication and OsmFramework.VERSION both read it from there, so the
+// three cannot drift apart.
+val osmFrameworkVersion: String = Regex("""(?m)^version = "([^"]+)"""")
+    .find(rootProject.file("../Cargo.toml").readText())
+    ?.groupValues?.get(1)
+    ?: error("no package version in Cargo.toml")
+version = osmFrameworkVersion
+
+// Explicit API mode: every declaration must say whether it is public API, and
+// public ones need explicit types. The public surface is a decision, not a default.
+kotlin {
+    explicitApi()
+}
+
 android {
     namespace = "io.github.mvexel.osmframework"
     compileSdk = 36
@@ -22,6 +37,34 @@ android {
     }
     publishing {
         singleVariant("release") { withSourcesJar() }
+    }
+}
+
+// Generates `internal const val GENERATED_VERSION` for OsmFramework.VERSION.
+abstract class GenerateVersionSource : DefaultTask() {
+    @get:Input abstract val frameworkVersion: Property<String>
+    @get:OutputDirectory abstract val outputDir: DirectoryProperty
+
+    @TaskAction
+    fun generate() {
+        val file = outputDir.file("io/github/mvexel/osmframework/GeneratedVersion.kt").get().asFile
+        file.parentFile.mkdirs()
+        file.writeText(
+            "// Generated from Cargo.toml by :osm-framework:generateVersionSource. Do not edit.\n" +
+                "package io.github.mvexel.osmframework\n\n" +
+                "internal const val GENERATED_VERSION: String = \"${frameworkVersion.get()}\"\n",
+        )
+    }
+}
+
+val generateVersionSource by tasks.registering(GenerateVersionSource::class) {
+    frameworkVersion.set(osmFrameworkVersion)
+    outputDir.set(layout.buildDirectory.dir("generated/source/osmFrameworkVersion"))
+}
+
+androidComponents {
+    onVariants { variant ->
+        variant.sources.kotlin?.addGeneratedSourceDirectory(generateVersionSource, GenerateVersionSource::outputDir)
     }
 }
 
@@ -47,7 +90,7 @@ afterEvaluate {
                 from(components["release"])
                 groupId = "io.github.mvexel"
                 artifactId = "osm-framework"
-                version = "0.1.0"
+                version = osmFrameworkVersion
             }
         }
         repositories {

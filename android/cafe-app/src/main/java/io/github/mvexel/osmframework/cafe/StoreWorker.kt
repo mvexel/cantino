@@ -57,8 +57,8 @@ object StoreWorker {
         val identity = identity(published)
         if (store == null || identity != openedIdentity) {
             closeStore()
-            Log.i(TAG, "opening ${published.file} ($identity)")
-            store = OsmStore.open(published.file.path)
+            Log.i(TAG, "opening ${published.dataFile} ($identity)")
+            store = OsmStore.open(published.dataFile.path)
             openedIdentity = identity
         }
         area = published
@@ -73,7 +73,7 @@ object StoreWorker {
     }
 
     private fun identity(area: AreaInfo): String =
-        area.metadata?.workId ?: area.file.let { f: File -> "${f.length()}:${f.lastModified()}" }
+        area.metadata?.workId?.toString() ?: area.dataFile.let { f: File -> "${f.length()}:${f.lastModified()}" }
 
     class NoAreaException : IllegalStateException("no offline area has been downloaded")
 }

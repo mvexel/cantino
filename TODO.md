@@ -72,8 +72,16 @@ Target onboarding flow (Martijn, 2026-10-03): get location → offer to download
 - [ ] Opening hours use the device clock and zone; a café in another zone than the phone is evaluated wrongly (needs the area's zone, e.g. from a tz lookup at download time)
 - [ ] Real-GPS first run not exercised by an agent on purpose (privacy); permission-denied path checked on the emulator only
 
-## 7. Developer documentation
-TBD
+## 7. Developer documentation — shipping milestone 2026-10-03 (GO)
+- [~] API freeze pass: public Kotlin surface audit (internal vs public), naming, KDoc on every public symbol, version 0.1.0
+- [~] Opt-in foreground-service mode for large area downloads (WorkManager 10-min limit)
+- [ ] **Name** before going public (OSMF trademark check + availability; research running) → rename package/artifact/JNI/C prefix/crate/repo
+- [x] Repo goes public, Apache-2.0 (Martijn 2026-10-03); LICENSE + NOTICE (ODbL/Protomaps attribution) prepared
+- [ ] Distribution: AAR published as a static Maven repo (no-auth; GitHub Pages) — prepared by Claude, publish step run by Martijn
+- [ ] README quickstart (install → download area → query → MapLibre basemap), verified by building it as a fresh project against the published artifact
+- [ ] Concepts guide: areas/snapshots/refresh, basemap sources, query semantics, threading, permissions, privacy
+- [ ] API reference (Dokka from KDoc), published as an artifact
+- [ ] Café app walkthrough; building from source / C ABI notes
 ## 8. Offline routing (later — not started; added 2026-10-03 by Martijn)
 - [ ] Research: on-device routing engines (e.g. Valhalla, GraphHopper, OSRM, Ferrostar/Valhalla mobile, pure-Rust options), their data models/graph formats vs our SQLite raw graph (build graph on device from the area db, or download pre-built tiles?), size/import cost for a ~10×10 km area, licensing, Android/iOS fit, and amount of work
 - [ ] Café app feature: real distance and travel time per chosen mode (walk/bike/car) in the nearby list, and "route to…" drawn on the map

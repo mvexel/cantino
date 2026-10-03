@@ -1,0 +1,17 @@
+osm-framework
+Copyright 2026 Martijn van Exel
+
+Licensed under the Apache License, Version 2.0 (see LICENSE).
+
+Data in this repository
+-----------------------
+Test fixtures, benchmark records and screenshots contain or show data derived
+from OpenStreetMap, © OpenStreetMap contributors, available under the Open
+Database License (ODbL) 1.0: https://www.openstreetmap.org/copyright
+
+tests/fixtures/basemap/*.pmtiles is an extract of a Protomaps basemap build
+(https://protomaps.com), derived from OpenStreetMap data (ODbL).
+
+Apps built with this SDK that display OSM data or Protomaps basemaps must show
+the attribution "© OpenStreetMap contributors" (and credit Protomaps when
+using its basemap builds).

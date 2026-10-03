@@ -9,7 +9,7 @@ import android.view.View
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
-import io.github.mvexel.osmframework.Metadata
+import io.github.mvexel.osmframework.ObjectMetadata
 import io.github.mvexel.osmframework.OsmId
 import io.github.mvexel.osmframework.OsmKind
 import io.github.mvexel.osmframework.OsmObject
@@ -57,7 +57,7 @@ class DetailActivity : Activity() {
                     val obj = store.get(id)
                     // Resolve node coordinates / member presence here, on the
                     // store thread, so the UI thread only renders.
-                    val refs = (obj as? OsmObject.Way)?.nodes?.map { ref ->
+                    val refs = (obj as? OsmObject.Way)?.nodeIds?.map { ref ->
                         ref to (store.get(OsmId(OsmKind.NODE, ref)) as? OsmObject.Node)?.let { LatLon(it.lat, it.lon) }
                     }.orEmpty()
                     val members = (obj as? OsmObject.Relation)?.members?.map { member ->
@@ -120,9 +120,9 @@ class DetailActivity : Activity() {
                 root.addView(mono("lat %.7f\nlon %.7f".format(obj.lat, obj.lon)))
             }
             is OsmObject.Way -> {
-                val distinct = obj.nodes.distinct().size
-                val closed = obj.nodes.size > 1 && obj.nodes.first() == obj.nodes.last()
-                section(root, "Way nodes (${obj.nodes.size} refs, $distinct distinct${if (closed) ", closed" else ""})")
+                val distinct = obj.nodeIds.distinct().size
+                val closed = obj.nodeIds.size > 1 && obj.nodeIds.first() == obj.nodeIds.last()
+                section(root, "Way nodes (${obj.nodeIds.size} refs, $distinct distinct${if (closed) ", closed" else ""})")
                 model.nodeRefs.forEachIndexed { index, (ref, location) ->
                     val label = "${index + 1}. node $ref  " + (location?.toString() ?: "not in this area")
                     root.addView(if (location != null) link(label, OsmId(OsmKind.NODE, ref)) else mono(label, Colors.MUTED))
@@ -141,10 +141,10 @@ class DetailActivity : Activity() {
         }
     }
 
-    private fun describe(m: Metadata): String = buildString {
+    private fun describe(m: ObjectMetadata): String = buildString {
         // Absent source fields are stored as 0/"" by the core: show them as unknown, not as real values.
         appendLine("version   ${m.version.takeIf { it > 0 } ?: "unknown"}")
-        appendLine("timestamp ${if (m.timestamp > 0) Instant.ofEpochSecond(m.timestamp).toString() else "unknown"}")
+        appendLine("timestamp ${if (m.timestampSeconds > 0) Instant.ofEpochSecond(m.timestampSeconds).toString() else "unknown"}")
         appendLine("changeset ${m.changeset.takeIf { it > 0 } ?: "unknown"}")
         append("user      ${m.user.ifEmpty { "unknown" }}${if (m.uid > 0) " (uid ${m.uid})" else ""}")
     }
