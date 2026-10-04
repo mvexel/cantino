@@ -203,4 +203,47 @@ with tempfile.TemporaryDirectory() as directory:
     assert info['addressed_tiles'] == 22 and info['spec_version'] == 3
     assert info['file_bytes'] == (d/'out.pmtiles').stat().st_size == tiles['archive_bytes']
 status_call(lib.cantino_basemap_plan_free,None)
-print('Rust mobile C ABI import/open/get/get_many/query/way_coordinates/representative_point/error/free/slice/basemap checks passed')
+
+# Area store: stage, commit through a foreign C callback (as Swift will),
+# read back. The hook aborts once (nothing changes), then lets it through.
+HOOK = c.CFUNCTYPE(c.c_int32, c.c_void_p, c.c_int32)
+lib.cantino_area_validate_id.argtypes = [string,c.POINTER(ptr)]
+lib.cantino_area_prepare_staging.argtypes = [string,string,string,c.POINTER(ptr),c.POINTER(ptr)]
+lib.cantino_area_write_staged_metadata.argtypes = [string,string,string,string,c.POINTER(ptr)]
+lib.cantino_area_commit.argtypes = [string,string,string,c.c_int32,HOOK,c.c_void_p,c.POINTER(ptr)]
+lib.cantino_area_published.argtypes = [string,string,c.POINTER(ptr),c.POINTER(ptr)]
+lib.cantino_classify_failure.argtypes = [string,c.POINTER(ptr),c.POINTER(ptr)]
+status_call(lib.cantino_area_validate_id,b'city')
+try:
+    status_call(lib.cantino_area_validate_id,b'../city')
+    raise AssertionError('expected invalid area ID')
+except RuntimeError:
+    assert lib.cantino_last_error_code() == INVALID_ARGUMENT
+with tempfile.TemporaryDirectory() as directory:
+    root, run = directory.encode(), b'7C9E6679-7425-40DE-944B-E07FC1F90AE7'
+    _, layout = call(lib.cantino_area_prepare_staging,root,b'city',run)
+    assert layout['staging_dir'].endswith('.staging/city/7c9e6679-7425-40de-944b-e07fc1f90ae7')
+    pathlib.Path(layout['staged_data']).write_bytes(b'12345')
+    sidecar = ('{"bbox":{"west":0,"south":0,"east":1,"north":1},"name":"n","snapshot_timestamp":null,'
+               '"imported_at_millis":1,"report":{"counts":{"nodes":0,"ways":0,"relations":0},'
+               '"database_bytes":5},"basemap":null,"work_id":"7c9e6679-7425-40de-944b-e07fc1f90ae7"}')
+    status_call(lib.cantino_area_write_staged_metadata,root,b'city',run,sidecar.encode())
+    stages = []
+    def hook(context, stage, answers=iter([1, 0])):
+        stages.append(stage)
+        return next(answers) if stage == 0 else 0
+    callback = HOOK(hook)
+    error = ptr()
+    assert lib.cantino_area_commit(root,b'city',run,0,callback,None,c.byref(error)) == 1
+    lib.cantino_free(error)
+    assert call(lib.cantino_area_published,root,b'city') == (1, None)
+    assert lib.cantino_area_commit(root,b'city',run,0,callback,None,c.byref(error)) == 0
+    lib.cantino_free(error)
+    assert stages == [0, 0, 1], stages
+    _, published = call(lib.cantino_area_published,root,b'city')
+    assert published['metadata']['work_id'] == '7c9e6679-7425-40de-944b-e07fc1f90ae7'
+    assert pathlib.Path(published['data']).read_bytes() == b'12345'
+_, storage = call(lib.cantino_classify_failure,b'{"io":"storage"}')
+assert storage == {'class':'storage','reason':'storage','inline_retry':False,'scheduler_retry':True}
+assert call(lib.cantino_classify_failure,b'{"http":206,"context":"range"}') == (1, None)
+print('Rust mobile C ABI import/open/get/get_many/query/way_coordinates/representative_point/error/free/slice/basemap/area/classify checks passed')

@@ -3,7 +3,30 @@
 All notable changes to Cantino (formerly osm-framework). Versions follow semantic versioning;
 before 1.0 a minor version may break the API.
 
-## 0.2.0 — 2026-10-03
+## Unreleased
+
+### Changed (internal; no public Kotlin API change)
+
+- **Area store in the Rust core.** The on-disk layout of downloaded areas,
+  staging, the roll-forward commit journal, recovery after a kill and the
+  reading of the published area (with its sidecar checks) moved from the
+  Kotlin `AreaStorage` into `src/area_storage.rs`, so the iOS adapter will
+  behave identically by construction. The on-disk format is unchanged:
+  areas written by 0.2.0 are read and recovered as they are (tested against
+  fixtures laid out as 0.2.0 wrote them). New C ABI: `cantino_area_*`.
+- **Area lock across processes.** The per-area lock is now taken in the
+  core: the in-process lock as before, plus an exclusive `flock` on a new,
+  empty `cantino-areas/<areaId>.lock` (best effort), so readers in another
+  process of the app also never see a half-published area. Readers now read
+  the published area under the lock (0.2.0 released it before reading).
+- **Failure classification in the core.** The table that maps HTTP
+  statuses, network/storage I/O errors and native errors to retry behaviour
+  and `FailureReason` moved from `SliceHttp`/`AreaDownloadWorker` into
+  `src/failure.rs` (`cantino_classify_failure`); same classes and reasons
+  as 0.2.0.
+- The staging directory is fsynced before the commit journal is written (a
+  power loss right after the commit point can no longer lose a staged file).
+
 
 ### Added
 

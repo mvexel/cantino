@@ -173,6 +173,30 @@ unsafe extern "C" {
         json: *mut *mut c_char,
         error: *mut *mut c_char,
     ) -> i32;
+    fn cantino_area_validate_id(area_id: *const c_char, error: *mut *mut c_char) -> i32;
+    fn cantino_area_layout(
+        root: *const c_char,
+        area_id: *const c_char,
+        work_id: *const c_char,
+        json: *mut *mut c_char,
+        error: *mut *mut c_char,
+    ) -> i32;
+    fn cantino_area_recover(
+        root: *const c_char,
+        area_id: *const c_char,
+        error: *mut *mut c_char,
+    ) -> i32;
+    fn cantino_area_published(
+        root: *const c_char,
+        area_id: *const c_char,
+        json: *mut *mut c_char,
+        error: *mut *mut c_char,
+    ) -> i32;
+    fn cantino_classify_failure(
+        input: *const c_char,
+        json: *mut *mut c_char,
+        error: *mut *mut c_char,
+    ) -> i32;
 }
 
 // ------------------------------------------------------- canonical JSON --
@@ -501,10 +525,63 @@ impl Runner {
                 }
                 result
             }
+            "area_validate_id" => {
+                let area_id = Self::text_arg(&args["area_id"]);
+                call_status(|error| unsafe { cantino_area_validate_id(area_id.ptr(), error) })
+            }
+            "area_layout" => {
+                let root = self.path(args["root"].as_str().unwrap());
+                let (root_arg, area_id, work_id) = (
+                    Arg(Some(c(root.to_str().unwrap()))),
+                    Self::text_arg(&args["area_id"]),
+                    Self::text_arg(&args["work_id"]),
+                );
+                let result = call_json(|out, error| unsafe {
+                    cantino_area_layout(root_arg.ptr(), area_id.ptr(), work_id.ptr(), out, error)
+                });
+                relative_paths(result, &root)
+            }
+            "area_published" | "area_recover" => {
+                let root = self.area_root(args);
+                let (root_arg, area_id) = (
+                    Arg(Some(c(root.to_str().unwrap()))),
+                    Self::text_arg(&args["area_id"]),
+                );
+                let result = if op == "area_published" {
+                    call_json(|out, error| unsafe {
+                        cantino_area_published(root_arg.ptr(), area_id.ptr(), out, error)
+                    })
+                } else {
+                    call_status(|error| unsafe {
+                        cantino_area_recover(root_arg.ptr(), area_id.ptr(), error)
+                    })
+                };
+                json!({ "result": relative_paths(result, &root), "files": file_sizes(&root) })
+            }
+            "classify_failure" => {
+                let input = Self::json_arg(&args["input"]);
+                call_json(|out, error| unsafe { cantino_classify_failure(input.ptr(), out, error) })
+            }
             "basemap_bad_feed" => self.basemap_bad_feed(args),
             "basemap_extract" => self.basemap_extract(args),
             other => panic!("unknown op {other}"),
         }
+    }
+
+    /// The areas root of an `area_published`/`area_recover` call: `root`
+    /// (a `scratch:` path, fresh per call), first filled with a copy of the
+    /// `fixture` directory unless that is null (then the root stays absent).
+    fn area_root(&self, args: &Value) -> PathBuf {
+        let root = self.path(args["root"].as_str().expect("area ops need a root"));
+        assert!(
+            !root.exists(),
+            "area roots must be fresh: {}",
+            root.display()
+        );
+        if let Some(fixture) = args["fixture"].as_str() {
+            copy_tree(&self.path(fixture), &root);
+        }
+        root
     }
 
     /// `basemap_bad_feed`: plan_new, first_request, then each listed feed of
@@ -671,6 +748,72 @@ fn plan_new(args: &Value, plan: &mut *mut CantinoBasemapPlan) -> Value {
     call_status(|error| unsafe {
         cantino_basemap_plan_new(bbox.ptr(), min_zoom, max_zoom, overfetch, plan, error)
     })
+}
+
+fn copy_tree(from: &Path, to: &Path) {
+    std::fs::create_dir_all(to).unwrap();
+    for entry in std::fs::read_dir(from).unwrap() {
+        let entry = entry.unwrap();
+        let target = to.join(entry.file_name());
+        if entry.file_type().unwrap().is_dir() {
+            copy_tree(&entry.path(), &target);
+        } else {
+            std::fs::copy(entry.path(), target).unwrap();
+        }
+    }
+}
+
+/// Projection for area ops (README): every string in `value` that is a path
+/// under `root` becomes relative to it (`root` itself becomes `"."`), so the
+/// outcome does not depend on where the runner's scratch directory is.
+fn relative_paths(value: Value, root: &Path) -> Value {
+    let prefix = root.to_str().unwrap();
+    match value {
+        Value::String(text) if text == prefix => Value::String(".".into()),
+        Value::String(text) => match text.strip_prefix(prefix).and_then(|t| t.strip_prefix('/')) {
+            Some(relative) => Value::String(relative.into()),
+            None => Value::String(text),
+        },
+        Value::Array(items) => Value::Array(
+            items
+                .into_iter()
+                .map(|item| relative_paths(item, root))
+                .collect(),
+        ),
+        Value::Object(map) => Value::Object(
+            map.into_iter()
+                .map(|(key, item)| (key, relative_paths(item, root)))
+                .collect(),
+        ),
+        other => other,
+    }
+}
+
+/// Every regular file under `root` (relative path, `/`-separated, to its
+/// size in bytes), or `null` when `root` does not exist.
+fn file_sizes(root: &Path) -> Value {
+    fn walk(root: &Path, at: &Path, out: &mut Map<String, Value>) {
+        for entry in std::fs::read_dir(at).unwrap() {
+            let path = entry.unwrap().path();
+            if path.is_dir() {
+                walk(root, &path, out);
+            } else {
+                let relative = path
+                    .strip_prefix(root)
+                    .unwrap()
+                    .to_str()
+                    .unwrap()
+                    .to_owned();
+                out.insert(relative, json!(std::fs::metadata(&path).unwrap().len()));
+            }
+        }
+    }
+    if !root.exists() {
+        return Value::Null;
+    }
+    let mut out = Map::new();
+    walk(root, root, &mut out);
+    Value::Object(out)
 }
 
 /// What an HTTP server answers to `Range: bytes=offset-(offset+length-1)`:

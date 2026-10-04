@@ -8,3 +8,5 @@ spike/*/out
 *.sqlite
 /.claude/worktrees/
 /.claude/.cc-writes
+# Placeholder area files of the 0.2.0 on-disk layout fixture (tests/area_storage.rs).
+!/tests/fixtures/area-storage-0.2.0/**/*.sqlite
