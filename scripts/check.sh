@@ -10,4 +10,8 @@ cargo clippy --all-targets -- -D warnings
 cargo test
 # `cargo test` builds the library's cdylib in target/debug as well.
 cargo build --lib
-python3 scripts/mobile-api-smoke.py target/debug/libcantino.so
+case "$(uname -s)" in
+Darwin) cdylib=target/debug/libcantino.dylib ;;
+*) cdylib=target/debug/libcantino.so ;;
+esac
+python3 scripts/mobile-api-smoke.py "$cdylib"
