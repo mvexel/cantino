@@ -70,7 +70,8 @@ struct OfferView: View {
             Text("Download an offline area?").font(.title2.bold())
             Text("Area centre (\(center.description), \(source.label)).").font(.footnote).foregroundStyle(Palette.muted)
             Text("About \(km) × \(km) km around \(center.description): map data (to find cafés) and a basemap, "
-                + "so the app works without a connection.")
+                + "so the app works without a connection. Of the map data, only points of interest "
+                + "(cafés, shops, other places) are kept; the basemap shows the rest.")
             Text("Privacy: the area's bounds (≈ your location) are sent to SliceOSM and the Protomaps tile host.")
                 .font(.callout)
             Button("Download") { model.startDownload(center: center) }

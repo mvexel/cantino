@@ -27,7 +27,11 @@ struct CafeLoaderTests {
         let directory = try Fixtures.scratch("cafe-relation")
         defer { try? FileManager.default.removeItem(at: directory) }
         let area = directory.appendingPathComponent("area.sqlite")
-        try OsmStore.importArea(input: Fixtures.directory.appendingPathComponent("cafe-relation.osm"), destination: area)
+        // Imported as the app imports downloads (CafeProfile): the café
+        // relation keeps its members by reference closure.
+        let report = try OsmStore.importArea(input: Fixtures.directory.appendingPathComponent("cafe-relation.osm"),
+                                             destination: area, options: CafeProfile.importOptions)
+        #expect(report.profile == CafeProfile.poi)
 
         let store = try OsmStore.open(area)
         defer { try? store.close() }
@@ -56,6 +60,46 @@ struct CafeLoaderTests {
         let detail = try DetailModel.load(store, OsmId(.way, 201))
         #expect(detail.nodeRefs.map(\.id) == [101, 102, 103, 104, 101])
         #expect(detail.nodeRefs.allSatisfy { $0.location != nil })
+    }
+
+    /// The app's import profile is applied: POIs stay, everything else is gone.
+    @Test func poiProfileKeepsCafesAndDropsStreets() throws {
+        let directory = try Fixtures.scratch("cafe-profile")
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let area = directory.appendingPathComponent("area.sqlite")
+        // The options AreaManager gets from CafeProfile.areaConfig.
+        #expect(CafeProfile.areaConfig.importOptions == CafeProfile.importOptions)
+        let report = try OsmStore.importArea(input: Fixtures.directory.appendingPathComponent("snapshot.osm"),
+                                             destination: area, options: CafeProfile.importOptions)
+
+        // The report records the app's profile; the map's status line reads it.
+        #expect(report.profile == CafeProfile.poi)
+        #expect(CafeProfile.label(report.profile) == "points of interest only")
+        // Only the café node is kept: no way or relation has a POI key.
+        #expect(report.counts.nodes == 1 && report.counts.ways == 0 && report.counts.relations == 0)
+
+        let store = try OsmStore.open(area)
+        defer { try? store.close() }
+        let cafes = try CafeLoader.load(store, bbox: Bbox(west: -111.1, south: 39.8, east: -110.9, north: 40.2))
+        #expect(cafes.map(\.id) == [OsmId(.node, 2)])
+        // highway=path and its untagged nodes: filtered out.
+        #expect(try store.get(OsmId(.way, 2)) == nil)
+        #expect(try store.get(OsmId(.node, 3)) == nil)
+        // highway=service, although it uses the café node.
+        #expect(try store.get(OsmId(.way, 1)) == nil)
+        // The detail screen names both causes for a missing object.
+        #expect(try DetailModel.load(store, OsmId(.way, 2), profile: report.profile).object == nil)
+        #expect(CafeProfile.notFoundText(report.profile).hasSuffix("or the import profile (points of interest only) did not keep it."))
+        #expect(CafeProfile.notFoundText(nil).hasPrefix("Not in this area or filtered out: "))
+        #expect(CafeProfile.notFoundText(nil).hasSuffix("or the import profile did not keep it."))
+    }
+
+    @Test func poiProfileHasTheEightDocumentedKeysOnAllKinds() {
+        #expect(CafeProfile.poi.keep.map(\.key)
+            == ["amenity", "shop", "tourism", "leisure", "craft", "office", "healthcare", "historic"])
+        #expect(CafeProfile.poi.keep.allSatisfy { $0.kinds == Set(OsmKind.allCases) && $0.values == nil })
+        #expect(CafeProfile.label(nil) == nil)
+        #expect(CafeProfile.label(ImportProfile(keep: [KeepRule(kinds: [.way], key: "highway")])) == "filtered: highway")
     }
 
     /// More cafés than one page: every one is found once, in ID order.
@@ -197,3 +241,4 @@ actor Signal {
         await withCheckedContinuation { waiters.append($0) }
     }
 }
+

@@ -56,6 +56,59 @@ struct Cafe: Hashable, Sendable, Identifiable {
     func openState(at now: LocalTime) -> OpenState { OpeningHours.evaluate(tags["opening_hours"], at: now) }
 }
 
+/// What the app keeps of the downloaded OSM data: points of interest only
+/// (port of `CafeProfile` in the Android café app's Cafes.kt; keep the rules
+/// in step).
+///
+/// The café app reads nothing but `amenity=cafe` objects and what they
+/// reference, and the basemap draws everything else (roads, buildings,
+/// water), so storing the rest would only cost space: on the Salt Lake City
+/// test area the POI profile is 8.8 MB instead of 128.5 MB
+/// (docs/guide/downloading.md, "Keep only what you need").
+///
+/// Why this is enough for the app: the import keeps references whole (a kept
+/// way keeps all its nodes, a kept relation all its members, recursively),
+/// so café markers and the inspector's way-node and member rows behave as
+/// with a full import. Objects that match none of the keys (a street, a
+/// plain building) are not in the area file. The basemap is independent of
+/// this profile; it is downloaded in full for the same bbox.
+///
+/// Changing the rules only affects new downloads: the published area keeps
+/// the profile it was built with (``ImportReport/profile``).
+enum CafeProfile {
+    /// `amenity`, `shop`, `tourism`, `leisure`, `craft`, `office`, `healthcare`, `historic` on nodes, ways and relations.
+    static let poi = ImportProfile(
+        keep: ["amenity", "shop", "tourism", "leisure", "craft", "office", "healthcare", "historic"]
+            .map { KeepRule(kinds: Set(OsmKind.allCases), key: $0) })
+
+    static let importOptions = ImportOptions(profile: poi)
+
+    /// The ``AreaManager`` config for the café app's downloads.
+    static let areaConfig = AreaConfig(importOptions: importOptions)
+
+    /// A short label for the profile an area records (``ImportReport/profile``),
+    /// or nil when it records none. Nil is not shown as "all map data": the
+    /// area metadata currently drops the recorded profile (core sidecar
+    /// parser), so a POI area reads back without one as well.
+    static func label(_ profile: ImportProfile?) -> String? {
+        switch profile {
+        case nil: nil
+        case poi: "points of interest only"
+        case let other?: "filtered: " + other.keep.map(\.key).joined(separator: ", ")
+        }
+    }
+
+    /// The detail screen's text for an object the area does not contain. The
+    /// app downloads with an import profile, so the object may be outside the
+    /// area *or* filtered out, and the area cannot tell which: both causes
+    /// are named, with the profile when the area records one.
+    static func notFoundText(_ profile: ImportProfile?) -> String {
+        "Not in this area or filtered out: the offline area does not contain this object. It lies outside the area "
+            + "(or was clipped at its edge), or the import profile"
+            + (label(profile).map { " (\($0))" } ?? "") + " did not keep it."
+    }
+}
+
 enum CafeLoader {
     static let pageSize = 500
 
@@ -132,7 +185,9 @@ struct RelationMemberRow: Hashable, Sendable {
     let present: Bool
     let name: String?
 
-    /// The row text; absent members (outside the area) say so instead of linking.
+    /// The row text; absent members say so instead of linking. With the
+    /// app's import profile they are still "not in this area" (outside it),
+    /// never filtered out: the import keeps every member of a kept relation.
     func label(index: Int) -> String {
         let role = member.role.isEmpty ? "(no role)" : member.role
         let target = "\(member.id.kind.label) \(member.id.id)"

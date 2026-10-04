@@ -42,7 +42,9 @@ struct DetailView: View {
         .task(id: id) {
             let id = id
             do {
-                model = try await CafeStore.shared.withStore { store, _ in try DetailModel.load(store, id) }
+                model = try await CafeStore.shared.withStore { store, area in
+                    try DetailModel.load(store, id, profile: area.metadata?.report?.profile)
+                }
             } catch {
                 self.error = "\(error)"
             }
@@ -115,7 +117,7 @@ struct DetailView: View {
             }
         } else {
             Text(verbatim: "\(kind) \(id.id)").font(.title2.bold())
-            Text("Not in this area: the offline extract does not contain this object (it lies outside the area, or was clipped at its edge).")
+            Text(CafeProfile.notFoundText(model.profile))
         }
     }
 
@@ -160,10 +162,17 @@ struct DetailModel: Sendable {
     let nodeRefs: [NodeRef]
     let members: [RelationMemberRow]
     let point: LatLon?
+    /// The profile the area was imported with (nil: everything).
+    var profile: ImportProfile? = nil
 
     /// Resolves node coordinates and member presence on the store thread
     /// (one batch get each), so the UI only renders.
-    static func load(_ store: OsmStore, _ id: OsmId) throws -> DetailModel {
+    ///
+    /// Way nodes and relation members of a kept object are never filtered
+    /// out by the app's import profile (the import keeps references whole),
+    /// so a missing one is outside the area. An object opened directly may
+    /// also be filtered out; `profile` lets the "not found" text say so.
+    static func load(_ store: OsmStore, _ id: OsmId, profile: ImportProfile? = nil) throws -> DetailModel {
         let object = try store.get(id)
         var refs: [NodeRef] = []
         if let way = object?.way {
@@ -174,6 +183,6 @@ struct DetailModel: Sendable {
         }
         let members = try object?.relation.map { try RelationMemberRow.rows(store, $0) } ?? []
         let point = try object.flatMap { try CafeLoader.representativePoint(store, $0) }
-        return DetailModel(object: object, nodeRefs: refs, members: members, point: point)
+        return DetailModel(object: object, nodeRefs: refs, members: members, point: point, profile: profile)
     }
 }

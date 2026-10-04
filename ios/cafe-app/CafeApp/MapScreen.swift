@@ -127,7 +127,10 @@ final class MapModel {
         formatter.locale = Locale(identifier: "en_US_POSIX")
         let snapshot = area.metadata?.snapshotTimestamp.map(formatter.string(from:)) ?? "unknown"
         let ref = reference.map { "distances from \($0.source.label)" } ?? "no reference location"
-        return "Offline area · OSM data as of \(snapshot) UTC · \(ref)"
+        // The profile comes from the area's own import report, never from
+        // what the app would request today (see CafeProfile.label).
+        let profile = CafeProfile.label(area.metadata?.report?.profile).map { "\($0) · " } ?? ""
+        return "Offline area · \(profile)OSM data as of \(snapshot) UTC · \(ref)"
     }
 }
 

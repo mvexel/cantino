@@ -7,7 +7,8 @@ import Observation
 ///
 ///   location permission → one CoreLocation fix
 ///     → offer "download ~10×10 km around you (map data + basemap)?"
-///     → AreaManager.download(…, .extract(latest Protomaps build, z15))
+///     → AreaManager.download(…, .extract(latest Protomaps build, z15)),
+///       importing points of interest only (``CafeProfile``)
 ///       with honest progress (phase, bytes, fraction when known)
 ///     → ready → map (``MapScreen``).
 ///
@@ -47,7 +48,8 @@ final class AppModel {
     let debugLocation = DebugLocation.read()
     let debugLaunch = DebugLaunch.read()
     @ObservationIgnored let device = DeviceLocation()
-    @ObservationIgnored private let areas = AreaManager()
+    /// Downloads started here import points of interest only (``CafeProfile``).
+    @ObservationIgnored private let areas = AreaManager(config: CafeProfile.areaConfig)
     /// The run the progress screen follows; nil before ``AreaManager/download`` returned.
     @ObservationIgnored private var currentRun: UUID?
     @ObservationIgnored private var lookup: Task<Void, Never>?
@@ -375,8 +377,9 @@ final class ProgressModel {
             url.flatMap { try? FileManager.default.attributesOfItem(atPath: $0.path)[.size] as? NSNumber }?.int64Value ?? -1
         }
         let counts = area.metadata?.report.map { "\($0.counts)" } ?? "nil"
+        let profile = area.metadata?.report?.profile.map { "\($0)" } ?? "nil"
         Log.download.info(
-            "ready in \(total) ms; data db \(size(area.dataURL)) B; pmtiles \(size(area.basemapURL)) B; counts \(counts, privacy: .public)")
+            "ready in \(total) ms; data db \(size(area.dataURL)) B; pmtiles \(size(area.basemapURL)) B; counts \(counts, privacy: .public); profile \(profile, privacy: .public)")
     }
 
     private func bytes(_ bytes: Int64, _ total: Int64?) {
