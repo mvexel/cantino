@@ -1,0 +1,358 @@
+<!DOCTYPE html>
+<html class="no-js" lang="en">
+<head>
+    <meta name="viewport" content="width=device-width, initial-scale=1" charset="UTF-8">
+    <title>AreaConfig</title>
+    <link href="../../../images/logo-icon.svg" rel="icon" type="image/svg">
+        <script>var pathToRoot = "../../../";</script>
+    <script>document.documentElement.classList.replace("no-js", "js");</script>
+    <script>const storage = localStorage.getItem("dokka-dark-mode")
+      if (storage == null) {
+        const osDarkSchemePreferred = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches
+        if (osDarkSchemePreferred === true) {
+          document.getElementsByTagName("html")[0].classList.add("theme-dark")
+        }
+      } else {
+        const savedDarkMode = JSON.parse(storage)
+        if (savedDarkMode === true) {
+          document.getElementsByTagName("html")[0].classList.add("theme-dark")
+        }
+      }
+    </script>
+<script type="text/javascript" src="../../../scripts/sourceset_dependencies.js" async="async"></script>
+<link href="../../../styles/style.css" rel="Stylesheet">
+<link href="../../../styles/main.css" rel="Stylesheet">
+<link href="../../../styles/prism.css" rel="Stylesheet">
+<link href="../../../styles/logo-styles.css" rel="Stylesheet">
+<link href="../../../ui-kit/ui-kit.min.css" rel="Stylesheet">
+<script type="text/javascript" src="../../../scripts/safe-local-storage_blocking.js"></script>
+<script type="text/javascript" src="../../../scripts/navigation-loader.js" async="async"></script>
+<script type="text/javascript" src="../../../scripts/platform-content-handler.js" async="async"></script>
+<script type="text/javascript" src="../../../scripts/main.js" defer="defer"></script>
+<script type="text/javascript" src="../../../scripts/prism.js" async="async"></script>
+<script type="text/javascript" src="../../../ui-kit/ui-kit.min.js" defer="defer"></script>
+</head>
+<body>
+<div class="root">
+    <header class="navigation theme-dark" id="navigation-wrapper" role="banner">
+            <a class="library-name--link" href="../../../index.html" tabindex="1">
+                    Cantino
+            </a>
+        <button class="navigation-controls--btn navigation-controls--btn_toc ui-kit_mobile-only" id="toc-toggle"
+                type="button">Toggle table of contents
+        </button>
+        <div class="navigation-controls--break ui-kit_mobile-only"></div>
+        <div class="library-version" id="library-version">
+0.2.0        </div>
+        <div class="navigation-controls">
+        <ul class="filter-section filter-section_loading" id="filter-section" aria-label="Target filter">
+                <button class="platform-tag platform-selector jvm-like" data-active="" aria-pressed="true"
+                        data-filter=":cantino/release">release</button>
+            <div class="dropdown filter-section--dropdown" data-role="dropdown" id="filter-section-dropdown">
+                <button class="button button_dropdown filter-section--dropdown-toggle" role="combobox"
+                        data-role="dropdown-toggle"
+                        aria-controls="platform-tags-listbox"
+                        aria-haspopup="listbox"
+                        aria-expanded="false"
+                        aria-label="Toggle source sets"
+                ></button>
+                <ul role="listbox" id="platform-tags-listbox" class="dropdown--list" data-role="dropdown-listbox" aria-label="Target filter">
+                    <div class="dropdown--header"><span>Target filter</span>
+                        <button class="button" data-role="dropdown-toggle" aria-label="Close target filter">
+                            <i class="ui-kit-icon ui-kit-icon_cross"></i>
+                        </button>
+                    </div>
+                        <li role="option" class="dropdown--option platform-selector-option jvm-like" tabindex="0">
+                            <label class="checkbox">
+                                <input type="checkbox" class="checkbox--input" id=":cantino/release"
+                                       data-filter=":cantino/release"/>
+                                <span class="checkbox--icon"></span>
+                                release
+                            </label>
+                        </li>
+                </ul>
+                <div class="dropdown--overlay"></div>
+            </div>
+        </ul>
+            <button class="navigation-controls--btn navigation-controls--btn_theme" id="theme-toggle-button"
+                    type="button">Switch theme
+            </button>
+            <div class="navigation-controls--btn navigation-controls--btn_search" id="searchBar" role="button">Search in
+                API
+            </div>
+        </div>
+    </header>
+    <div id="container">
+        <nav id="leftColumn" class="sidebar" data-item-type="SECTION" data-item-config='{"defaultSize": 280, "minSize": 200, "maxSize": 400}'>
+            <a class="toc--skip-link" href="#main">Skip to content</a>
+            <div class="dropdown theme-dark_mobile" data-role="dropdown" id="toc-dropdown">
+                <ul role="listbox" id="toc-listbox" class="dropdown--list dropdown--list_toc-list"
+                    data-role="dropdown-listbox" aria-label="Table of contents">
+                    <div class="dropdown--header">
+                            <span>
+                                    Cantino
+                            </span>
+                        <button class="button" data-role="dropdown-toggle" aria-label="Close table of contents">
+                            <i class="ui-kit-icon ui-kit-icon_cross"></i>
+                        </button>
+                    </div>
+                    <div class="sidebar--inner" id="sideMenu"></div>
+                </ul>
+                <div class="dropdown--overlay"></div>
+            </div>
+        </nav>
+        <div id="resizer" class="resizer" data-item-type="BAR"></div>
+        <div id="main" data-item-type="SECTION" role="main">
+<div class="main-content" data-page-type="classlike" id="content" pageIds="Cantino::lol.osm.cantino/AreaConfig///PointingToDeclaration//703280004">
+  <div class="breadcrumbs"><a href="../../../index.html">Cantino</a><span class="delimiter">/</span><a href="../index.html">lol.osm.cantino</a><span class="delimiter">/</span><span class="current">AreaConfig</span></div>
+  <div class="cover ">
+    <h1 class="cover"><span>Area</span><wbr></wbr><span><span>Config</span></span></h1>
+    <div class="platform-hinted " data-platform-hinted="data-platform-hinted"><div class="content sourceset-dependent-content" data-active="" data-togglable=":cantino/release"><div class="symbol monospace"><span class="token keyword">data </span><span class="token keyword">class </span><a href="index.html">AreaConfig</a><span class="token punctuation">(</span><span class="parameters "><span class="parameter "><span class="token keyword">val </span>sliceBaseUrl<span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-string/index.html">String</a><span class="token operator"> = </span>DEFAULT_SLICE_BASE_URL<span class="token punctuation">, </span></span><span class="parameter "><span class="token keyword">val </span>pollIntervalMillis<span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-long/index.html">Long</a><span class="token punctuation">, </span></span><span class="parameter "><span class="token keyword">val </span>maxSliceWaitMillis<span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-long/index.html">Long</a><span class="token operator"> = </span>8 * 60_000<span class="token punctuation">, </span></span><span class="parameter "><span class="token keyword">val </span>connectTimeoutMillis<span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-int/index.html">Int</a><span class="token punctuation">, </span></span><span class="parameter "><span class="token keyword">val </span>readTimeoutMillis<span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-int/index.html">Int</a><span class="token punctuation">, </span></span><span class="parameter "><span class="token keyword">val </span>inlineRetries<span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-int/index.html">Int</a><span class="token operator"> = </span><span class="token constant">3</span><span class="token punctuation">, </span></span><span class="parameter "><span class="token keyword">val </span>inlineRetryDelayMillis<span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-long/index.html">Long</a><span class="token punctuation">, </span></span><span class="parameter "><span class="token keyword">val </span>maxRunAttempts<span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-int/index.html">Int</a><span class="token operator"> = </span><span class="token constant">5</span><span class="token punctuation">, </span></span><span class="parameter "><span class="token keyword">val </span>backoffDelayMillis<span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-long/index.html">Long</a><span class="token punctuation">, </span></span><span class="parameter "><span class="token keyword">val </span>importOptions<span class="token operator">: </span><a href="../-import-options/index.html">ImportOptions</a><span class="token operator"> = </span>ImportOptions()<span class="token punctuation">, </span></span><span class="parameter "><span class="token keyword">val </span>basemapParallelism<span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-int/index.html">Int</a><span class="token operator"> = </span><span class="token constant">4</span><span class="token punctuation">, </span></span><span class="parameter "><span class="token keyword">val </span>foreground<span class="token operator">: </span><a href="../-foreground-config/index.html">ForegroundConfig</a><span class="token operator">?</span><span class="token operator"> = </span>null</span></span><span class="token punctuation">)</span><span class="source-link-wrapper"><span class="source-link" data-element-type="source-link">(<a href="https://github.com/mvexel/cantino/blob/v0.2.0/android/cantino/src/main/java/lol/osm/cantino/AreaModels.kt#L51">source</a>)</span></span></div><p class="paragraph">Tuning and endpoints for <a href="../-area-manager/index.html">AreaManager</a>. The defaults target the public SliceOSM service and suit a city-sized area; most apps pass <code class="lang-kotlin">AreaConfig()</code> or only set <span data-unresolved-link="lol.osm.cantino/AreaConfig//#kotlin.String#kotlin.Long#kotlin.Long#kotlin.Int#kotlin.Int#kotlin.Int#kotlin.Long#kotlin.Int#kotlin.Long#lol.osm.cantino.ImportOptions#kotlin.Int#lol.osm.cantino.ForegroundConfig?/PointingToCallableParameters(11)/">foreground</span>. Tests inject a local server through <span data-unresolved-link="lol.osm.cantino/AreaConfig//#kotlin.String#kotlin.Long#kotlin.Long#kotlin.Int#kotlin.Int#kotlin.Int#kotlin.Long#kotlin.Int#kotlin.Long#lol.osm.cantino.ImportOptions#kotlin.Int#lol.osm.cantino.ForegroundConfig?/PointingToCallableParameters(0)/">sliceBaseUrl</span>.</p><p class="paragraph">Retries happen at two levels. Inside one run, a transient HTTP failure (network error, timeout, 5xx, 408, 429) is retried <span data-unresolved-link="lol.osm.cantino/AreaConfig//#kotlin.String#kotlin.Long#kotlin.Long#kotlin.Int#kotlin.Int#kotlin.Int#kotlin.Long#kotlin.Int#kotlin.Long#lol.osm.cantino.ImportOptions#kotlin.Int#lol.osm.cantino.ForegroundConfig?/PointingToCallableParameters(5)/">inlineRetries</span> times with a delay starting at <span data-unresolved-link="lol.osm.cantino/AreaConfig//#kotlin.String#kotlin.Long#kotlin.Long#kotlin.Int#kotlin.Int#kotlin.Int#kotlin.Long#kotlin.Int#kotlin.Long#lol.osm.cantino.ImportOptions#kotlin.Int#lol.osm.cantino.ForegroundConfig?/PointingToCallableParameters(6)/">inlineRetryDelayMillis</span> and doubling, so a short server hiccup does not cost a WorkManager backoff. If that is not enough the run ends with <code class="lang-kotlin">Result.retry()</code> and WorkManager reschedules it with exponential backoff from <span data-unresolved-link="lol.osm.cantino/AreaConfig//#kotlin.String#kotlin.Long#kotlin.Long#kotlin.Int#kotlin.Int#kotlin.Int#kotlin.Long#kotlin.Int#kotlin.Long#lol.osm.cantino.ImportOptions#kotlin.Int#lol.osm.cantino.ForegroundConfig?/PointingToCallableParameters(8)/">backoffDelayMillis</span> (WorkManager enforces a 10 s minimum), up to <span data-unresolved-link="lol.osm.cantino/AreaConfig//#kotlin.String#kotlin.Long#kotlin.Long#kotlin.Int#kotlin.Int#kotlin.Int#kotlin.Long#kotlin.Int#kotlin.Long#lol.osm.cantino.ImportOptions#kotlin.Int#lol.osm.cantino.ForegroundConfig?/PointingToCallableParameters(7)/">maxRunAttempts</span> runs in total. Permanent failures (other 4xx, data that fails to import) are never retried.</p><p class="paragraph">The config is copied into each work request, so a run restarted after process death uses the config it was started with.</p></div></div>
+  </div>
+  <div class="tabbedcontent">
+    <div class="tabs-section" tabs-section="tabs-section"><button class="section-tab" data-active="" data-togglable="CONSTRUCTOR,TYPE,PROPERTY,FUNCTION">Members</button></div>
+    <div class="tabs-section-body">
+      <div data-togglable="CONSTRUCTOR">
+        <h2 class="tableheader">Constructors</h2>
+        <div class="table"><a data-name="1487246917%2FConstructors%2F703280004" anchor-label="AreaConfig" id="1487246917%2FConstructors%2F703280004" data-filterable-set=":cantino/release"></a>
+          <div class="table-row table-row_content" data-togglable="CONSTRUCTOR" data-filterable-current=":cantino/release" data-filterable-set=":cantino/release">
+            <div class="main-subrow keyValue ">
+              <div class=""><span class="inline-flex">
+                  <div><a href="-area-config.html"><span>Area</span><wbr></wbr><span><span>Config</span></span></a></div>
+<span class="anchor-wrapper"><span class="anchor-icon" pointing-to="1487246917%2FConstructors%2F703280004"></span>
+                    <div class="copy-popup-wrapper "><span class="copy-popup-icon"></span><span>Link copied to clipboard</span></div>
+                  </span></span></div>
+              <div>
+                <div class="title">
+                  <div class="platform-hinted " data-platform-hinted="data-platform-hinted"><div class="content sourceset-dependent-content" data-active="" data-togglable=":cantino/release"><div class="symbol monospace"><span class="token keyword">constructor</span><span class="token punctuation">(</span><span class="parameters "><span class="parameter ">sliceBaseUrl<span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-string/index.html">String</a><span class="token operator"> = </span>DEFAULT_SLICE_BASE_URL<span class="token punctuation">, </span></span><span class="parameter ">pollIntervalMillis<span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-long/index.html">Long</a><span class="token punctuation">, </span></span><span class="parameter ">maxSliceWaitMillis<span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-long/index.html">Long</a><span class="token operator"> = </span>8 * 60_000<span class="token punctuation">, </span></span><span class="parameter ">connectTimeoutMillis<span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-int/index.html">Int</a><span class="token punctuation">, </span></span><span class="parameter ">readTimeoutMillis<span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-int/index.html">Int</a><span class="token punctuation">, </span></span><span class="parameter ">inlineRetries<span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-int/index.html">Int</a><span class="token operator"> = </span><span class="token constant">3</span><span class="token punctuation">, </span></span><span class="parameter ">inlineRetryDelayMillis<span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-long/index.html">Long</a><span class="token punctuation">, </span></span><span class="parameter ">maxRunAttempts<span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-int/index.html">Int</a><span class="token operator"> = </span><span class="token constant">5</span><span class="token punctuation">, </span></span><span class="parameter ">backoffDelayMillis<span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-long/index.html">Long</a><span class="token punctuation">, </span></span><span class="parameter ">importOptions<span class="token operator">: </span><a href="../-import-options/index.html">ImportOptions</a><span class="token operator"> = </span>ImportOptions()<span class="token punctuation">, </span></span><span class="parameter ">basemapParallelism<span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-int/index.html">Int</a><span class="token operator"> = </span><span class="token constant">4</span><span class="token punctuation">, </span></span><span class="parameter ">foreground<span class="token operator">: </span><a href="../-foreground-config/index.html">ForegroundConfig</a><span class="token operator">?</span><span class="token operator"> = </span>null</span></span><span class="token punctuation">)</span></div></div></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div data-togglable="TYPE">
+        <h2 class="tableheader">Types</h2>
+        <div class="table"><a data-name="-1799705167%2FClasslikes%2F703280004" anchor-label="Companion" id="-1799705167%2FClasslikes%2F703280004" data-filterable-set=":cantino/release"></a>
+          <div class="table-row table-row_content" data-filterable-current=":cantino/release" data-filterable-set=":cantino/release">
+            <div class="main-subrow keyValue ">
+              <div class=""><span class="inline-flex">
+                  <div><a href="-companion/index.html"><span><span>Companion</span></span></a></div>
+<span class="anchor-wrapper"><span class="anchor-icon" pointing-to="-1799705167%2FClasslikes%2F703280004"></span>
+                    <div class="copy-popup-wrapper "><span class="copy-popup-icon"></span><span>Link copied to clipboard</span></div>
+                  </span></span></div>
+              <div>
+                <div class="title">
+                  <div class="platform-hinted " data-platform-hinted="data-platform-hinted"><div class="content sourceset-dependent-content" data-active="" data-togglable=":cantino/release"><div class="symbol monospace"><span class="token keyword">object </span><a href="-companion/index.html">Companion</a></div><div class="brief "><p class="paragraph">Defaults of <a href="index.html">AreaConfig</a>.</p></div></div></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div data-togglable="PROPERTY">
+        <h2 class="tableheader">Properties</h2>
+        <div class="table"><a data-name="-2005158033%2FProperties%2F703280004" anchor-label="backoffDelayMillis" id="-2005158033%2FProperties%2F703280004" data-filterable-set=":cantino/release"></a>
+          <div class="table-row table-row_content" data-filterable-current=":cantino/release" data-filterable-set=":cantino/release">
+            <div class="main-subrow keyValue ">
+              <div class=""><span class="inline-flex">
+                  <div><a href="backoff-delay-millis.html"><span>backoff</span><wbr></wbr><span>Delay</span><wbr></wbr><span><span>Millis</span></span></a></div>
+<span class="anchor-wrapper"><span class="anchor-icon" pointing-to="-2005158033%2FProperties%2F703280004"></span>
+                    <div class="copy-popup-wrapper "><span class="copy-popup-icon"></span><span>Link copied to clipboard</span></div>
+                  </span></span></div>
+              <div>
+                <div class="title">
+                  <div class="platform-hinted " data-platform-hinted="data-platform-hinted"><div class="content sourceset-dependent-content" data-active="" data-togglable=":cantino/release"><div class="symbol monospace"><span class="token keyword">val </span><a href="backoff-delay-millis.html">backoffDelayMillis</a><span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-long/index.html">Long</a></div><div class="brief "><p class="paragraph">Initial WorkManager backoff between runs (exponential, at least 10 s). Default 30000 (30 s).</p></div></div></div>
+                </div>
+              </div>
+            </div>
+          </div>
+<a data-name="-726255713%2FProperties%2F703280004" anchor-label="basemapParallelism" id="-726255713%2FProperties%2F703280004" data-filterable-set=":cantino/release"></a>
+          <div class="table-row table-row_content" data-filterable-current=":cantino/release" data-filterable-set=":cantino/release">
+            <div class="main-subrow keyValue ">
+              <div class=""><span class="inline-flex">
+                  <div><a href="basemap-parallelism.html"><span>basemap</span><wbr></wbr><span><span>Parallelism</span></span></a></div>
+<span class="anchor-wrapper"><span class="anchor-icon" pointing-to="-726255713%2FProperties%2F703280004"></span>
+                    <div class="copy-popup-wrapper "><span class="copy-popup-icon"></span><span>Link copied to clipboard</span></div>
+                  </span></span></div>
+              <div>
+                <div class="title">
+                  <div class="platform-hinted " data-platform-hinted="data-platform-hinted"><div class="content sourceset-dependent-content" data-active="" data-togglable=":cantino/release"><div class="symbol monospace"><span class="token keyword">val </span><a href="basemap-parallelism.html">basemapParallelism</a><span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-int/index.html">Int</a></div><div class="brief "><p class="paragraph">Parallel HTTP range requests of a <a href="../-basemap-source/-extract/index.html">BasemapSource.Extract</a> (go-pmtiles uses 4). Default 4.</p></div></div></div>
+                </div>
+              </div>
+            </div>
+          </div>
+<a data-name="1688056147%2FProperties%2F703280004" anchor-label="connectTimeoutMillis" id="1688056147%2FProperties%2F703280004" data-filterable-set=":cantino/release"></a>
+          <div class="table-row table-row_content" data-filterable-current=":cantino/release" data-filterable-set=":cantino/release">
+            <div class="main-subrow keyValue ">
+              <div class=""><span class="inline-flex">
+                  <div><a href="connect-timeout-millis.html"><span>connect</span><wbr></wbr><span>Timeout</span><wbr></wbr><span><span>Millis</span></span></a></div>
+<span class="anchor-wrapper"><span class="anchor-icon" pointing-to="1688056147%2FProperties%2F703280004"></span>
+                    <div class="copy-popup-wrapper "><span class="copy-popup-icon"></span><span>Link copied to clipboard</span></div>
+                  </span></span></div>
+              <div>
+                <div class="title">
+                  <div class="platform-hinted " data-platform-hinted="data-platform-hinted"><div class="content sourceset-dependent-content" data-active="" data-togglable=":cantino/release"><div class="symbol monospace"><span class="token keyword">val </span><a href="connect-timeout-millis.html">connectTimeoutMillis</a><span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-int/index.html">Int</a></div><div class="brief "><p class="paragraph">HTTP connect timeout per request. Default 15000 (15 s).</p></div></div></div>
+                </div>
+              </div>
+            </div>
+          </div>
+<a data-name="1307113677%2FProperties%2F703280004" anchor-label="foreground" id="1307113677%2FProperties%2F703280004" data-filterable-set=":cantino/release"></a>
+          <div class="table-row table-row_content" data-filterable-current=":cantino/release" data-filterable-set=":cantino/release">
+            <div class="main-subrow keyValue ">
+              <div class=""><span class="inline-flex">
+                  <div><a href="foreground.html"><span><span>foreground</span></span></a></div>
+<span class="anchor-wrapper"><span class="anchor-icon" pointing-to="1307113677%2FProperties%2F703280004"></span>
+                    <div class="copy-popup-wrapper "><span class="copy-popup-icon"></span><span>Link copied to clipboard</span></div>
+                  </span></span></div>
+              <div>
+                <div class="title">
+                  <div class="platform-hinted " data-platform-hinted="data-platform-hinted"><div class="content sourceset-dependent-content" data-active="" data-togglable=":cantino/release"><div class="symbol monospace"><span class="token keyword">val </span><a href="foreground.html">foreground</a><span class="token operator">: </span><a href="../-foreground-config/index.html">ForegroundConfig</a><span class="token operator">?</span></div><div class="brief "><p class="paragraph">Opt-in: run downloads as a foreground service with a progress notification (see <a href="../-foreground-config/index.html">ForegroundConfig</a>). Null (the default) runs them as ordinary background work, subject to WorkManager's 10-minute limit per run.</p></div></div></div>
+                </div>
+              </div>
+            </div>
+          </div>
+<a data-name="-811669295%2FProperties%2F703280004" anchor-label="importOptions" id="-811669295%2FProperties%2F703280004" data-filterable-set=":cantino/release"></a>
+          <div class="table-row table-row_content" data-filterable-current=":cantino/release" data-filterable-set=":cantino/release">
+            <div class="main-subrow keyValue ">
+              <div class=""><span class="inline-flex">
+                  <div><a href="import-options.html"><span>import</span><wbr></wbr><span><span>Options</span></span></a></div>
+<span class="anchor-wrapper"><span class="anchor-icon" pointing-to="-811669295%2FProperties%2F703280004"></span>
+                    <div class="copy-popup-wrapper "><span class="copy-popup-icon"></span><span>Link copied to clipboard</span></div>
+                  </span></span></div>
+              <div>
+                <div class="title">
+                  <div class="platform-hinted " data-platform-hinted="data-platform-hinted"><div class="content sourceset-dependent-content" data-active="" data-togglable=":cantino/release"><div class="symbol monospace"><span class="token keyword">val </span><a href="import-options.html">importOptions</a><span class="token operator">: </span><a href="../-import-options/index.html">ImportOptions</a></div><div class="brief "><p class="paragraph">Options for the on-device import of the downloaded extract.</p></div></div></div>
+                </div>
+              </div>
+            </div>
+          </div>
+<a data-name="-760106467%2FProperties%2F703280004" anchor-label="inlineRetries" id="-760106467%2FProperties%2F703280004" data-filterable-set=":cantino/release"></a>
+          <div class="table-row table-row_content" data-filterable-current=":cantino/release" data-filterable-set=":cantino/release">
+            <div class="main-subrow keyValue ">
+              <div class=""><span class="inline-flex">
+                  <div><a href="inline-retries.html"><span>inline</span><wbr></wbr><span><span>Retries</span></span></a></div>
+<span class="anchor-wrapper"><span class="anchor-icon" pointing-to="-760106467%2FProperties%2F703280004"></span>
+                    <div class="copy-popup-wrapper "><span class="copy-popup-icon"></span><span>Link copied to clipboard</span></div>
+                  </span></span></div>
+              <div>
+                <div class="title">
+                  <div class="platform-hinted " data-platform-hinted="data-platform-hinted"><div class="content sourceset-dependent-content" data-active="" data-togglable=":cantino/release"><div class="symbol monospace"><span class="token keyword">val </span><a href="inline-retries.html">inlineRetries</a><span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-int/index.html">Int</a></div><div class="brief "><p class="paragraph">Retries of a transient HTTP failure within one run. Default 3.</p></div></div></div>
+                </div>
+              </div>
+            </div>
+          </div>
+<a data-name="1224850134%2FProperties%2F703280004" anchor-label="inlineRetryDelayMillis" id="1224850134%2FProperties%2F703280004" data-filterable-set=":cantino/release"></a>
+          <div class="table-row table-row_content" data-filterable-current=":cantino/release" data-filterable-set=":cantino/release">
+            <div class="main-subrow keyValue ">
+              <div class=""><span class="inline-flex">
+                  <div><a href="inline-retry-delay-millis.html"><span>inline</span><wbr></wbr><span>Retry</span><wbr></wbr><span>Delay</span><wbr></wbr><span><span>Millis</span></span></a></div>
+<span class="anchor-wrapper"><span class="anchor-icon" pointing-to="1224850134%2FProperties%2F703280004"></span>
+                    <div class="copy-popup-wrapper "><span class="copy-popup-icon"></span><span>Link copied to clipboard</span></div>
+                  </span></span></div>
+              <div>
+                <div class="title">
+                  <div class="platform-hinted " data-platform-hinted="data-platform-hinted"><div class="content sourceset-dependent-content" data-active="" data-togglable=":cantino/release"><div class="symbol monospace"><span class="token keyword">val </span><a href="inline-retry-delay-millis.html">inlineRetryDelayMillis</a><span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-long/index.html">Long</a></div><div class="brief "><p class="paragraph">First inline retry delay; doubles per retry. Default 1000 (1 s).</p></div></div></div>
+                </div>
+              </div>
+            </div>
+          </div>
+<a data-name="1379146979%2FProperties%2F703280004" anchor-label="maxRunAttempts" id="1379146979%2FProperties%2F703280004" data-filterable-set=":cantino/release"></a>
+          <div class="table-row table-row_content" data-filterable-current=":cantino/release" data-filterable-set=":cantino/release">
+            <div class="main-subrow keyValue ">
+              <div class=""><span class="inline-flex">
+                  <div><a href="max-run-attempts.html"><span>max</span><wbr></wbr><span>Run</span><wbr></wbr><span><span>Attempts</span></span></a></div>
+<span class="anchor-wrapper"><span class="anchor-icon" pointing-to="1379146979%2FProperties%2F703280004"></span>
+                    <div class="copy-popup-wrapper "><span class="copy-popup-icon"></span><span>Link copied to clipboard</span></div>
+                  </span></span></div>
+              <div>
+                <div class="title">
+                  <div class="platform-hinted " data-platform-hinted="data-platform-hinted"><div class="content sourceset-dependent-content" data-active="" data-togglable=":cantino/release"><div class="symbol monospace"><span class="token keyword">val </span><a href="max-run-attempts.html">maxRunAttempts</a><span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-int/index.html">Int</a></div><div class="brief "><p class="paragraph">WorkManager runs in total before a transient cause becomes <a href="../-area-state/-failed/index.html">AreaState.Failed</a>. Default 5.</p></div></div></div>
+                </div>
+              </div>
+            </div>
+          </div>
+<a data-name="1348000903%2FProperties%2F703280004" anchor-label="maxSliceWaitMillis" id="1348000903%2FProperties%2F703280004" data-filterable-set=":cantino/release"></a>
+          <div class="table-row table-row_content" data-filterable-current=":cantino/release" data-filterable-set=":cantino/release">
+            <div class="main-subrow keyValue ">
+              <div class=""><span class="inline-flex">
+                  <div><a href="max-slice-wait-millis.html"><span>max</span><wbr></wbr><span>Slice</span><wbr></wbr><span>Wait</span><wbr></wbr><span><span>Millis</span></span></a></div>
+<span class="anchor-wrapper"><span class="anchor-icon" pointing-to="1348000903%2FProperties%2F703280004"></span>
+                    <div class="copy-popup-wrapper "><span class="copy-popup-icon"></span><span>Link copied to clipboard</span></div>
+                  </span></span></div>
+              <div>
+                <div class="title">
+                  <div class="platform-hinted " data-platform-hinted="data-platform-hinted"><div class="content sourceset-dependent-content" data-active="" data-togglable=":cantino/release"><div class="symbol monospace"><span class="token keyword">val </span><a href="max-slice-wait-millis.html">maxSliceWaitMillis</a><span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-long/index.html">Long</a></div><div class="brief "><p class="paragraph">Slicing longer than this within one run is treated as transient: the run retries later and resumes polling the same job. Default 480000 (8 min).</p></div></div></div>
+                </div>
+              </div>
+            </div>
+          </div>
+<a data-name="-1209511962%2FProperties%2F703280004" anchor-label="pollIntervalMillis" id="-1209511962%2FProperties%2F703280004" data-filterable-set=":cantino/release"></a>
+          <div class="table-row table-row_content" data-filterable-current=":cantino/release" data-filterable-set=":cantino/release">
+            <div class="main-subrow keyValue ">
+              <div class=""><span class="inline-flex">
+                  <div><a href="poll-interval-millis.html"><span>poll</span><wbr></wbr><span>Interval</span><wbr></wbr><span><span>Millis</span></span></a></div>
+<span class="anchor-wrapper"><span class="anchor-icon" pointing-to="-1209511962%2FProperties%2F703280004"></span>
+                    <div class="copy-popup-wrapper "><span class="copy-popup-icon"></span><span>Link copied to clipboard</span></div>
+                  </span></span></div>
+              <div>
+                <div class="title">
+                  <div class="platform-hinted " data-platform-hinted="data-platform-hinted"><div class="content sourceset-dependent-content" data-active="" data-togglable=":cantino/release"><div class="symbol monospace"><span class="token keyword">val </span><a href="poll-interval-millis.html">pollIntervalMillis</a><span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-long/index.html">Long</a></div><div class="brief "><p class="paragraph">Delay between job status polls while SliceOSM slices. Default 2000 (2 s).</p></div></div></div>
+                </div>
+              </div>
+            </div>
+          </div>
+<a data-name="1995858809%2FProperties%2F703280004" anchor-label="readTimeoutMillis" id="1995858809%2FProperties%2F703280004" data-filterable-set=":cantino/release"></a>
+          <div class="table-row table-row_content" data-filterable-current=":cantino/release" data-filterable-set=":cantino/release">
+            <div class="main-subrow keyValue ">
+              <div class=""><span class="inline-flex">
+                  <div><a href="read-timeout-millis.html"><span>read</span><wbr></wbr><span>Timeout</span><wbr></wbr><span><span>Millis</span></span></a></div>
+<span class="anchor-wrapper"><span class="anchor-icon" pointing-to="1995858809%2FProperties%2F703280004"></span>
+                    <div class="copy-popup-wrapper "><span class="copy-popup-icon"></span><span>Link copied to clipboard</span></div>
+                  </span></span></div>
+              <div>
+                <div class="title">
+                  <div class="platform-hinted " data-platform-hinted="data-platform-hinted"><div class="content sourceset-dependent-content" data-active="" data-togglable=":cantino/release"><div class="symbol monospace"><span class="token keyword">val </span><a href="read-timeout-millis.html">readTimeoutMillis</a><span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-int/index.html">Int</a></div><div class="brief "><p class="paragraph">HTTP read timeout: the longest silence tolerated mid-response. Default 60000 (60 s).</p></div></div></div>
+                </div>
+              </div>
+            </div>
+          </div>
+<a data-name="750524036%2FProperties%2F703280004" anchor-label="sliceBaseUrl" id="750524036%2FProperties%2F703280004" data-filterable-set=":cantino/release"></a>
+          <div class="table-row table-row_content" data-filterable-current=":cantino/release" data-filterable-set=":cantino/release">
+            <div class="main-subrow keyValue ">
+              <div class=""><span class="inline-flex">
+                  <div><a href="slice-base-url.html"><span>slice</span><wbr></wbr><span>Base</span><wbr></wbr><span><span>Url</span></span></a></div>
+<span class="anchor-wrapper"><span class="anchor-icon" pointing-to="750524036%2FProperties%2F703280004"></span>
+                    <div class="copy-popup-wrapper "><span class="copy-popup-icon"></span><span>Link copied to clipboard</span></div>
+                  </span></span></div>
+              <div>
+                <div class="title">
+                  <div class="platform-hinted " data-platform-hinted="data-platform-hinted"><div class="content sourceset-dependent-content" data-active="" data-togglable=":cantino/release"><div class="symbol monospace"><span class="token keyword">val </span><a href="slice-base-url.html">sliceBaseUrl</a><span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-string/index.html">String</a></div><div class="brief "><p class="paragraph">SliceOSM service root (http or https, ending in <code class="lang-kotlin">/</code>). Default <a href="-companion/-d-e-f-a-u-l-t_-s-l-i-c-e_-b-a-s-e_-u-r-l.html">DEFAULT_SLICE_BASE_URL</a>, <code class="lang-kotlin">https://slice.openstreetmap.us/</code>.</p></div></div></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+    <div class="footer">
+        <div class="footer--container">
+            <a href="#content" id="go-to-top-link" class="footer--button footer--button_go-to-top"></a>
+            <div class="footer--content">
+                <div>
+                    <span>Generated by </span>
+                    <a class="footer--link footer--link_external" href="https://github.com/Kotlin/dokka">
+                        Dokka
+                    </a>
+                    <div>Cantino 0.2.0. Map data © OpenStreetMap contributors (ODbL).</div>
+                </div>
+            </div>
+        </div>
+    </div>
+        </div>
+    </div>
+</div>
+</body>
+</html>

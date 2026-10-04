@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Opening hours - Cantino guide</title>
+<style>
+  :root { color-scheme: light dark; --fg: #1d1d1f; --muted: #5f6368; --bg: #fbfaf7; --code: #efede8; --link: #0b57d0; --line: #d9d6cf; }
+  @media (prefers-color-scheme: dark) { :root { --fg: #e8e6e3; --muted: #a8a49c; --bg: #161616; --code: #262624; --link: #8ab4f8; --line: #3a3a37; } }
+  body { margin: 0; background: var(--bg); color: var(--fg); font: 16px/1.55 system-ui, sans-serif; }
+  nav { max-width: 48rem; margin: 0 auto; padding: 1rem 16px 0; font-size: .9rem; color: var(--muted); }
+  main { max-width: 48rem; margin: 0 auto; padding: 1rem 16px 3rem; }
+  a { color: var(--link); }
+  img { max-width: 100%; height: auto; }
+  pre { background: var(--code); padding: .8rem 1rem; border-radius: 6px; overflow-x: auto; font-size: .88rem; }
+  code { background: var(--code); padding: .05em .3em; border-radius: 4px; font-size: .92em; }
+  pre code { background: none; padding: 0; }
+  pre.mermaid { background: none; text-align: center; }
+  table { border-collapse: collapse; display: block; overflow-x: auto; }
+  th, td { border: 1px solid var(--line); padding: .35rem .6rem; vertical-align: top; text-align: left; }
+  blockquote { margin-left: 0; padding-left: 1rem; border-left: 3px solid var(--line); color: var(--muted); }
+</style>
+</head>
+<body>
+<nav><a href="../">Cantino</a> / <a href="index.html">Guide</a> / <a href="../api/">API reference</a></nav>
+<main>
+<h1 id="opening-hours">Opening hours</h1>
+<p>Cantino hands you the <code>opening_hours</code> tag as the raw
+string it has in OpenStreetMap. It does not parse or evaluate it: what
+"open now" means is your app's business (opening-hours interpretation is
+out of the core's scope). This page says how to pair Cantino with an
+evaluator.</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode kotlin"><code class="sourceCode kotlin"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="kw">val</span> <span class="va">cafes</span> <span class="op">=</span> store<span class="op">.</span>query<span class="op">(</span>Query<span class="op">(</span>tags <span class="op">=</span> listOf<span class="op">(</span>TagFilter<span class="op">.</span>Equals<span class="op">(</span><span class="st">&quot;amenity&quot;</span><span class="op">,</span> <span class="st">&quot;cafe&quot;</span><span class="op">)),</span> bbox <span class="op">=</span> bbox<span class="op">))</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a>cafes<span class="op">.</span>forEach <span class="op">{</span> obj <span class="op">-&gt;</span></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a>    <span class="kw">val</span> <span class="va">raw</span><span class="op">:</span> <span class="kw">String</span><span class="op">?</span> <span class="op">=</span> obj<span class="op">.</span>tags<span class="op">[</span><span class="st">&quot;opening_hours&quot;</span><span class="op">]</span>   <span class="co">// null = no tag, not &quot;closed&quot;</span></span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<h2 id="rules-that-hold-whatever-library-you-use">Rules that hold
+whatever library you use</h2>
+<ul>
+<li><strong>Unknown stays unknown.</strong> A missing tag, a string the
+evaluator cannot parse, and a string whose answer depends on something
+you do not know (public holidays of an unknown country, a comment, a
+date range) are all "unknown", never "closed". Show the raw string next
+to an unknown state.</li>
+<li><strong>Time zone: use the place's, not the device's.</strong>
+<code>opening_hours</code> is local wall-clock time at the place.
+Evaluating it in the device's zone is wrong when the user is elsewhere
+(travelling, or browsing an area they plan to visit). Cantino stores no
+time zone for an area in 0.x. Derive it yourself, for example from the
+area's centre with a time zone lookup at download time, keep it with
+your own records, and evaluate <code>Instant.now()</code> in that
+zone.</li>
+<li><strong>Public holidays (<code>PH</code>) and school holidays
+(<code>SH</code>)</strong> need a holiday calendar for the region.
+Without one, a rule that mentions <code>PH</code> is unknown on days it
+could apply.</li>
+<li><strong>Sunrise and sunset</strong> keywords need the place's
+coordinates (<code>OsmStore.representativePoint</code>).</li>
+<li>Parse once per object and cache; do not reparse hundreds of strings
+per frame.</li>
+</ul>
+<h2 id="evaluator-libraries">Evaluator libraries</h2>
+<p>Survey as of 2026-10-03 from each project's README. Cantino endorses
+none of them; check licence, activity and API for what you need.</p>
+<table>
+<thead>
+<tr>
+<th>Library</th>
+<th>Language</th>
+<th>Licence</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><a
+href="https://github.com/westnordost/osm-opening-hours">osm-opening-hours</a>
+(<code>de.westnordost:osm-opening-hours</code>)</td>
+<td>Kotlin multiplatform, no dependencies</td>
+<td>MIT</td>
+<td>Parses to a typed data model and back; lenient mode; used in
+StreetComplete. Its README describes parsing and the data model; confirm
+its API covers "open at time T" before choosing it.</td>
+</tr>
+<tr>
+<td><a
+href="https://github.com/simonpoole/OpeningHoursParser">OpeningHoursParser</a>
+(<code>ch.poole:OpeningHoursParser</code>)</td>
+<td>Java</td>
+<td>MIT</td>
+<td>Parser for the OSM specification, strict and non-strict modes; used
+in Vespucci and other Android apps. Check its API for evaluation and
+holiday support.</td>
+</tr>
+<tr>
+<td><a
+href="https://github.com/opening-hours/opening_hours.js">opening_hours.js</a></td>
+<td>JavaScript</td>
+<td>LGPL-3.0 (from 3.4)</td>
+<td>Most complete (variable times, public and school holidays for many
+countries); distinguishes open, closed and unknown. JavaScript only, so
+it fits a WebView or embedded-JS setup, not plain Kotlin.</td>
+</tr>
+</tbody>
+</table>
+<p>The OSM wiki's <a
+href="https://wiki.openstreetmap.org/wiki/Key:opening_hours">Key:opening_hours</a>
+and its <a
+href="https://wiki.openstreetmap.org/wiki/Key:opening_hours/specification">specification</a>
+are the reference for the syntax.</p>
+<h2 id="the-café-apps-evaluator-an-example-not-a-recommendation">The
+café app's evaluator: an example, not a recommendation</h2>
+<p><a
+href="https://github.com/mvexel/cantino/blob/main/android/cafe-app/src/main/java/lol/osm/cantino/cafe/OpeningHours.kt"><code>OpeningHours.kt</code></a>
+in the café app evaluates a strict subset (weekday ranges,
+<code>24/7</code>, <code>off</code>, past-midnight ranges) with 14 JVM
+tests and returns Open, Closed or Unknown with a reason. On the Salt
+Lake City test area, 104 of 106 present values evaluate. It exists to
+demonstrate the rules above. It uses the device's time zone, which is
+wrong for a place outside the user's zone (<a href="cafe-app.html">café
+walkthrough</a>). For a real app, use a maintained library and a
+per-area time zone.</p>
+</main>
+</body>
+</html>

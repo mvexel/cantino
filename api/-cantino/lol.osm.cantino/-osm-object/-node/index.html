@@ -1,0 +1,309 @@
+<!DOCTYPE html>
+<html class="no-js" lang="en">
+<head>
+    <meta name="viewport" content="width=device-width, initial-scale=1" charset="UTF-8">
+    <title>Node</title>
+    <link href="../../../../images/logo-icon.svg" rel="icon" type="image/svg">
+        <script>var pathToRoot = "../../../../";</script>
+    <script>document.documentElement.classList.replace("no-js", "js");</script>
+    <script>const storage = localStorage.getItem("dokka-dark-mode")
+      if (storage == null) {
+        const osDarkSchemePreferred = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches
+        if (osDarkSchemePreferred === true) {
+          document.getElementsByTagName("html")[0].classList.add("theme-dark")
+        }
+      } else {
+        const savedDarkMode = JSON.parse(storage)
+        if (savedDarkMode === true) {
+          document.getElementsByTagName("html")[0].classList.add("theme-dark")
+        }
+      }
+    </script>
+<script type="text/javascript" src="../../../../scripts/sourceset_dependencies.js" async="async"></script>
+<link href="../../../../styles/style.css" rel="Stylesheet">
+<link href="../../../../styles/main.css" rel="Stylesheet">
+<link href="../../../../styles/prism.css" rel="Stylesheet">
+<link href="../../../../styles/logo-styles.css" rel="Stylesheet">
+<link href="../../../../ui-kit/ui-kit.min.css" rel="Stylesheet">
+<script type="text/javascript" src="../../../../scripts/safe-local-storage_blocking.js"></script>
+<script type="text/javascript" src="../../../../scripts/navigation-loader.js" async="async"></script>
+<script type="text/javascript" src="../../../../scripts/platform-content-handler.js" async="async"></script>
+<script type="text/javascript" src="../../../../scripts/main.js" defer="defer"></script>
+<script type="text/javascript" src="../../../../scripts/prism.js" async="async"></script>
+<script type="text/javascript" src="../../../../ui-kit/ui-kit.min.js" defer="defer"></script>
+</head>
+<body>
+<div class="root">
+    <header class="navigation theme-dark" id="navigation-wrapper" role="banner">
+            <a class="library-name--link" href="../../../../index.html" tabindex="1">
+                    Cantino
+            </a>
+        <button class="navigation-controls--btn navigation-controls--btn_toc ui-kit_mobile-only" id="toc-toggle"
+                type="button">Toggle table of contents
+        </button>
+        <div class="navigation-controls--break ui-kit_mobile-only"></div>
+        <div class="library-version" id="library-version">
+0.2.0        </div>
+        <div class="navigation-controls">
+        <ul class="filter-section filter-section_loading" id="filter-section" aria-label="Target filter">
+                <button class="platform-tag platform-selector jvm-like" data-active="" aria-pressed="true"
+                        data-filter=":cantino/release">release</button>
+            <div class="dropdown filter-section--dropdown" data-role="dropdown" id="filter-section-dropdown">
+                <button class="button button_dropdown filter-section--dropdown-toggle" role="combobox"
+                        data-role="dropdown-toggle"
+                        aria-controls="platform-tags-listbox"
+                        aria-haspopup="listbox"
+                        aria-expanded="false"
+                        aria-label="Toggle source sets"
+                ></button>
+                <ul role="listbox" id="platform-tags-listbox" class="dropdown--list" data-role="dropdown-listbox" aria-label="Target filter">
+                    <div class="dropdown--header"><span>Target filter</span>
+                        <button class="button" data-role="dropdown-toggle" aria-label="Close target filter">
+                            <i class="ui-kit-icon ui-kit-icon_cross"></i>
+                        </button>
+                    </div>
+                        <li role="option" class="dropdown--option platform-selector-option jvm-like" tabindex="0">
+                            <label class="checkbox">
+                                <input type="checkbox" class="checkbox--input" id=":cantino/release"
+                                       data-filter=":cantino/release"/>
+                                <span class="checkbox--icon"></span>
+                                release
+                            </label>
+                        </li>
+                </ul>
+                <div class="dropdown--overlay"></div>
+            </div>
+        </ul>
+            <button class="navigation-controls--btn navigation-controls--btn_theme" id="theme-toggle-button"
+                    type="button">Switch theme
+            </button>
+            <div class="navigation-controls--btn navigation-controls--btn_search" id="searchBar" role="button">Search in
+                API
+            </div>
+        </div>
+    </header>
+    <div id="container">
+        <nav id="leftColumn" class="sidebar" data-item-type="SECTION" data-item-config='{"defaultSize": 280, "minSize": 200, "maxSize": 400}'>
+            <a class="toc--skip-link" href="#main">Skip to content</a>
+            <div class="dropdown theme-dark_mobile" data-role="dropdown" id="toc-dropdown">
+                <ul role="listbox" id="toc-listbox" class="dropdown--list dropdown--list_toc-list"
+                    data-role="dropdown-listbox" aria-label="Table of contents">
+                    <div class="dropdown--header">
+                            <span>
+                                    Cantino
+                            </span>
+                        <button class="button" data-role="dropdown-toggle" aria-label="Close table of contents">
+                            <i class="ui-kit-icon ui-kit-icon_cross"></i>
+                        </button>
+                    </div>
+                    <div class="sidebar--inner" id="sideMenu"></div>
+                </ul>
+                <div class="dropdown--overlay"></div>
+            </div>
+        </nav>
+        <div id="resizer" class="resizer" data-item-type="BAR"></div>
+        <div id="main" data-item-type="SECTION" role="main">
+<div class="main-content" data-page-type="classlike" id="content" pageIds="Cantino::lol.osm.cantino/OsmObject.Node///PointingToDeclaration//703280004">
+  <div class="breadcrumbs"><a href="../../../../index.html">Cantino</a><span class="delimiter">/</span><a href="../../index.html">lol.osm.cantino</a><span class="delimiter">/</span><a href="../index.html">OsmObject</a><span class="delimiter">/</span><span class="current">Node</span></div>
+  <div class="cover ">
+    <h1 class="cover"><span><span>Node</span></span></h1>
+    <div class="platform-hinted " data-platform-hinted="data-platform-hinted"><div class="content sourceset-dependent-content" data-active="" data-togglable=":cantino/release"><div class="symbol monospace"><span class="token keyword">class </span><a href="index.html">Node</a> : <a href="../index.html">OsmObject</a><span class="source-link-wrapper"><span class="source-link" data-element-type="source-link">(<a href="https://github.com/mvexel/cantino/blob/v0.2.0/android/cantino/src/main/java/lol/osm/cantino/Models.kt#L124">source</a>)</span></span></div><p class="paragraph">A node. Coordinates are integers in 1e-7 degrees (<span data-unresolved-link="lol.osm.cantino/OsmObject.Node//#lol.osm.cantino.OsmId#kotlin.Int#kotlin.Int#kotlin.Int#kotlin.collections.Map[kotlin.String,kotlin.String]#lol.osm.cantino.ObjectMetadata?/PointingToCallableParameters(1)/">latE7</span>, <span data-unresolved-link="lol.osm.cantino/OsmObject.Node//#lol.osm.cantino.OsmId#kotlin.Int#kotlin.Int#kotlin.Int#kotlin.collections.Map[kotlin.String,kotlin.String]#lol.osm.cantino.ObjectMetadata?/PointingToCallableParameters(2)/">lonE7</span>), the storage format, so they compare and round-trip without float drift; <a href="lat.html">lat</a> and <a href="lon.html">lon</a> are the same values in degrees.</p><p class="paragraph"><span data-unresolved-link="lol.osm.cantino/OsmObject.Node//#lol.osm.cantino.OsmId#kotlin.Int#kotlin.Int#kotlin.Int#kotlin.collections.Map[kotlin.String,kotlin.String]#lol.osm.cantino.ObjectMetadata?/PointingToCallableParameters(3)/">locationVersion</span> is the object version at which the node got its current coordinate; it is kept even when <span data-unresolved-link="lol.osm.cantino/OsmObject.Node//#lol.osm.cantino.OsmId#kotlin.Int#kotlin.Int#kotlin.Int#kotlin.collections.Map[kotlin.String,kotlin.String]#lol.osm.cantino.ObjectMetadata?/PointingToCallableParameters(5)/">metadata</span> is not.</p><p class="paragraph">Untagged nodes (the vertices of ways) are stored and returned by <a href="../../-osm-store/get.html">OsmStore.get</a>, but they are not spatially indexed: a bbox <a href="../../-query/index.html">Query</a> never returns them. Reach them through their ways.</p></div></div>
+  </div>
+  <div class="tabbedcontent">
+    <div class="tabs-section" tabs-section="tabs-section"><button class="section-tab" data-active="" data-togglable="CONSTRUCTOR,TYPE,PROPERTY,FUNCTION">Members</button></div>
+    <div class="tabs-section-body">
+      <div data-togglable="PROPERTY">
+        <h2 class="tableheader">Properties</h2>
+        <div class="table"><a data-name="1859176558%2FProperties%2F703280004" anchor-label="id" id="1859176558%2FProperties%2F703280004" data-filterable-set=":cantino/release"></a>
+          <div class="table-row table-row_content" data-filterable-current=":cantino/release" data-filterable-set=":cantino/release">
+            <div class="main-subrow keyValue ">
+              <div class=""><span class="inline-flex">
+                  <div><a href="id.html"><span><span>id</span></span></a></div>
+<span class="anchor-wrapper"><span class="anchor-icon" pointing-to="1859176558%2FProperties%2F703280004"></span>
+                    <div class="copy-popup-wrapper "><span class="copy-popup-icon"></span><span>Link copied to clipboard</span></div>
+                  </span></span></div>
+              <div>
+                <div class="title">
+                  <div class="platform-hinted " data-platform-hinted="data-platform-hinted"><div class="content sourceset-dependent-content" data-active="" data-togglable=":cantino/release"><div class="symbol monospace"><span class="token keyword">open </span><span class="token keyword">override </span><span class="token keyword">val </span><a href="id.html">id</a><span class="token operator">: </span><a href="../../-osm-id/index.html">OsmId</a></div><div class="brief "><p class="paragraph">Kind and ID; <a href="../../-osm-id/kind.html">OsmId.kind</a> matches the subtype.</p></div></div></div>
+                </div>
+              </div>
+            </div>
+          </div>
+<a data-name="-251878638%2FProperties%2F703280004" anchor-label="lat" id="-251878638%2FProperties%2F703280004" data-filterable-set=":cantino/release"></a>
+          <div class="table-row table-row_content" data-filterable-current=":cantino/release" data-filterable-set=":cantino/release">
+            <div class="main-subrow keyValue ">
+              <div class=""><span class="inline-flex">
+                  <div><a href="lat.html"><span><span>lat</span></span></a></div>
+<span class="anchor-wrapper"><span class="anchor-icon" pointing-to="-251878638%2FProperties%2F703280004"></span>
+                    <div class="copy-popup-wrapper "><span class="copy-popup-icon"></span><span>Link copied to clipboard</span></div>
+                  </span></span></div>
+              <div>
+                <div class="title">
+                  <div class="platform-hinted " data-platform-hinted="data-platform-hinted"><div class="content sourceset-dependent-content" data-active="" data-togglable=":cantino/release"><div class="symbol monospace"><span class="token keyword">val </span><a href="lat.html">lat</a><span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-double/index.html">Double</a></div><div class="brief "><p class="paragraph">Latitude in degrees (WGS84).</p></div></div></div>
+                </div>
+              </div>
+            </div>
+          </div>
+<a data-name="-1807449728%2FProperties%2F703280004" anchor-label="latE7" id="-1807449728%2FProperties%2F703280004" data-filterable-set=":cantino/release"></a>
+          <div class="table-row table-row_content" data-filterable-current=":cantino/release" data-filterable-set=":cantino/release">
+            <div class="main-subrow keyValue ">
+              <div class=""><span class="inline-flex">
+                  <div><a href="lat-e7.html"><span>lat</span><wbr></wbr><span><span>E7</span></span></a></div>
+<span class="anchor-wrapper"><span class="anchor-icon" pointing-to="-1807449728%2FProperties%2F703280004"></span>
+                    <div class="copy-popup-wrapper "><span class="copy-popup-icon"></span><span>Link copied to clipboard</span></div>
+                  </span></span></div>
+              <div>
+                <div class="title">
+                  <div class="platform-hinted " data-platform-hinted="data-platform-hinted"><div class="content sourceset-dependent-content" data-active="" data-togglable=":cantino/release"><div class="symbol monospace"><span class="token keyword">val </span><a href="lat-e7.html">latE7</a><span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-int/index.html">Int</a></div><div class="brief "><p class="paragraph">Latitude in 1e-7 degrees.</p></div></div></div>
+                </div>
+              </div>
+            </div>
+          </div>
+<a data-name="-1069737010%2FProperties%2F703280004" anchor-label="locationVersion" id="-1069737010%2FProperties%2F703280004" data-filterable-set=":cantino/release"></a>
+          <div class="table-row table-row_content" data-filterable-current=":cantino/release" data-filterable-set=":cantino/release">
+            <div class="main-subrow keyValue ">
+              <div class=""><span class="inline-flex">
+                  <div><a href="location-version.html"><span>location</span><wbr></wbr><span><span>Version</span></span></a></div>
+<span class="anchor-wrapper"><span class="anchor-icon" pointing-to="-1069737010%2FProperties%2F703280004"></span>
+                    <div class="copy-popup-wrapper "><span class="copy-popup-icon"></span><span>Link copied to clipboard</span></div>
+                  </span></span></div>
+              <div>
+                <div class="title">
+                  <div class="platform-hinted " data-platform-hinted="data-platform-hinted"><div class="content sourceset-dependent-content" data-active="" data-togglable=":cantino/release"><div class="symbol monospace"><span class="token keyword">val </span><a href="location-version.html">locationVersion</a><span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-int/index.html">Int</a></div><div class="brief "><p class="paragraph">Object version at which the node got its current coordinate.</p></div></div></div>
+                </div>
+              </div>
+            </div>
+          </div>
+<a data-name="139696870%2FProperties%2F703280004" anchor-label="lon" id="139696870%2FProperties%2F703280004" data-filterable-set=":cantino/release"></a>
+          <div class="table-row table-row_content" data-filterable-current=":cantino/release" data-filterable-set=":cantino/release">
+            <div class="main-subrow keyValue ">
+              <div class=""><span class="inline-flex">
+                  <div><a href="lon.html"><span><span>lon</span></span></a></div>
+<span class="anchor-wrapper"><span class="anchor-icon" pointing-to="139696870%2FProperties%2F703280004"></span>
+                    <div class="copy-popup-wrapper "><span class="copy-popup-icon"></span><span>Link copied to clipboard</span></div>
+                  </span></span></div>
+              <div>
+                <div class="title">
+                  <div class="platform-hinted " data-platform-hinted="data-platform-hinted"><div class="content sourceset-dependent-content" data-active="" data-togglable=":cantino/release"><div class="symbol monospace"><span class="token keyword">val </span><a href="lon.html">lon</a><span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-double/index.html">Double</a></div><div class="brief "><p class="paragraph">Longitude in degrees (WGS84).</p></div></div></div>
+                </div>
+              </div>
+            </div>
+          </div>
+<a data-name="834458708%2FProperties%2F703280004" anchor-label="lonE7" id="834458708%2FProperties%2F703280004" data-filterable-set=":cantino/release"></a>
+          <div class="table-row table-row_content" data-filterable-current=":cantino/release" data-filterable-set=":cantino/release">
+            <div class="main-subrow keyValue ">
+              <div class=""><span class="inline-flex">
+                  <div><a href="lon-e7.html"><span>lon</span><wbr></wbr><span><span>E7</span></span></a></div>
+<span class="anchor-wrapper"><span class="anchor-icon" pointing-to="834458708%2FProperties%2F703280004"></span>
+                    <div class="copy-popup-wrapper "><span class="copy-popup-icon"></span><span>Link copied to clipboard</span></div>
+                  </span></span></div>
+              <div>
+                <div class="title">
+                  <div class="platform-hinted " data-platform-hinted="data-platform-hinted"><div class="content sourceset-dependent-content" data-active="" data-togglable=":cantino/release"><div class="symbol monospace"><span class="token keyword">val </span><a href="lon-e7.html">lonE7</a><span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-int/index.html">Int</a></div><div class="brief "><p class="paragraph">Longitude in 1e-7 degrees.</p></div></div></div>
+                </div>
+              </div>
+            </div>
+          </div>
+<a data-name="1284036570%2FProperties%2F703280004" anchor-label="metadata" id="1284036570%2FProperties%2F703280004" data-filterable-set=":cantino/release"></a>
+          <div class="table-row table-row_content" data-filterable-current=":cantino/release" data-filterable-set=":cantino/release">
+            <div class="main-subrow keyValue ">
+              <div class=""><span class="inline-flex">
+                  <div><a href="metadata.html"><span><span>metadata</span></span></a></div>
+<span class="anchor-wrapper"><span class="anchor-icon" pointing-to="1284036570%2FProperties%2F703280004"></span>
+                    <div class="copy-popup-wrapper "><span class="copy-popup-icon"></span><span>Link copied to clipboard</span></div>
+                  </span></span></div>
+              <div>
+                <div class="title">
+                  <div class="platform-hinted " data-platform-hinted="data-platform-hinted"><div class="content sourceset-dependent-content" data-active="" data-togglable=":cantino/release"><div class="symbol monospace"><span class="token keyword">open </span><span class="token keyword">override </span><span class="token keyword">val </span><a href="metadata.html">metadata</a><span class="token operator">: </span><a href="../../-object-metadata/index.html">ObjectMetadata</a><span class="token operator">?</span></div><div class="brief "><p class="paragraph">Editing metadata, or null for untagged nodes imported without <a href="../../-import-options/preserve-untagged-metadata.html">ImportOptions.preserveUntaggedMetadata</a> (they keep only <a href="location-version.html">Node.locationVersion</a>). Tagged nodes, ways and relations always have it.</p></div></div></div>
+                </div>
+              </div>
+            </div>
+          </div>
+<a data-name="-313249744%2FProperties%2F703280004" anchor-label="tags" id="-313249744%2FProperties%2F703280004" data-filterable-set=":cantino/release"></a>
+          <div class="table-row table-row_content" data-filterable-current=":cantino/release" data-filterable-set=":cantino/release">
+            <div class="main-subrow keyValue ">
+              <div class=""><span class="inline-flex">
+                  <div><a href="tags.html"><span><span>tags</span></span></a></div>
+<span class="anchor-wrapper"><span class="anchor-icon" pointing-to="-313249744%2FProperties%2F703280004"></span>
+                    <div class="copy-popup-wrapper "><span class="copy-popup-icon"></span><span>Link copied to clipboard</span></div>
+                  </span></span></div>
+              <div>
+                <div class="title">
+                  <div class="platform-hinted " data-platform-hinted="data-platform-hinted"><div class="content sourceset-dependent-content" data-active="" data-togglable=":cantino/release"><div class="symbol monospace"><span class="token keyword">open </span><span class="token keyword">override </span><span class="token keyword">val </span><a href="tags.html">tags</a><span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin.collections/-map/index.html">Map</a><span class="token operator">&lt;</span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-string/index.html">String</a><span class="token punctuation">, </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-string/index.html">String</a><span class="token operator">&gt;</span></div><div class="brief "><p class="paragraph">Raw tags, exactly as in OSM: no normalization; an empty value is distinct from a missing key.</p></div></div></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div data-togglable="FUNCTION">
+        <h2 class="tableheader">Functions</h2>
+        <div class="table"><a data-name="2022955384%2FFunctions%2F703280004" anchor-label="equals" id="2022955384%2FFunctions%2F703280004" data-filterable-set=":cantino/release"></a>
+          <div class="table-row table-row_content" data-filterable-current=":cantino/release" data-filterable-set=":cantino/release">
+            <div class="main-subrow keyValue ">
+              <div class=""><span class="inline-flex">
+                  <div><a href="equals.html"><span><span>equals</span></span></a></div>
+<span class="anchor-wrapper"><span class="anchor-icon" pointing-to="2022955384%2FFunctions%2F703280004"></span>
+                    <div class="copy-popup-wrapper "><span class="copy-popup-icon"></span><span>Link copied to clipboard</span></div>
+                  </span></span></div>
+              <div>
+                <div class="title">
+                  <div class="platform-hinted " data-platform-hinted="data-platform-hinted"><div class="content sourceset-dependent-content" data-active="" data-togglable=":cantino/release"><div class="symbol monospace"><span class="token keyword">open </span><span class="token keyword">operator override </span><span class="token keyword">fun </span><a href="equals.html"><span class="token function">equals</span></a><span class="token punctuation">(</span><span class="parameters "><span class="parameter ">other<span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-any/index.html">Any</a><span class="token operator">?</span></span></span><span class="token punctuation">)</span><span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-boolean/index.html">Boolean</a></div></div></div>
+                </div>
+              </div>
+            </div>
+          </div>
+<a data-name="-254326674%2FFunctions%2F703280004" anchor-label="hashCode" id="-254326674%2FFunctions%2F703280004" data-filterable-set=":cantino/release"></a>
+          <div class="table-row table-row_content" data-filterable-current=":cantino/release" data-filterable-set=":cantino/release">
+            <div class="main-subrow keyValue ">
+              <div class=""><span class="inline-flex">
+                  <div><a href="hash-code.html"><span>hash</span><wbr></wbr><span><span>Code</span></span></a></div>
+<span class="anchor-wrapper"><span class="anchor-icon" pointing-to="-254326674%2FFunctions%2F703280004"></span>
+                    <div class="copy-popup-wrapper "><span class="copy-popup-icon"></span><span>Link copied to clipboard</span></div>
+                  </span></span></div>
+              <div>
+                <div class="title">
+                  <div class="platform-hinted " data-platform-hinted="data-platform-hinted"><div class="content sourceset-dependent-content" data-active="" data-togglable=":cantino/release"><div class="symbol monospace"><span class="token keyword">open </span><span class="token keyword">override </span><span class="token keyword">fun </span><a href="hash-code.html"><span class="token function">hashCode</span></a><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-int/index.html">Int</a></div></div></div>
+                </div>
+              </div>
+            </div>
+          </div>
+<a data-name="-432492739%2FFunctions%2F703280004" anchor-label="toString" id="-432492739%2FFunctions%2F703280004" data-filterable-set=":cantino/release"></a>
+          <div class="table-row table-row_content" data-filterable-current=":cantino/release" data-filterable-set=":cantino/release">
+            <div class="main-subrow keyValue ">
+              <div class=""><span class="inline-flex">
+                  <div><a href="to-string.html"><span>to</span><wbr></wbr><span><span>String</span></span></a></div>
+<span class="anchor-wrapper"><span class="anchor-icon" pointing-to="-432492739%2FFunctions%2F703280004"></span>
+                    <div class="copy-popup-wrapper "><span class="copy-popup-icon"></span><span>Link copied to clipboard</span></div>
+                  </span></span></div>
+              <div>
+                <div class="title">
+                  <div class="platform-hinted " data-platform-hinted="data-platform-hinted"><div class="content sourceset-dependent-content" data-active="" data-togglable=":cantino/release"><div class="symbol monospace"><span class="token keyword">open </span><span class="token keyword">override </span><span class="token keyword">fun </span><a href="to-string.html"><span class="token function">toString</span></a><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-string/index.html">String</a></div></div></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+    <div class="footer">
+        <div class="footer--container">
+            <a href="#content" id="go-to-top-link" class="footer--button footer--button_go-to-top"></a>
+            <div class="footer--content">
+                <div>
+                    <span>Generated by </span>
+                    <a class="footer--link footer--link_external" href="https://github.com/Kotlin/dokka">
+                        Dokka
+                    </a>
+                    <div>Cantino 0.2.0. Map data © OpenStreetMap contributors (ODbL).</div>
+                </div>
+            </div>
+        </div>
+    </div>
+        </div>
+    </div>
+</div>
+</body>
+</html>

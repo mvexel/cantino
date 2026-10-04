@@ -1,0 +1,117 @@
+{
+  "formatVersion": "1.1",
+  "component": {
+    "group": "lol.osm",
+    "module": "cantino",
+    "version": "0.2.0",
+    "attributes": {
+      "org.gradle.status": "release"
+    }
+  },
+  "createdBy": {
+    "gradle": {
+      "version": "9.8.0"
+    }
+  },
+  "variants": [
+    {
+      "name": "releaseVariantReleaseApiPublication",
+      "attributes": {
+        "org.gradle.category": "library",
+        "org.gradle.dependency.bundling": "external",
+        "org.gradle.libraryelements": "aar",
+        "org.gradle.usage": "java-api"
+      },
+      "dependencies": [
+        {
+          "group": "org.jetbrains.kotlinx",
+          "module": "kotlinx-coroutines-android",
+          "version": {
+            "requires": "1.10.2"
+          }
+        },
+        {
+          "group": "org.jetbrains.kotlin",
+          "module": "kotlin-stdlib",
+          "version": {
+            "requires": "2.2.10"
+          }
+        }
+      ],
+      "files": [
+        {
+          "name": "cantino-0.2.0.aar",
+          "url": "cantino-0.2.0.aar",
+          "size": 5103639,
+          "sha512": "8e537bd812a0045546060ce50d5025566b586f6e0ef2bdc05f3e2beeb1cac138e98abbc413e9ba0991ae8ca50eeac5d88eca79a75d2214a1548870384b737954",
+          "sha256": "057b07fcbde0b0f24d9bc22b89adce97f5defdc94cf97b5dc7c9c536ba91aa77",
+          "sha1": "2dcd4675f5c30e51993518956a11ad51eb04598b",
+          "md5": "14f8764e22735616334a5cb7934a2053"
+        }
+      ]
+    },
+    {
+      "name": "releaseVariantReleaseRuntimePublication",
+      "attributes": {
+        "org.gradle.category": "library",
+        "org.gradle.dependency.bundling": "external",
+        "org.gradle.libraryelements": "aar",
+        "org.gradle.usage": "java-runtime"
+      },
+      "dependencies": [
+        {
+          "group": "androidx.work",
+          "module": "work-runtime-ktx",
+          "version": {
+            "requires": "2.12.0"
+          }
+        },
+        {
+          "group": "org.jetbrains.kotlinx",
+          "module": "kotlinx-coroutines-android",
+          "version": {
+            "requires": "1.10.2"
+          }
+        },
+        {
+          "group": "org.jetbrains.kotlin",
+          "module": "kotlin-stdlib",
+          "version": {
+            "requires": "2.2.10"
+          }
+        }
+      ],
+      "files": [
+        {
+          "name": "cantino-0.2.0.aar",
+          "url": "cantino-0.2.0.aar",
+          "size": 5103639,
+          "sha512": "8e537bd812a0045546060ce50d5025566b586f6e0ef2bdc05f3e2beeb1cac138e98abbc413e9ba0991ae8ca50eeac5d88eca79a75d2214a1548870384b737954",
+          "sha256": "057b07fcbde0b0f24d9bc22b89adce97f5defdc94cf97b5dc7c9c536ba91aa77",
+          "sha1": "2dcd4675f5c30e51993518956a11ad51eb04598b",
+          "md5": "14f8764e22735616334a5cb7934a2053"
+        }
+      ]
+    },
+    {
+      "name": "releaseVariantReleaseSourcePublication",
+      "attributes": {
+        "org.gradle.category": "documentation",
+        "org.gradle.dependency.bundling": "external",
+        "org.gradle.docstype": "sources",
+        "org.gradle.usage": "java-runtime"
+      },
+      "files": [
+        {
+          "name": "cantino-0.2.0-sources.jar",
+          "url": "cantino-0.2.0-sources.jar",
+          "size": 56425,
+          "sha512": "725d269014c0ac4dff786eae8725cb269c6c346f75ef50bf4992c2dc71245cfef17f05e0f76fb1738409f78b692367100bc3264ea258cb83fb9152b25e71a6a7",
+          "sha256": "60a40df1ad3f9d9b2fd0ef34c7840c6b981e1bafdde0e7bf0cfb05e85fbf9ddb",
+          "sha1": "cb5d1a67969a933f9db0504c75ae4f3a29f3cd45",
+          "md5": "ddedce07dac0bf9a7f129712842e1428"
+        }
+      ]
+    }
+  ]
+}

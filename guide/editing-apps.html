@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Editing apps: what Cantino gives you
+today - Cantino guide</title>
+<style>
+  :root { color-scheme: light dark; --fg: #1d1d1f; --muted: #5f6368; --bg: #fbfaf7; --code: #efede8; --link: #0b57d0; --line: #d9d6cf; }
+  @media (prefers-color-scheme: dark) { :root { --fg: #e8e6e3; --muted: #a8a49c; --bg: #161616; --code: #262624; --link: #8ab4f8; --line: #3a3a37; } }
+  body { margin: 0; background: var(--bg); color: var(--fg); font: 16px/1.55 system-ui, sans-serif; }
+  nav { max-width: 48rem; margin: 0 auto; padding: 1rem 16px 0; font-size: .9rem; color: var(--muted); }
+  main { max-width: 48rem; margin: 0 auto; padding: 1rem 16px 3rem; }
+  a { color: var(--link); }
+  img { max-width: 100%; height: auto; }
+  pre { background: var(--code); padding: .8rem 1rem; border-radius: 6px; overflow-x: auto; font-size: .88rem; }
+  code { background: var(--code); padding: .05em .3em; border-radius: 4px; font-size: .92em; }
+  pre code { background: none; padding: 0; }
+  pre.mermaid { background: none; text-align: center; }
+  table { border-collapse: collapse; display: block; overflow-x: auto; }
+  th, td { border: 1px solid var(--line); padding: .35rem .6rem; vertical-align: top; text-align: left; }
+  blockquote { margin-left: 0; padding-left: 1rem; border-left: 3px solid var(--line); color: var(--muted); }
+</style>
+</head>
+<body>
+<nav><a href="../">Cantino</a> / <a href="index.html">Guide</a> / <a href="../api/">API reference</a></nav>
+<main>
+<h1 id="editing-apps-what-cantino-gives-you-today">Editing apps: what
+Cantino gives you today</h1>
+<p>Cantino 0.x is read-only: there is no edit layer, no upload and no
+sync, and those are out of scope until the project's scope changes. If
+you are building an editor, here is what you can rely on and what you
+must build.</p>
+<h2 id="what-you-get">What you get</h2>
+<ul>
+<li><strong>Raw tags</strong>, exactly as in OpenStreetMap, plus ordered
+way node lists and relation members with roles.</li>
+<li><strong>Per-object metadata</strong> (<code>ObjectMetadata</code>):
+<code>version</code>, <code>timestampSeconds</code>,
+<code>changeset</code>, <code>uid</code>, <code>user</code> of the
+object version in the extract. Always present for tagged nodes, ways and
+relations. Untagged nodes have none unless you import with
+<code>ImportOptions(preserveUntaggedMetadata = true)</code>; they always
+keep <code>Node.locationVersion</code>. A zero field may mean "unknown"
+(<a href="querying.html#metadata">Querying: metadata</a>).</li>
+<li><strong>A snapshot timestamp</strong>:
+<code>AreaMetadata.snapshotTimestamp</code>, the replication time of the
+SliceOSM extract (<a href="sliceosm.html#data-lag">SliceOSM: data
+lag</a>).</li>
+<li><strong>Immutable snapshots.</strong> Queries see one consistent
+state; the data does not change under you until you refresh.</li>
+<li><strong>Helpers for field apps</strong>:
+<code>representativePoint</code>, <code>wayCoordinates</code>, batch
+<code>get</code>, <code>TagFilter.NotExists</code> ("amenities without
+<code>opening_hours</code>").</li>
+</ul>
+<h2 id="what-you-do-not-get">What you do not get</h2>
+<ul>
+<li>No local pending-edits layer, no osmChange generation, no OAuth, no
+upload, no conflict handling. Build these against the <a
+href="https://wiki.openstreetmap.org/wiki/API_v0.6">OSM API</a>.</li>
+<li>No incremental updates: a refresh re-downloads the whole area.</li>
+<li>No guarantee that an object is current. It is current as of the
+snapshot.</li>
+</ul>
+<h2 id="detecting-stale-data">Detecting stale data</h2>
+<p>Check an object against the server, not the snapshot, before you
+upload a change to it:</p>
+<ol type="1">
+<li>Keep <code>obj.metadata?.version</code> from the snapshot: the
+version your user edited on top of.</li>
+<li>Fetch the current object (<code>GET /api/0.6/node/&lt;id&gt;</code>,
+or <code>way</code>, <code>relation</code>) and compare
+<code>version</code>. If it is higher, someone edited the object since
+the snapshot: show a conflict instead of uploading. The OSM API enforces
+the same thing, since an upload must name the version it modifies.</li>
+<li>Use <code>snapshotTimestamp</code> to decide when to warn or force a
+refresh before editing: an area whose snapshot is older than your
+threshold is more likely to conflict. The snapshot alone cannot tell you
+that a given object has changed; only the server can.</li>
+</ol>
+<p>A way vertex (untagged node) has no metadata in the default import,
+so moving one cannot be version-checked from the snapshot unless you set
+<code>preserveUntaggedMetadata</code>; budget the larger file.</p>
+<h2 id="where-this-is-going">Where this is going</h2>
+<p>The design on file (a research note, not a promise) keeps the
+downloaded base file immutable and stores user edits in a separate
+overlay database attached at open, each edit recording the base version
+it derived from; queries return edits over the base. See <a
+href="https://github.com/mvexel/cantino/blob/main/docs/research/2026-10-03-prebaked-dataset-format.md"><code>docs/research/2026-10-03-prebaked-dataset-format.md</code></a>.
+Building it needs a scope change first; see the <a
+href="roadmap.html">roadmap</a>.</p>
+</main>
+</body>
+</html>

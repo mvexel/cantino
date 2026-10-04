@@ -1,0 +1,268 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Café app walkthrough - Cantino guide</title>
+<style>
+  :root { color-scheme: light dark; --fg: #1d1d1f; --muted: #5f6368; --bg: #fbfaf7; --code: #efede8; --link: #0b57d0; --line: #d9d6cf; }
+  @media (prefers-color-scheme: dark) { :root { --fg: #e8e6e3; --muted: #a8a49c; --bg: #161616; --code: #262624; --link: #8ab4f8; --line: #3a3a37; } }
+  body { margin: 0; background: var(--bg); color: var(--fg); font: 16px/1.55 system-ui, sans-serif; }
+  nav { max-width: 48rem; margin: 0 auto; padding: 1rem 16px 0; font-size: .9rem; color: var(--muted); }
+  main { max-width: 48rem; margin: 0 auto; padding: 1rem 16px 3rem; }
+  a { color: var(--link); }
+  img { max-width: 100%; height: auto; }
+  pre { background: var(--code); padding: .8rem 1rem; border-radius: 6px; overflow-x: auto; font-size: .88rem; }
+  code { background: var(--code); padding: .05em .3em; border-radius: 4px; font-size: .92em; }
+  pre code { background: none; padding: 0; }
+  pre.mermaid { background: none; text-align: center; }
+  table { border-collapse: collapse; display: block; overflow-x: auto; }
+  th, td { border: 1px solid var(--line); padding: .35rem .6rem; vertical-align: top; text-align: left; }
+  blockquote { margin-left: 0; padding-left: 1rem; border-left: 3px solid var(--line); color: var(--muted); }
+</style>
+</head>
+<body>
+<nav><a href="../">Cantino</a> / <a href="index.html">Guide</a> / <a href="../api/">API reference</a></nav>
+<main>
+<h1 id="café-app-walkthrough">Café app walkthrough</h1>
+<p><a
+href="https://github.com/mvexel/cantino/blob/main/android/cafe-app"><code>android/cafe-app</code></a>
+is the reference app for Cantino 0.2.0: find cafés near you, with no
+network after the first download. Plain Android views, MapLibre Native
+13.6.1, no Play Services. It passed this acceptance scenario on a Pixel
+8 (2026-10-03, downtown Salt Lake City):</p>
+<table>
+<thead>
+<tr>
+<th>Download</th>
+<th>Map, airplane mode</th>
+<th>Filters</th>
+<th>Object detail</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><img src="../screenshots/2026-10-03-cafe-progress.png"
+alt="progress" /></td>
+<td><img src="../screenshots/2026-10-03-cafe-map-airplane.png"
+alt="map" /></td>
+<td><img src="../screenshots/2026-10-03-cafe-list-outdoor-yes.png"
+alt="filter" /></td>
+<td><img src="../screenshots/2026-10-03-cafe-detail-way.png"
+alt="way" /></td>
+</tr>
+</tbody>
+</table>
+<p>Paths below are relative to
+<code>android/cafe-app/src/main/java/lol/osm/cantino/cafe/</code>.</p>
+<h2 id="1-download-the-area">1. Download the area</h2>
+<table>
+<thead>
+<tr>
+<th>What</th>
+<th>Code</th>
+<th>Cantino API</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Location permission, one fix (<code>LocationManager</code>, 30 s
+timeout); fallback: type "lat,lon" or pick a preset</td>
+<td><code>MainActivity.startFirstRun</code>, <code>Location.kt</code>
+(<code>DeviceLocation.current</code>)</td>
+<td></td>
+</tr>
+<tr>
+<td>10×10 km box around the fix</td>
+<td><code>Cafes.kt</code>: <code>Geo.squareAround</code>,
+<code>Geo.AREA_SIZE_KM</code> (a default, not a cap)</td>
+<td><code>Bbox</code></td>
+</tr>
+<tr>
+<td>Offer dialog with the privacy line (the bbox goes to SliceOSM and
+the tile host)</td>
+<td><code>MainActivity.offerDownload</code></td>
+<td></td>
+</tr>
+<tr>
+<td>Find a basemap build (demo) and start the download</td>
+<td><code>MainActivity.startDownload</code></td>
+<td><code>ProtomapsBuilds.latestUrl()</code>,
+<code>AreaManager.download(…, BasemapSource.Extract(planet, maxZoom = 15))</code></td>
+</tr>
+<tr>
+<td>Progress screen: phase, bytes (with total when known), per-phase
+durations</td>
+<td><code>MainActivity.ProgressScreen.update</code></td>
+<td><code>AreaManager.state(areaId)</code>, every <code>AreaState</code>
+subtype</td>
+</tr>
+<tr>
+<td>Failure: Retry, or back to the map (the previous area is kept)</td>
+<td><code>MainActivity.showFailure</code></td>
+<td><code>AreaState.Failed.retryable</code>,
+<code>publishedArea</code></td>
+</tr>
+<tr>
+<td>Refresh: same bbox, full replace</td>
+<td><code>MainActivity.confirmRefresh</code></td>
+<td><code>AreaMetadata.bbox</code>, <code>download</code> again</td>
+</tr>
+</tbody>
+</table>
+<p>The state is collected for the activity's whole life
+(<code>MainActivity.onCreate</code>), so a relaunch during a download
+shows its progress, and the first emitted state decides the screen:
+running → progress, published → map, otherwise → first run.</p>
+<p>Measured: Ready in 27.4 s, 75.6 MB database, 6.5 MB basemap (<a
+href="performance.html#area-download-1010-km">Performance</a>).</p>
+<h2 id="2-restart-in-airplane-mode">2. Restart in airplane mode</h2>
+<p>Nothing to do in code: on launch, <code>publishedArea(AREA_ID)</code>
+is not null, so <code>MainActivity</code> goes straight to
+<code>showMap()</code>. Every byte the map and queries need is in
+<code>filesDir/cantino-areas/</code>.</p>
+<h2 id="3-show-the-basemap">3. Show the basemap</h2>
+<table>
+<thead>
+<tr>
+<th>What</th>
+<th>Code</th>
+<th>Cantino API</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Offline Protomaps style (copied from the sample app's
+<code>build-assets</code> by the <code>copyBasemapStyleAssets</code>
+Gradle task) with the area's PMTiles URL substituted</td>
+<td><code>MapScreen.styleJson</code></td>
+<td><code>AreaInfo.pmtilesUrl</code></td>
+</tr>
+<tr>
+<td>Keep the camera over the area</td>
+<td><code>MapScreen.setupMap</code></td>
+<td><code>AreaMetadata.bbox</code></td>
+</tr>
+</tbody>
+</table>
+<h2 id="4-find-nearby-cafés">4. Find nearby cafés</h2>
+<table>
+<thead>
+<tr>
+<th>What</th>
+<th>Code</th>
+<th>Cantino API</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>One store, one thread, reopened after a refresh</td>
+<td><code>StoreWorker.withStore</code></td>
+<td><code>OsmStore.open</code>, <code>AreaMetadata.workId</code></td>
+</tr>
+<tr>
+<td>All <code>amenity=cafe</code> in the area, paged by 500</td>
+<td><code>CafeLoader.load</code></td>
+<td><code>Query(tags, bbox, after, limit)</code>,
+<code>TagFilter.Equals</code></td>
+</tr>
+<tr>
+<td>A map point for ways and relations (an anchor, not exact
+geometry)</td>
+<td><code>CafeLoader.representativePoint</code></td>
+<td><code>store.representativePoint</code></td>
+</tr>
+<tr>
+<td>Dots on the map (GeoJSON source), nearby list sorted by
+distance</td>
+<td><code>MapScreen.applyFilters</code>,
+<code>MapScreen.geoJson</code></td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<p>Result on the Salt Lake City area: 136 cafés (120 nodes, 16
+ways).</p>
+<h2 id="5-filter-by-outdoor-seating-and-opening-hours">5. Filter by
+outdoor seating and opening hours</h2>
+<p>Interpretation lives in the app, never in Cantino:</p>
+<table>
+<thead>
+<tr>
+<th>Filter</th>
+<th>Code</th>
+<th>Rule</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Outdoor seating Yes / No / Unknown</td>
+<td><code>Cafes.kt</code>: <code>OutdoorSeating.of</code></td>
+<td><code>yes</code>, <code>no</code>, seating kinds
+(<code>sidewalk</code>, <code>garden</code>, …) = yes; missing or
+anything else = Unknown (raw value kept)</td>
+</tr>
+<tr>
+<td>Open now / Closed / Unknown</td>
+<td><code>OpeningHours.kt</code> (14 JVM tests in
+<code>src/test</code>)</td>
+<td>A strict subset of the <code>opening_hours</code> syntax; anything
+else is Unknown with a reason. Missing tag = Unknown</td>
+</tr>
+</tbody>
+</table>
+<p>Each choice shows its count, and Unknown is never folded into Open or
+Closed: on this area 104 of 106 present <code>opening_hours</code>
+values evaluate; 30 cafés have none.</p>
+<h2 id="6-inspect-tags-and-underlying-objects">6. Inspect tags and
+underlying objects</h2>
+<table>
+<thead>
+<tr>
+<th>What</th>
+<th>Code</th>
+<th>Cantino API</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Any object by kind and ID</td>
+<td><code>DetailActivity</code></td>
+<td><code>store.get(OsmId)</code></td>
+</tr>
+<tr>
+<td>All raw tags</td>
+<td><code>DetailActivity.render</code></td>
+<td><code>OsmObject.tags</code></td>
+</tr>
+<tr>
+<td>Metadata, or "not stored (location version N)" for untagged
+nodes</td>
+<td><code>DetailActivity.describe</code></td>
+<td><code>ObjectMetadata</code>, <code>Node.locationVersion</code></td>
+</tr>
+<tr>
+<td>Way node list in order, repeats included, tap → node</td>
+<td><code>DetailActivity</code></td>
+<td><code>Way.nodeIds</code></td>
+</tr>
+<tr>
+<td>Relation members (role, kind, id), "not in this area" when
+missing</td>
+<td><code>DetailActivity</code></td>
+<td><code>Relation.members</code>, <code>get</code> returning null</td>
+</tr>
+</tbody>
+</table>
+<h2 id="running-it">Running it</h2>
+<div class="sourceCode" id="cb1"><pre class="sourceCode sh"><code class="sourceCode bash"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="ex">scripts/basemap-assets.sh</span>                         <span class="co"># style, glyphs, sprites</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a><span class="ex">scripts/build-android.sh</span></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a><span class="bu">cd</span> android <span class="kw">&amp;&amp;</span> <span class="ex">mise</span> exec <span class="at">--</span> ./gradlew :cafe-app:installDebug</span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a><span class="co"># Automated runs: never send a real location; use the debug override (debuggable builds only)</span></span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a><span class="ex">adb</span> shell am start <span class="at">-S</span> <span class="at">-n</span> lol.osm.cantino.cafe/.MainActivity <span class="at">--ef</span> lat 40.7608 <span class="at">--ef</span> lon <span class="at">-111.8910</span></span></code></pre></div>
+<p>Known limits: opening hours use the device's time zone, not the
+café's; the relation-café path has not run on a device (no café relation
+in the test area).</p>
+</main>
+</body>
+</html>

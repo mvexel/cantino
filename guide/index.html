@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Cantino guide - Cantino guide</title>
+<style>
+  :root { color-scheme: light dark; --fg: #1d1d1f; --muted: #5f6368; --bg: #fbfaf7; --code: #efede8; --link: #0b57d0; --line: #d9d6cf; }
+  @media (prefers-color-scheme: dark) { :root { --fg: #e8e6e3; --muted: #a8a49c; --bg: #161616; --code: #262624; --link: #8ab4f8; --line: #3a3a37; } }
+  body { margin: 0; background: var(--bg); color: var(--fg); font: 16px/1.55 system-ui, sans-serif; }
+  nav { max-width: 48rem; margin: 0 auto; padding: 1rem 16px 0; font-size: .9rem; color: var(--muted); }
+  main { max-width: 48rem; margin: 0 auto; padding: 1rem 16px 3rem; }
+  a { color: var(--link); }
+  img { max-width: 100%; height: auto; }
+  pre { background: var(--code); padding: .8rem 1rem; border-radius: 6px; overflow-x: auto; font-size: .88rem; }
+  code { background: var(--code); padding: .05em .3em; border-radius: 4px; font-size: .92em; }
+  pre code { background: none; padding: 0; }
+  pre.mermaid { background: none; text-align: center; }
+  table { border-collapse: collapse; display: block; overflow-x: auto; }
+  th, td { border: 1px solid var(--line); padding: .35rem .6rem; vertical-align: top; text-align: left; }
+  blockquote { margin-left: 0; padding-left: 1rem; border-left: 3px solid var(--line); color: var(--muted); }
+</style>
+</head>
+<body>
+<nav><a href="../">Cantino</a> / <a href="index.html">Guide</a> / <a href="../api/">API reference</a></nav>
+<main>
+<h1 id="cantino-guide">Cantino guide</h1>
+<p>Cantino 0.2.0, Android. Start with the <a
+href="https://github.com/mvexel/cantino/blob/main/README.md#quickstart">quickstart</a>,
+then read the page you need.</p>
+<table>
+<thead>
+<tr>
+<th>Page</th>
+<th>Read it for</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><a href="concepts.html">Concepts</a></td>
+<td>Areas, snapshots, refresh, what "published" means</td>
+</tr>
+<tr>
+<td><a href="downloading.html">Downloading areas</a></td>
+<td><code>AreaManager</code>, the <code>AreaState</code> machine,
+cancellation, failures, foreground mode, sizes, privacy</td>
+</tr>
+<tr>
+<td><a href="basemaps.html">Basemaps</a></td>
+<td><code>BasemapSource</code>, hosting PMTiles, the offline style,
+MapLibre, attribution</td>
+</tr>
+<tr>
+<td><a href="querying.html">Querying</a></td>
+<td><code>OsmStore</code> threading, <code>Query</code> semantics,
+pagination, the object model</td>
+</tr>
+<tr>
+<td><a href="performance.html">Performance and sizes</a></td>
+<td>Measured numbers on a Pixel 8</td>
+</tr>
+<tr>
+<td><a href="building.html">Building from source</a></td>
+<td>Rust core, NDK, AAR, checks, Dokka, publishing</td>
+</tr>
+<tr>
+<td><a href="c-abi.html">C ABI</a></td>
+<td><code>include/cantino.h</code> for iOS and other bindings</td>
+</tr>
+<tr>
+<td><a href="cafe-app.html">Café app walkthrough</a></td>
+<td>The reference app, step by step, mapped to code</td>
+</tr>
+<tr>
+<td><a href="sliceosm.html">SliceOSM in production</a></td>
+<td>What the service is, terms, limits, data lag, self-hosting via
+<code>sliceBaseUrl</code></td>
+</tr>
+<tr>
+<td><a href="opening-hours.html">Opening hours</a></td>
+<td>Pairing raw <code>opening_hours</code> strings with an evaluator
+library; time zones</td>
+</tr>
+<tr>
+<td><a href="editing-apps.html">Editing apps</a></td>
+<td>What Cantino gives an editor today: versions, snapshot freshness,
+detecting stale data</td>
+</tr>
+<tr>
+<td><a href="roadmap.html">Maintenance and roadmap</a></td>
+<td>Maintainer, versioning, 0.2, what is next, path to 1.0</td>
+</tr>
+</tbody>
+</table>
+<p>Guide (HTML): <a
+href="https://mvexel.github.io/cantino/guide/">https://mvexel.github.io/cantino/guide/</a>.
+API reference: <a
+href="https://mvexel.github.io/cantino/api/">https://mvexel.github.io/cantino/api/</a>
+(every public symbol has KDoc; the reference is the authority on
+details).</p>
+</main>
+</body>
+</html>

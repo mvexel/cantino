@@ -1,0 +1,127 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Building from source - Cantino guide</title>
+<style>
+  :root { color-scheme: light dark; --fg: #1d1d1f; --muted: #5f6368; --bg: #fbfaf7; --code: #efede8; --link: #0b57d0; --line: #d9d6cf; }
+  @media (prefers-color-scheme: dark) { :root { --fg: #e8e6e3; --muted: #a8a49c; --bg: #161616; --code: #262624; --link: #8ab4f8; --line: #3a3a37; } }
+  body { margin: 0; background: var(--bg); color: var(--fg); font: 16px/1.55 system-ui, sans-serif; }
+  nav { max-width: 48rem; margin: 0 auto; padding: 1rem 16px 0; font-size: .9rem; color: var(--muted); }
+  main { max-width: 48rem; margin: 0 auto; padding: 1rem 16px 3rem; }
+  a { color: var(--link); }
+  img { max-width: 100%; height: auto; }
+  pre { background: var(--code); padding: .8rem 1rem; border-radius: 6px; overflow-x: auto; font-size: .88rem; }
+  code { background: var(--code); padding: .05em .3em; border-radius: 4px; font-size: .92em; }
+  pre code { background: none; padding: 0; }
+  pre.mermaid { background: none; text-align: center; }
+  table { border-collapse: collapse; display: block; overflow-x: auto; }
+  th, td { border: 1px solid var(--line); padding: .35rem .6rem; vertical-align: top; text-align: left; }
+  blockquote { margin-left: 0; padding-left: 1rem; border-left: 3px solid var(--line); color: var(--muted); }
+</style>
+</head>
+<body>
+<nav><a href="../">Cantino</a> / <a href="index.html">Guide</a> / <a href="../api/">API reference</a></nav>
+<main>
+<h1 id="building-from-source">Building from source</h1>
+<p>You only need this to change Cantino itself; apps consume the
+published AAR (<a
+href="https://github.com/mvexel/cantino/blob/main/README.md#install">Install</a>).</p>
+<h2 id="layout">Layout</h2>
+<pre class="text"><code>src/                 Rust core: import, SQLite store, queries, SliceOSM protocol, PMTiles extract
+  android.rs         JNI adapter (wraps the C ABI functions)
+  mobile_api.rs      C ABI (include/cantino.h)
+include/cantino.h    C ABI header, the contract for every platform adapter
+android/cantino      Kotlin library (AAR): OsmStore, AreaManager, models
+android/cafe-app     reference app
+android/sample-app   offline basemap demo
+scripts/             build, check, bench, basemap assets, publishing</code></pre>
+<h2 id="toolchain">Toolchain</h2>
+<table>
+<thead>
+<tr>
+<th>Tool</th>
+<th>Version</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Rust</td>
+<td>1.99.0 (pinned in <code>rust-toolchain.toml</code>)</td>
+<td><code>rustup target add aarch64-linux-android armv7-linux-androideabi x86_64-linux-android --toolchain 1.99.0</code></td>
+</tr>
+<tr>
+<td>Android NDK</td>
+<td>r29 (<code>29.0.14206865</code>), SDK-managed</td>
+<td>Cross-compiles the Rust library; Gradle also uses it to strip</td>
+</tr>
+<tr>
+<td>Android SDK</td>
+<td>compileSdk 36</td>
+<td><code>android/local.properties</code>: <code>sdk.dir=…</code></td>
+</tr>
+<tr>
+<td>JDK</td>
+<td>Temurin 25 via <a href="https://mise.jdx.dev/">mise</a>
+(<code>mise.toml</code>)</td>
+<td>Run Gradle as <code>mise exec -- ./gradlew …</code></td>
+</tr>
+<tr>
+<td>Gradle / AGP</td>
+<td>9.8 wrapper / 9.4.1 (built-in Kotlin)</td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<p>No C++ toolchain or Docker: SQLite is compiled by
+<code>rusqlite</code>'s bundled feature.</p>
+<h2 id="build">Build</h2>
+<div class="sourceCode" id="cb2"><pre class="sourceCode sh"><code class="sourceCode bash"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="ex">scripts/check.sh</span>               <span class="co"># rustfmt, clippy -D warnings, cargo test, C ABI smoke test (Python ctypes)</span></span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a><span class="ex">scripts/build-android.sh</span>       <span class="co"># → target/android/{arm64-v8a,armeabi-v7a,x86_64}/libcantino.so</span></span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a><span class="bu">cd</span> android</span>
+<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a><span class="ex">mise</span> exec <span class="at">--</span> ./gradlew :cantino:assembleRelease                         <span class="co"># the AAR</span></span>
+<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a><span class="ex">mise</span> exec <span class="at">--</span> ./gradlew :cantino:publishReleasePublicationToLocalRepository  <span class="co"># Maven layout in android/build/repo</span></span>
+<span id="cb2-6"><a href="#cb2-6" aria-hidden="true" tabindex="-1"></a><span class="ex">mise</span> exec <span class="at">--</span> ./gradlew :cantino:dokkaGeneratePublicationHtml            <span class="co"># API reference → cantino/build/dokka/html</span></span>
+<span id="cb2-7"><a href="#cb2-7" aria-hidden="true" tabindex="-1"></a><span class="ex">mise</span> exec <span class="at">--</span> ./gradlew :cantino:connectedDebugAndroidTest               <span class="co"># instrumented tests on a device/emulator</span></span></code></pre></div>
+<p>The AAR packages whatever is in
+<code>target/android/&lt;ABI&gt;/</code>, so rerun
+<code>scripts/build-android.sh</code> after changing Rust code.</p>
+<p>The Pages site (landing page, Maven repository, <code>/api/</code>,
+and this guide as HTML under <code>/guide/</code>) is built by
+<code>scripts/publish-pages.sh</code>. Rendering the guide needs <a
+href="https://pandoc.org/installing.html">pandoc</a> 3.x on the
+<code>PATH</code> (it converts <code>docs/guide/*.md</code> with
+<code>scripts/guide-filter.lua</code> and
+<code>scripts/guide-template.html</code>; Mermaid diagrams are drawn in
+the browser). To check only the guide:
+<code>scripts/publish-pages.sh --guide-only --out build/pages</code>,
+then open <code>build/pages/guide/index.html</code>.</p>
+<p>Sample apps need the offline style assets first:</p>
+<div class="sourceCode" id="cb3"><pre class="sourceCode sh"><code class="sourceCode bash"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="ex">scripts/basemap-assets.sh</span>      <span class="co"># → android/sample-app/build-assets (needs curl, git, node/npm)</span></span>
+<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a><span class="bu">cd</span> android <span class="kw">&amp;&amp;</span> <span class="ex">mise</span> exec <span class="at">--</span> ./gradlew :cafe-app:assembleDebug :sample-app:assembleDebug</span></code></pre></div>
+<h2 id="desktop-tools">Desktop tools</h2>
+<div class="sourceCode" id="cb4"><pre class="sourceCode sh"><code class="sourceCode bash"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a><span class="ex">cargo</span> run <span class="at">--release</span> <span class="at">--example</span> offline <span class="at">--</span> import INPUT.osm.pbf AREA.sqlite</span>
+<span id="cb4-2"><a href="#cb4-2" aria-hidden="true" tabindex="-1"></a><span class="ex">cargo</span> run <span class="at">--release</span> <span class="at">--example</span> offline <span class="at">--</span> cafes AREA.sqlite</span>
+<span id="cb4-3"><a href="#cb4-3" aria-hidden="true" tabindex="-1"></a><span class="ex">cargo</span> run <span class="at">--release</span> <span class="at">--example</span> offline <span class="at">--</span> get AREA.sqlite way 1</span>
+<span id="cb4-4"><a href="#cb4-4" aria-hidden="true" tabindex="-1"></a><span class="va">ANDROID_SERIAL</span><span class="op">=&lt;</span>device<span class="op">&gt;</span> scripts/bench-android.sh <span class="ex">CITY.osm.pbf</span>   <span class="co"># city benchmark JSON from a device</span></span></code></pre></div>
+<p>Area files are portable between desktop and device (same format,
+<code>application_id</code> "CNTN", format version 1).</p>
+<h2 id="versioning">Versioning</h2>
+<p>One version for everything, from <code>Cargo.toml</code>: the Maven
+publication and <code>Cantino.VERSION</code> read it at build time. The
+C ABI header is versioned with the crate. Semantic versioning; before
+1.0 a minor version may break the API (see the compatibility policy in
+the <a
+href="https://github.com/mvexel/cantino/blob/main/CHANGELOG.md">CHANGELOG</a>).</p>
+<h2 id="publishing-maintainers">Publishing (maintainers)</h2>
+<div class="sourceCode" id="cb5"><pre class="sourceCode sh"><code class="sourceCode bash"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a><span class="ex">scripts/publish-pages.sh</span> <span class="at">--worktree</span>   <span class="co"># Maven repo + API docs + landing page → build/pages, synced to build/gh-pages</span></span></code></pre></div>
+<p>The script builds native libraries, the release AAR with its POM, and
+the Dokka HTML, lays them out for GitHub Pages (<code>/maven/…</code>,
+<code>/api/…</code>, <code>/index.html</code>), and prints the commands
+to commit and push the <code>gh-pages</code> branch. It never
+pushes.</p>
+</main>
+</body>
+</html>

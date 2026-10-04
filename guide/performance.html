@@ -1,0 +1,128 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Performance and sizes - Cantino guide</title>
+<style>
+  :root { color-scheme: light dark; --fg: #1d1d1f; --muted: #5f6368; --bg: #fbfaf7; --code: #efede8; --link: #0b57d0; --line: #d9d6cf; }
+  @media (prefers-color-scheme: dark) { :root { --fg: #e8e6e3; --muted: #a8a49c; --bg: #161616; --code: #262624; --link: #8ab4f8; --line: #3a3a37; } }
+  body { margin: 0; background: var(--bg); color: var(--fg); font: 16px/1.55 system-ui, sans-serif; }
+  nav { max-width: 48rem; margin: 0 auto; padding: 1rem 16px 0; font-size: .9rem; color: var(--muted); }
+  main { max-width: 48rem; margin: 0 auto; padding: 1rem 16px 3rem; }
+  a { color: var(--link); }
+  img { max-width: 100%; height: auto; }
+  pre { background: var(--code); padding: .8rem 1rem; border-radius: 6px; overflow-x: auto; font-size: .88rem; }
+  code { background: var(--code); padding: .05em .3em; border-radius: 4px; font-size: .92em; }
+  pre code { background: none; padding: 0; }
+  pre.mermaid { background: none; text-align: center; }
+  table { border-collapse: collapse; display: block; overflow-x: auto; }
+  th, td { border: 1px solid var(--line); padding: .35rem .6rem; vertical-align: top; text-align: left; }
+  blockquote { margin-left: 0; padding-left: 1rem; border-left: 3px solid var(--line); color: var(--muted); }
+</style>
+</head>
+<body>
+<nav><a href="../">Cantino</a> / <a href="index.html">Guide</a> / <a href="../api/">API reference</a></nav>
+<main>
+<h1 id="performance-and-sizes">Performance and sizes</h1>
+<p>All numbers: Pixel 8 (Android 17, arm64), 2026-10-03, Cantino's
+SQLite core through the AAR (ART, JNI, JSON and Kotlin decoding
+included). Raw records in <a
+href="https://github.com/mvexel/cantino/blob/main/docs/bench"><code>docs/bench/</code></a>.</p>
+<h2 id="city-extract-salt-lake-city">City extract: Salt Lake City</h2>
+<p>SliceOSM bbox <code>-112.10,40.70,-111.80,40.85</code> (about 25×17
+km), 13.1 MB PBF, 1.44M nodes, 207k ways, 1,473 relations. Record: <a
+href="https://github.com/mvexel/cantino/blob/main/docs/bench/2026-10-03-slc-sqlite-core-pixel8.json"><code>2026-10-03-slc-sqlite-core-pixel8.json</code></a>.</p>
+<table>
+<thead>
+<tr>
+<th>Measure</th>
+<th>Value</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Area database</td>
+<td>128.5 MB (9.8× the PBF)</td>
+</tr>
+<tr>
+<td>Import, in the app</td>
+<td>8.2 s (5.7 s as a plain native binary on the same phone)</td>
+</tr>
+<tr>
+<td>Peak memory during import</td>
+<td>~156 MB above the app's own baseline</td>
+</tr>
+<tr>
+<td>Tag query, 175 cafés (<code>amenity=cafe</code>)</td>
+<td>p50 11.9 ms, p95 22.3 ms (cold 87.5 ms)</td>
+</tr>
+<tr>
+<td>Bbox + tag query (downtown, 15 cafés)</td>
+<td>p50 3.3 ms, p95 3.7 ms</td>
+</tr>
+<tr>
+<td><code>get</code> by ID</td>
+<td>p50 0.08 ms, p95 0.12 ms</td>
+</tr>
+</tbody>
+</table>
+<p>Query time through the AAR is dominated by crossing JNI as JSON and
+decoding it (about 0.08 ms per object); the Rust core itself answers the
+175-café query in 3–4 ms. Ask for the objects you need, page with
+<code>limit</code>.</p>
+<h2 id="area-download-1010-km">Area download: 10×10 km</h2>
+<p>Downtown Salt Lake City, live SliceOSM and Protomaps, basemap
+<code>Extract</code> z0–15.</p>
+<table>
+<thead>
+<tr>
+<th>Measure</th>
+<th>Value</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Total to <code>Ready</code></td>
+<td>27.4 s (refresh of the same area: 14.0 s)</td>
+</tr>
+<tr>
+<td>of which slicing (server)</td>
+<td>19.5 s</td>
+</tr>
+<tr>
+<td>PBF</td>
+<td>7.8 MB, downloaded in 0.8 s</td>
+</tr>
+<tr>
+<td>Import</td>
+<td>3.2 s → 75.6 MB database (778k nodes, 123k ways, 931 relations)</td>
+</tr>
+<tr>
+<td>Basemap</td>
+<td>2.3 s; 28 requests, 7.6 MB transferred, 6.5 MB file, 196 tiles</td>
+</tr>
+</tbody>
+</table>
+<p>A small area (0.01°×0.006°, a few blocks) is <code>Ready</code> in
+about 4 s without a basemap and 6 s with one (1 MB basemap).</p>
+<h2 id="app-size">App size</h2>
+<p>The AAR is 3.5 MB; each ABI's <code>libcantino.so</code> is about 3.3
+MB (stripped). The native library depends only on libc, libm and libdl.
+MapLibre Native adds about 13 MB per ABI if you use it. Ship only the
+ABIs you need (<code>arm64-v8a</code>, <code>armeabi-v7a</code>,
+<code>x86_64</code>) (<code>abiFilters</code>), or split per ABI with an
+App Bundle.</p>
+<h2 id="rules-of-thumb">Rules of thumb</h2>
+<ul>
+<li>Disk ≈ 10× the PBF size, and ≈ 75 MB per 10×10 km of dense city,
+plus ~6.5 MB of basemap at z15.</li>
+<li>Import memory grows with the area; city scale is fine, country scale
+is not a 0.x goal.</li>
+<li>Keep one store open; <code>open</code> costs more than a query.</li>
+<li>Prefer a tag filter plus bbox over a bare bbox: tag filters are the
+most selective index.</li>
+</ul>
+</main>
+</body>
+</html>

@@ -1,0 +1,464 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Downloading areas - Cantino guide</title>
+<style>
+  :root { color-scheme: light dark; --fg: #1d1d1f; --muted: #5f6368; --bg: #fbfaf7; --code: #efede8; --link: #0b57d0; --line: #d9d6cf; }
+  @media (prefers-color-scheme: dark) { :root { --fg: #e8e6e3; --muted: #a8a49c; --bg: #161616; --code: #262624; --link: #8ab4f8; --line: #3a3a37; } }
+  body { margin: 0; background: var(--bg); color: var(--fg); font: 16px/1.55 system-ui, sans-serif; }
+  nav { max-width: 48rem; margin: 0 auto; padding: 1rem 16px 0; font-size: .9rem; color: var(--muted); }
+  main { max-width: 48rem; margin: 0 auto; padding: 1rem 16px 3rem; }
+  a { color: var(--link); }
+  img { max-width: 100%; height: auto; }
+  pre { background: var(--code); padding: .8rem 1rem; border-radius: 6px; overflow-x: auto; font-size: .88rem; }
+  code { background: var(--code); padding: .05em .3em; border-radius: 4px; font-size: .92em; }
+  pre code { background: none; padding: 0; }
+  pre.mermaid { background: none; text-align: center; }
+  table { border-collapse: collapse; display: block; overflow-x: auto; }
+  th, td { border: 1px solid var(--line); padding: .35rem .6rem; vertical-align: top; text-align: left; }
+  blockquote { margin-left: 0; padding-left: 1rem; border-left: 3px solid var(--line); color: var(--muted); }
+</style>
+</head>
+<body>
+<nav><a href="../">Cantino</a> / <a href="index.html">Guide</a> / <a href="../api/">API reference</a></nav>
+<main>
+<h1 id="downloading-areas">Downloading areas</h1>
+<p><code>AreaManager</code> downloads, refreshes and locates areas.
+Downloads run in WorkManager, so they survive the app leaving the screen
+and process death, wait for a network connection, and retry transient
+failures.</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode kotlin"><code class="sourceCode kotlin"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="kw">val</span> <span class="va">areas</span> <span class="op">=</span> AreaManager<span class="op">(</span>context<span class="op">)</span>                       <span class="co">// cheap; create where you need it</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a><span class="kw">val</span> <span class="va">runId</span> <span class="op">=</span> areas<span class="op">.</span>download<span class="op">(</span></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a>    areaId <span class="op">=</span> <span class="st">&quot;city&quot;</span><span class="op">,</span></span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a>    bbox <span class="op">=</span> Bbox<span class="op">(</span>west <span class="op">=</span> <span class="op">-</span><span class="fl">111.95</span><span class="op">,</span> south <span class="op">=</span> <span class="fl">40.716</span><span class="op">,</span> east <span class="op">=</span> <span class="op">-</span><span class="fl">111.832</span><span class="op">,</span> north <span class="op">=</span> <span class="fl">40.806</span><span class="op">),</span></span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a>    name <span class="op">=</span> <span class="st">&quot;Salt Lake City&quot;</span><span class="op">,</span>                           <span class="co">// shown in SliceOSM&#39;s job list</span></span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a>    basemap <span class="op">=</span> BasemapSource<span class="op">.</span>Extract<span class="op">(</span>planetUrl<span class="op">),</span>        <span class="co">// optional; see Basemaps</span></span>
+<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a><span class="op">)</span></span>
+<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a>areas<span class="op">.</span>state<span class="op">(</span><span class="st">&quot;city&quot;</span><span class="op">).</span>collect <span class="op">{</span> state <span class="op">-&gt;</span> render<span class="op">(</span>state<span class="op">)</span> <span class="op">}</span> <span class="co">// Flow&lt;AreaState&gt;, never completes</span></span>
+<span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a>areas<span class="op">.</span>cancel<span class="op">(</span><span class="st">&quot;city&quot;</span><span class="op">)</span>                                   <span class="co">// keeps the published area</span></span></code></pre></div>
+<table>
+<thead>
+<tr>
+<th>Method</th>
+<th>Thread</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>download(areaId, bbox, name, basemap)</code></td>
+<td>any</td>
+<td>Replaces a running download of the same ID. Returns the WorkManager
+run ID</td>
+</tr>
+<tr>
+<td><code>cancel(areaId)</code></td>
+<td>any</td>
+<td>No-op if nothing runs</td>
+</tr>
+<tr>
+<td><code>state(areaId)</code></td>
+<td>any (collect in a coroutine)</td>
+<td>Current state first, then every change</td>
+</tr>
+<tr>
+<td><code>publishedArea(areaId)</code>, <code>dataFile</code>,
+<code>basemapFile</code></td>
+<td><strong>background</strong></td>
+<td>Read the disk; may wait a few ms for a commit in progress</td>
+</tr>
+</tbody>
+</table>
+<h2 id="the-state-machine">The state machine</h2>
+<pre class="mermaid">stateDiagram-v2
+    direction LR
+    [*] --&gt; Idle
+    Idle --&gt; Queued: download()
+    Queued --&gt; Submitting: network + storage ok
+    Submitting --&gt; Slicing
+    Slicing --&gt; Downloading
+    Downloading --&gt; Importing
+    Importing --&gt; Basemap: BasemapSource Url or Extract
+    Importing --&gt; Ready: BasemapSource.None
+    Basemap --&gt; Ready
+    Submitting --&gt; Queued: transient failure (backoff)
+    Slicing --&gt; Queued
+    Downloading --&gt; Queued
+    Basemap --&gt; Queued
+    Queued --&gt; Failed: permanent failure or retries exhausted
+    Submitting --&gt; Failed
+    Importing --&gt; Failed
+    Basemap --&gt; Failed
+    Queued --&gt; Cancelled: cancel()
+    Downloading --&gt; Cancelled: cancel()</pre>
+<p>Every state except <code>Idle</code> also has
+<code>runId: UUID</code> (first constructor property, not listed
+below).</p>
+<table>
+<thead>
+<tr>
+<th>State</th>
+<th>Payload</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>Idle(published)</code></td>
+<td>published <code>AreaInfo?</code></td>
+<td>No download known (never started, or WorkManager pruned it after ~1
+day). <code>runId</code> is null</td>
+</tr>
+<tr>
+<td><code>Queued(previousRuns)</code></td>
+<td>runs so far</td>
+<td>Waiting for network/storage, or backing off after a transient
+failure</td>
+</tr>
+<tr>
+<td><code>Submitting</code></td>
+<td></td>
+<td>Sending the bbox to SliceOSM, or re-attaching to the job of an
+interrupted run</td>
+</tr>
+<tr>
+<td><code>Slicing(fraction)</code></td>
+<td>0..1 or null</td>
+<td>SliceOSM cuts the extract (null until the server reports
+totals)</td>
+</tr>
+<tr>
+<td><code>Downloading(bytes, totalBytes)</code></td>
+<td></td>
+<td>The PBF extract</td>
+</tr>
+<tr>
+<td><code>Importing</code></td>
+<td></td>
+<td>Building the SQLite file in staging (not interruptible; a cancel is
+honored when it returns)</td>
+</tr>
+<tr>
+<td><code>Basemap(phase, bytes, totalBytes)</code></td>
+<td><code>DOWNLOAD</code> / <code>DIRECTORIES</code> /
+<code>TILES</code></td>
+<td>Only with a <code>BasemapSource</code></td>
+</tr>
+<tr>
+<td><code>Ready(area)</code></td>
+<td>the published <code>AreaInfo</code></td>
+<td>Data and basemap published together</td>
+</tr>
+<tr>
+<td><code>Failed(message, retryable, reason)</code></td>
+<td><code>FailureReason</code></td>
+<td>Nothing published. <code>reason</code> = why (see <a
+href="#failures-and-retries">Failures</a>); <code>retryable</code> =
+transient cause that exhausted retries</td>
+</tr>
+<tr>
+<td><code>Cancelled</code></td>
+<td></td>
+<td>Nothing published</td>
+</tr>
+</tbody>
+</table>
+<p>Every state carries the same guarantee: <strong>the previously
+published area is intact until <code>Ready</code></strong>. You can keep
+showing it during a refresh and after a failure.</p>
+<p><code>AreaState</code> is sealed, so <code>when (state) { … }</code>
+is exhaustive:</p>
+<div class="sourceCode" id="cb2"><pre
+class="sourceCode kotlin"><code class="sourceCode kotlin"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="kw">fun</span> <span class="fu">render</span><span class="op">(</span><span class="va">state</span><span class="op">:</span> <span class="dt">AreaState</span><span class="op">)</span> <span class="op">=</span> <span class="cf">when</span> <span class="op">(</span>state<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a>    <span class="kw">is</span> AreaState<span class="op">.</span>Idle <span class="op">-&gt;</span> show<span class="op">(</span>state<span class="op">.</span>published<span class="op">)</span></span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a>    <span class="kw">is</span> AreaState<span class="op">.</span>Queued <span class="op">-&gt;</span> status<span class="op">(</span><span class="st">&quot;Waiting for network…&quot;</span><span class="op">)</span></span>
+<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a>    <span class="kw">is</span> AreaState<span class="op">.</span>Submitting <span class="op">-&gt;</span> status<span class="op">(</span><span class="st">&quot;Requesting extract…&quot;</span><span class="op">)</span></span>
+<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a>    <span class="kw">is</span> AreaState<span class="op">.</span>Slicing <span class="op">-&gt;</span> status<span class="op">(</span><span class="st">&quot;Cutting extract </span><span class="ss">${</span>state<span class="op">.</span>fraction<span class="op">?.</span>let <span class="op">{</span> <span class="st">&quot;</span><span class="ss">${</span><span class="op">(</span>it <span class="op">*</span> <span class="dv">100</span><span class="op">).</span>toInt<span class="op">()</span><span class="ss">}</span><span class="st"> %&quot;</span> <span class="ss">}</span><span class="st"> ?: &quot;&quot;}&quot;</span><span class="op">)</span></span>
+<span id="cb2-6"><a href="#cb2-6" aria-hidden="true" tabindex="-1"></a>    <span class="kw">is</span> AreaState<span class="op">.</span>Downloading <span class="op">-&gt;</span> status<span class="op">(</span><span class="st">&quot;Downloading </span><span class="ss">${</span>state<span class="op">.</span>bytes <span class="op">/</span> <span class="dv">1_000_000</span><span class="ss">}</span><span class="st"> MB&quot;</span><span class="op">)</span></span>
+<span id="cb2-7"><a href="#cb2-7" aria-hidden="true" tabindex="-1"></a>    <span class="kw">is</span> AreaState<span class="op">.</span>Importing <span class="op">-&gt;</span> status<span class="op">(</span><span class="st">&quot;Preparing offline data…&quot;</span><span class="op">)</span></span>
+<span id="cb2-8"><a href="#cb2-8" aria-hidden="true" tabindex="-1"></a>    <span class="kw">is</span> AreaState<span class="op">.</span>Basemap <span class="op">-&gt;</span> status<span class="op">(</span><span class="st">&quot;Basemap: </span><span class="ss">${</span>state<span class="op">.</span>phase<span class="ss">}</span><span class="st">&quot;</span><span class="op">)</span></span>
+<span id="cb2-9"><a href="#cb2-9" aria-hidden="true" tabindex="-1"></a>    <span class="kw">is</span> AreaState<span class="op">.</span>Ready <span class="op">-&gt;</span> show<span class="op">(</span>state<span class="op">.</span>area<span class="op">)</span></span>
+<span id="cb2-10"><a href="#cb2-10" aria-hidden="true" tabindex="-1"></a>    <span class="kw">is</span> AreaState<span class="op">.</span>Failed <span class="op">-&gt;</span> error<span class="op">(</span>state<span class="op">.</span>reason<span class="op">,</span> state<span class="op">.</span>message<span class="op">,</span> canRetry <span class="op">=</span> state<span class="op">.</span>retryable<span class="op">)</span></span>
+<span id="cb2-11"><a href="#cb2-11" aria-hidden="true" tabindex="-1"></a>    <span class="kw">is</span> AreaState<span class="op">.</span>Cancelled <span class="op">-&gt;</span> status<span class="op">(</span><span class="st">&quot;Cancelled&quot;</span><span class="op">)</span></span>
+<span id="cb2-12"><a href="#cb2-12" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<p><strong><code>state()</code> follows the area, not one run.</strong>
+Right after <code>download()</code> the flow can still show the final
+state of an earlier run (WorkManager enqueues asynchronously). Every
+state except <code>Idle</code> therefore carries <code>runId</code>, the
+WorkManager ID of the run it belongs to: the <code>UUID</code>
+<code>download()</code> returned. <code>isTerminal</code> is true for
+<code>Ready</code>, <code>Failed</code> and <code>Cancelled</code>.
+Match <code>runId</code> to wait for <em>your</em> download (the <a
+href="https://github.com/mvexel/cantino/blob/main/README.md#quickstart">quickstart</a>
+does the same):</p>
+<div class="sourceCode" id="cb3"><pre
+class="sourceCode kotlin"><code class="sourceCode kotlin"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="kw">val</span> <span class="va">runId</span> <span class="op">=</span> areas<span class="op">.</span>download<span class="op">(</span><span class="st">&quot;home&quot;</span><span class="op">,</span> bbox<span class="op">)</span></span>
+<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a><span class="kw">val</span> <span class="va">end</span> <span class="op">=</span> areas<span class="op">.</span>state<span class="op">(</span><span class="st">&quot;home&quot;</span><span class="op">).</span>first <span class="op">{</span> it<span class="op">.</span>runId <span class="op">==</span> runId <span class="op">&amp;&amp;</span> it<span class="op">.</span>isTerminal <span class="op">}</span></span></code></pre></div>
+<p>Plain <code>state(areaId)</code> collection (a progress UI) needs no
+matching: it shows whatever run the area is on, and <code>runId</code>
+changes when a new run starts.</p>
+<p>The blocking disk reads <code>dataFile</code>,
+<code>basemapFile</code> and <code>publishedArea</code> have main-safe
+suspend counterparts: <code>loadDataFile</code>,
+<code>loadBasemapFile</code> and <code>loadPublishedArea</code> (they
+run on <code>Dispatchers.IO</code>).</p>
+<h2 id="cancellation">Cancellation</h2>
+<p><code>cancel(areaId)</code> stops a queued or running download; the
+state becomes <code>Cancelled</code> shortly after. It is honored up to
+the commit point, including during the import (whose staged result is
+then discarded). A cancel that arrives during the final milliseconds of
+renames is ignored: that run reports <code>Ready</code>. A new
+<code>download()</code> of the same ID cancels and replaces the running
+one.</p>
+<h2 id="failures-and-retries">Failures and retries</h2>
+<table>
+<thead>
+<tr>
+<th>Cause</th>
+<th>What happens</th>
+<th><code>Failed.reason</code></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Network error, timeout, truncated download</td>
+<td>Retried inline (3×, 1 s doubling), then the run ends and WorkManager
+reruns it with exponential backoff (from 30 s), up to 5 runs. A rerun
+resumes polling the same SliceOSM job instead of resubmitting. Retries
+exhausted: <code>Failed(retryable = true)</code></td>
+<td><code>NETWORK</code></td>
+</tr>
+<tr>
+<td>HTTP 5xx / 408 / 429, a vanished SliceOSM job, an unparseable server
+answer, a job still slicing after <code>maxSliceWaitMillis</code></td>
+<td>As above (transient)</td>
+<td><code>SERVER</code></td>
+</tr>
+<tr>
+<td>A basemap server ignoring <code>Range</code> (or sending the wrong
+range)</td>
+<td><code>Failed(retryable = false)</code> at once</td>
+<td><code>SERVER</code></td>
+</tr>
+<tr>
+<td>Other HTTP 4xx (a <code>400</code> from SliceOSM on submit, a
+basemap URL that is <code>404</code>), invalid bbox or name, zooms the
+basemap archive lacks</td>
+<td><code>Failed(retryable = false)</code> at once</td>
+<td><code>INVALID_REQUEST</code></td>
+</tr>
+<tr>
+<td>A PBF that fails to import (corrupt, truncated, unsorted), a basemap
+that is not a valid PMTiles v3 archive</td>
+<td><code>Failed(retryable = false)</code> at once</td>
+<td><code>INVALID_DATA</code></td>
+</tr>
+<tr>
+<td>Disk full while downloading or importing</td>
+<td>Transient: WorkManager retries once storage is no longer low;
+<code>Failed(retryable = true)</code> if the retries run out</td>
+<td><code>STORAGE</code></td>
+</tr>
+<tr>
+<td>An I/O error while publishing</td>
+<td>Transient: the next run finishes the commit</td>
+<td><code>STORAGE</code></td>
+</tr>
+<tr>
+<td>An unexpected error (a bug), or a failure recorded by Cantino
+0.1</td>
+<td><code>Failed(retryable = false)</code></td>
+<td><code>UNKNOWN</code></td>
+</tr>
+<tr>
+<td>Storage low before the run</td>
+<td>Not a failure: the work stays <code>Queued</code> until storage
+recovers (WorkManager constraint)</td>
+<td></td>
+</tr>
+<tr>
+<td>Process killed</td>
+<td>WorkManager reruns the work; a run killed after its commit point is
+completed on the next access</td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<p>Branch on <code>reason</code> for what to tell the user;
+<code>message</code> is a developer-facing description (not localized,
+not for parsing):</p>
+<div class="sourceCode" id="cb4"><pre
+class="sourceCode kotlin"><code class="sourceCode kotlin"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a><span class="kw">is</span> AreaState<span class="op">.</span>Failed <span class="op">-&gt;</span> <span class="cf">when</span> <span class="op">(</span>state<span class="op">.</span>reason<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb4-2"><a href="#cb4-2" aria-hidden="true" tabindex="-1"></a>    FailureReason<span class="op">.</span>NETWORK <span class="op">-&gt;</span> <span class="st">&quot;No connection. Try again later.&quot;</span></span>
+<span id="cb4-3"><a href="#cb4-3" aria-hidden="true" tabindex="-1"></a>    FailureReason<span class="op">.</span>STORAGE <span class="op">-&gt;</span> <span class="st">&quot;Not enough space for the offline area.&quot;</span></span>
+<span id="cb4-4"><a href="#cb4-4" aria-hidden="true" tabindex="-1"></a>    FailureReason<span class="op">.</span>INVALID_REQUEST <span class="op">-&gt;</span> <span class="st">&quot;This area cannot be downloaded.&quot;</span>   <span class="co">// e.g. too large for SliceOSM</span></span>
+<span id="cb4-5"><a href="#cb4-5" aria-hidden="true" tabindex="-1"></a>    FailureReason<span class="op">.</span>SERVER<span class="op">,</span> FailureReason<span class="op">.</span>INVALID_DATA<span class="op">,</span> FailureReason<span class="op">.</span>UNKNOWN <span class="op">-&gt;</span> <span class="st">&quot;Download failed. Try again later.&quot;</span></span>
+<span id="cb4-6"><a href="#cb4-6" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<p>All of these knobs are in <code>AreaConfig</code>
+(<code>inlineRetries</code>, <code>maxRunAttempts</code>,
+<code>backoffDelayMillis</code>, timeouts, <code>sliceBaseUrl</code>).
+Most apps pass <code>AreaConfig()</code> or only set
+<code>foreground</code>. Downloads restart from byte 0 on a retry (no
+byte-range resume in 0.2.0).</p>
+<h2 id="foreground-mode">Foreground mode</h2>
+<p>WorkManager stops an ordinary background run after about 10 minutes.
+A 10×10 km city area takes well under a minute, so most apps never need
+this. For large areas, opt in:</p>
+<div class="sourceCode" id="cb5"><pre
+class="sourceCode kotlin"><code class="sourceCode kotlin"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a><span class="kw">val</span> <span class="va">areas</span> <span class="op">=</span> AreaManager<span class="op">(</span></span>
+<span id="cb5-2"><a href="#cb5-2" aria-hidden="true" tabindex="-1"></a>    context<span class="op">,</span></span>
+<span id="cb5-3"><a href="#cb5-3" aria-hidden="true" tabindex="-1"></a>    AreaConfig<span class="op">(</span>foreground <span class="op">=</span> ForegroundConfig<span class="op">(</span>title <span class="op">=</span> <span class="st">&quot;Downloading offline map&quot;</span><span class="op">,</span> smallIcon <span class="op">=</span> R<span class="op">.</span>drawable<span class="op">.</span>ic_download<span class="op">)),</span></span>
+<span id="cb5-4"><a href="#cb5-4" aria-hidden="true" tabindex="-1"></a><span class="op">)</span></span></code></pre></div>
+<p>and add to <strong>your app's</strong>
+<code>AndroidManifest.xml</code>:</p>
+<div class="sourceCode" id="cb6"><pre
+class="sourceCode xml"><code class="sourceCode xml"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a>&lt;<span class="kw">manifest</span> <span class="ot">xmlns:android=</span><span class="st">&quot;http://schemas.android.com/apk/res/android&quot;</span></span>
+<span id="cb6-2"><a href="#cb6-2" aria-hidden="true" tabindex="-1"></a>    <span class="ot">xmlns:tools=</span><span class="st">&quot;http://schemas.android.com/tools&quot;</span>&gt;</span>
+<span id="cb6-3"><a href="#cb6-3" aria-hidden="true" tabindex="-1"></a>    &lt;<span class="kw">uses-permission</span> <span class="ot">android:name=</span><span class="st">&quot;android.permission.FOREGROUND_SERVICE&quot;</span> /&gt;</span>
+<span id="cb6-4"><a href="#cb6-4" aria-hidden="true" tabindex="-1"></a>    &lt;<span class="kw">uses-permission</span> <span class="ot">android:name=</span><span class="st">&quot;android.permission.FOREGROUND_SERVICE_DATA_SYNC&quot;</span> /&gt;</span>
+<span id="cb6-5"><a href="#cb6-5" aria-hidden="true" tabindex="-1"></a>    &lt;<span class="kw">application</span>&gt;</span>
+<span id="cb6-6"><a href="#cb6-6" aria-hidden="true" tabindex="-1"></a>        &lt;<span class="kw">service</span></span>
+<span id="cb6-7"><a href="#cb6-7" aria-hidden="true" tabindex="-1"></a>            <span class="ot">android:name=</span><span class="st">&quot;androidx.work.impl.foreground.SystemForegroundService&quot;</span></span>
+<span id="cb6-8"><a href="#cb6-8" aria-hidden="true" tabindex="-1"></a>            <span class="ot">android:foregroundServiceType=</span><span class="st">&quot;dataSync&quot;</span></span>
+<span id="cb6-9"><a href="#cb6-9" aria-hidden="true" tabindex="-1"></a>            <span class="ot">tools:node=</span><span class="st">&quot;merge&quot;</span> /&gt;</span>
+<span id="cb6-10"><a href="#cb6-10" aria-hidden="true" tabindex="-1"></a>    &lt;/<span class="kw">application</span>&gt;</span>
+<span id="cb6-11"><a href="#cb6-11" aria-hidden="true" tabindex="-1"></a>&lt;/<span class="kw">manifest</span>&gt;</span></code></pre></div>
+<p>The library does not declare these itself, because a
+<code>dataSync</code> foreground service makes Google Play ask for a
+declaration in the Play Console, and apps that never use the mode should
+not carry it.</p>
+<table>
+<thead>
+<tr>
+<th>Situation</th>
+<th>Behavior</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Manifest entries missing</td>
+<td>Logs a warning (tag <code>AreaDownloadWorker</code>) and runs as
+background work. Never crashes</td>
+</tr>
+<tr>
+<td><code>POST_NOTIFICATIONS</code> denied (Android 13+)</td>
+<td>Runs in the foreground; the notification is not shown in the
+shade</td>
+</tr>
+<tr>
+<td>Started from the background (Android 12+), e.g. a retry after
+backoff</td>
+<td>Android refuses the foreground start; the run continues as
+background work</td>
+</tr>
+<tr>
+<td>Android 15+</td>
+<td><code>dataSync</code> services are limited to ~6 h per day</td>
+</tr>
+</tbody>
+</table>
+<p>The notification shows progress and a cancel action
+(<code>ForegroundConfig.cancelLabel</code>).</p>
+<h2 id="area-size">Area size</h2>
+<p>The bbox is entirely your choice; there is no hard cap. Reference
+numbers for a 10×10 km box around downtown Salt Lake City (Pixel 8, live
+services, 2026-10-03):</p>
+<table>
+<thead>
+<tr>
+<th>Step</th>
+<th>Time</th>
+<th>Size</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Basemap build lookup (<code>ProtomapsBuilds.latestUrl</code>)</td>
+<td>0.7 s</td>
+<td></td>
+</tr>
+<tr>
+<td>Submit + slicing (SliceOSM)</td>
+<td>0.9 s + 19.5 s</td>
+<td></td>
+</tr>
+<tr>
+<td>PBF download</td>
+<td>0.8 s</td>
+<td>7.8 MB</td>
+</tr>
+<tr>
+<td>Import</td>
+<td>3.2 s</td>
+<td>75.6 MB SQLite (778k nodes, 123k ways, 931 relations)</td>
+</tr>
+<tr>
+<td>Basemap extract z0–15</td>
+<td>0.9 s directories + 1.4 s tiles</td>
+<td>7.6 MB transferred, 6.5 MB PMTiles, 196 tiles</td>
+</tr>
+<tr>
+<td><strong>Total to <code>Ready</code></strong></td>
+<td><strong>27.4 s</strong></td>
+<td><strong>~82 MB on disk</strong></td>
+</tr>
+</tbody>
+</table>
+<p>A refresh of the same area took 14.0 s. Slicing time depends on
+SliceOSM's load. More numbers: <a href="performance.html">Performance
+and sizes</a>.</p>
+<h2 id="privacy">Privacy</h2>
+<p>A download sends the <strong>bbox</strong> to SliceOSM
+(<code>slice.openstreetmap.us</code>, run by OpenStreetMap US) and, with
+a basemap, the byte ranges for that bbox to the basemap host. If the
+bbox is centred on the user, it reveals their approximate location to
+those services. Tell users before the first download (the café app shows
+a one-line note). After that, nothing leaves the device: queries and map
+rendering are local. Set <code>AreaConfig.sliceBaseUrl</code> if you run
+your own SliceOSM instance.</p>
+<h2 id="manifest-and-permissions">Manifest and permissions</h2>
+<table>
+<thead>
+<tr>
+<th>Entry</th>
+<th>From</th>
+<th>Why</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>INTERNET</code>, <code>ACCESS_NETWORK_STATE</code></td>
+<td>Cantino</td>
+<td>Downloads; waiting for a network</td>
+</tr>
+<tr>
+<td><code>WAKE_LOCK</code>, <code>RECEIVE_BOOT_COMPLETED</code>,
+<code>FOREGROUND_SERVICE</code></td>
+<td>WorkManager</td>
+<td>Scheduling (no service type, so no Play declaration)</td>
+</tr>
+<tr>
+<td>Foreground-service <code>dataSync</code> entries</td>
+<td><strong>your app</strong>, opt-in</td>
+<td>Foreground mode only</td>
+</tr>
+</tbody>
+</table>
+<p>An app that only reads an area it ships or imports itself can remove
+<code>INTERNET</code> with <code>tools:node="remove"</code> (keep
+<code>ACCESS_NETWORK_STATE</code> if you use MapLibre, which crashes
+without it; see <a
+href="https://github.com/mvexel/cantino/blob/main/android/sample-app/src/main/AndroidManifest.xml"><code>android/sample-app</code></a>).</p>
+<h2 id="your-own-extracts">Your own extracts</h2>
+<p><code>OsmStore.importArea(input, destination)</code> imports any OSM
+PBF or OSM XML file (no history files, no osmChange) into an area
+database, atomically. Call it off the main thread; it takes seconds for
+a city. Use it when you obtain extracts yourself, then
+<code>OsmStore.open(destination)</code>.</p>
+<script type="module">import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs";mermaid.initialize({startOnLoad:true,theme:(window.matchMedia&&matchMedia("(prefers-color-scheme: dark)").matches)?"dark":"default"});</script>
+</main>
+</body>
+</html>

@@ -1,0 +1,173 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Basemaps - Cantino guide</title>
+<style>
+  :root { color-scheme: light dark; --fg: #1d1d1f; --muted: #5f6368; --bg: #fbfaf7; --code: #efede8; --link: #0b57d0; --line: #d9d6cf; }
+  @media (prefers-color-scheme: dark) { :root { --fg: #e8e6e3; --muted: #a8a49c; --bg: #161616; --code: #262624; --link: #8ab4f8; --line: #3a3a37; } }
+  body { margin: 0; background: var(--bg); color: var(--fg); font: 16px/1.55 system-ui, sans-serif; }
+  nav { max-width: 48rem; margin: 0 auto; padding: 1rem 16px 0; font-size: .9rem; color: var(--muted); }
+  main { max-width: 48rem; margin: 0 auto; padding: 1rem 16px 3rem; }
+  a { color: var(--link); }
+  img { max-width: 100%; height: auto; }
+  pre { background: var(--code); padding: .8rem 1rem; border-radius: 6px; overflow-x: auto; font-size: .88rem; }
+  code { background: var(--code); padding: .05em .3em; border-radius: 4px; font-size: .92em; }
+  pre code { background: none; padding: 0; }
+  pre.mermaid { background: none; text-align: center; }
+  table { border-collapse: collapse; display: block; overflow-x: auto; }
+  th, td { border: 1px solid var(--line); padding: .35rem .6rem; vertical-align: top; text-align: left; }
+  blockquote { margin-left: 0; padding-left: 1rem; border-left: 3px solid var(--line); color: var(--muted); }
+</style>
+</head>
+<body>
+<nav><a href="../">Cantino</a> / <a href="index.html">Guide</a> / <a href="../api/">API reference</a></nav>
+<main>
+<h1 id="basemaps">Basemaps</h1>
+<p>Cantino does not render OSM data or generate tiles on the device. For
+a map under your data, it downloads a <strong>PMTiles</strong> vector
+basemap for the area's bbox next to the OSM data, and you render it with
+<strong>MapLibre Native</strong>.</p>
+<h2 id="choosing-a-source">Choosing a source</h2>
+<p>Pass a <code>BasemapSource</code> to
+<code>AreaManager.download</code>:</p>
+<table>
+<thead>
+<tr>
+<th>Source</th>
+<th>What it does</th>
+<th>Use when</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>BasemapSource.None</code> (default)</td>
+<td>OSM data only</td>
+<td>You don't show a map, or bring your own</td>
+</tr>
+<tr>
+<td><code>BasemapSource.Url(url)</code></td>
+<td>Downloads a ready PMTiles file as is, then validates it (PMTiles
+v3)</td>
+<td>You pre-cut a file per city/region on your server</td>
+</tr>
+<tr>
+<td><code>BasemapSource.Extract(planetUrl, maxZoom = 15, overfetch = 0.05)</code></td>
+<td>Cuts the bbox out of a large remote PMTiles archive on the device,
+with HTTP range requests (same output as
+<code>pmtiles extract</code>)</td>
+<td>You host one big archive (planet or region) and let each device take
+its piece</td>
+</tr>
+</tbody>
+</table>
+<p>The basemap is part of the area: <code>Ready</code> means data
+<strong>and</strong> basemap are published, a refresh replaces both, and
+a refresh with <code>None</code> removes the old basemap. Size for 10×10
+km at z0–15: about 6.5 MB.</p>
+<h2 id="hosting-demo-vs-production">Hosting: demo vs production</h2>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode kotlin"><code class="sourceCode kotlin"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="co">// Demo only: HEADs build.protomaps.com for today&#39;s build, then up to 7 days back.</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a><span class="kw">val</span> <span class="va">planet</span> <span class="op">=</span> ProtomapsBuilds<span class="op">.</span>latestUrl<span class="op">()</span> <span class="co">// suspend; throws IOException if none</span></span></code></pre></div>
+<p><code>ProtomapsBuilds.latestUrl()</code> is for demos and tests.
+Protomaps' daily builds expire after about a week and Protomaps asks
+apps not to hotlink them. For production, <strong>mirror a
+build</strong> to storage you control and pass its URL:</p>
+<ol type="1">
+<li>Download a build once
+(<code>https://build.protomaps.com/YYYYMMDD.pmtiles</code>, over 100 GB
+for the planet), or cut a region with
+<code>pmtiles extract &lt;build-url&gt; region.pmtiles --bbox=…</code>.</li>
+<li>Upload it to any host that supports HTTP range requests: Cloudflare
+R2 (no egress fees, a good fit), S3 + CloudFront, or a plain web
+server.</li>
+<li>Use
+<code>BasemapSource.Extract("https://tiles.example.com/planet.pmtiles")</code>.</li>
+</ol>
+<p>The server must answer range requests with
+<code>206 Partial Content</code>; a server that ignores
+<code>Range</code> (answers <code>200</code>) fails the download with a
+non-retryable error rather than streaming the whole archive.</p>
+<h2 id="showing-it-in-maplibre">Showing it in MapLibre</h2>
+<p><code>AreaInfo.pmtilesUrl</code> is a ready MapLibre source URL
+(<code>pmtiles://file:///data/…/&lt;areaId&gt;.pmtiles</code>; needs a
+MapLibre Native Android with PMTiles support; Cantino is tested with
+13.6.1):</p>
+<div class="sourceCode" id="cb2"><pre
+class="sourceCode kotlin"><code class="sourceCode kotlin"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="kw">val</span> <span class="va">area</span> <span class="op">=</span> areas<span class="op">.</span>publishedArea<span class="op">(</span><span class="st">&quot;city&quot;</span><span class="op">)</span> <span class="op">?:</span> <span class="kw">return</span>  <span class="co">// background thread</span></span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a><span class="kw">val</span> <span class="va">styleJson</span> <span class="op">=</span> assets<span class="op">.</span><span class="kw">open</span><span class="op">(</span><span class="st">&quot;style.json&quot;</span><span class="op">).</span>bufferedReader<span class="op">().</span>use <span class="op">{</span> it<span class="op">.</span>readText<span class="op">()</span> <span class="op">}</span></span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a>    <span class="op">.</span>replace<span class="op">(</span><span class="st">&quot;__PMTILES_URL__&quot;</span><span class="op">,</span> area<span class="op">.</span>pmtilesUrl<span class="op">!!)</span></span>
+<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a>mapView<span class="op">.</span>getMapAsync <span class="op">{</span> map <span class="op">-&gt;</span></span>
+<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a>    map<span class="op">.</span>setStyle<span class="op">(</span>Style<span class="op">.</span>Builder<span class="op">().</span>fromJson<span class="op">(</span>styleJson<span class="op">))</span></span>
+<span id="cb2-6"><a href="#cb2-6" aria-hidden="true" tabindex="-1"></a>    area<span class="op">.</span>metadata<span class="op">?.</span>bbox<span class="op">?.</span>let <span class="op">{</span> b <span class="op">-&gt;</span></span>
+<span id="cb2-7"><a href="#cb2-7" aria-hidden="true" tabindex="-1"></a>        <span class="co">// The basemap covers only the area: keep the camera over it.</span></span>
+<span id="cb2-8"><a href="#cb2-8" aria-hidden="true" tabindex="-1"></a>        map<span class="op">.</span>setLatLngBoundsForCameraTarget<span class="op">(</span>LatLngBounds<span class="op">.</span>from<span class="op">(</span>b<span class="op">.</span>north<span class="op">,</span> b<span class="op">.</span>east<span class="op">,</span> b<span class="op">.</span>south<span class="op">,</span> b<span class="op">.</span>west<span class="op">))</span></span>
+<span id="cb2-9"><a href="#cb2-9" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb2-10"><a href="#cb2-10" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<p>Add your own data as GeoJSON sources on top (the café app builds one
+from a <code>Query</code>; see <a
+href="https://github.com/mvexel/cantino/blob/main/android/cafe-app/src/main/java/lol/osm/cantino/cafe/MapScreen.kt"><code>MapScreen.kt</code></a>).</p>
+<h2 id="a-full-offline-style">A full offline style</h2>
+<p>A complete style needs three things besides the tiles, all of which
+must be on the device to work offline:</p>
+<table>
+<thead>
+<tr>
+<th>Asset</th>
+<th>Where it goes</th>
+<th>Source</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Style JSON (layers)</td>
+<td>app assets, <code>style.json</code></td>
+<td><a
+href="https://github.com/protomaps/basemaps"><code>@protomaps/basemaps</code></a>
+(layers match the Protomaps v4 tile schema)</td>
+</tr>
+<tr>
+<td>Glyphs (fonts for labels)</td>
+<td>app assets, <code>asset://glyphs/{fontstack}/{range}.pbf</code></td>
+<td><a
+href="https://github.com/protomaps/basemaps-assets"><code>protomaps/basemaps-assets</code></a></td>
+</tr>
+<tr>
+<td>Sprites (icons)</td>
+<td>app assets, <code>asset://sprites/light</code></td>
+<td>same</td>
+</tr>
+</tbody>
+</table>
+<p><a
+href="https://github.com/mvexel/cantino/blob/main/scripts/basemap-assets.sh"><code>scripts/basemap-assets.sh</code></a>
+generates all three (Protomaps "light" flavor, English labels, fonts
+subset to Latin, Greek and Cyrillic ranges: 1.7 MB) into
+<code>android/sample-app/build-assets/</code>, with the source URL as
+the placeholder <code>__PMTILES_URL__</code>. Copy
+<code>style.json</code>, <code>glyphs/</code> and <code>sprites/</code>
+into your app's assets (the café app does this with a Gradle
+<code>Sync</code> task) and replace the placeholder at runtime as
+above.</p>
+<p>Without glyphs, keep to layers without text (the quickstart's
+three-layer style). Without the style, MapLibre has nothing to draw.</p>
+<h2 id="checking-a-pmtiles-file">Checking a PMTiles file</h2>
+<div class="sourceCode" id="cb3"><pre
+class="sourceCode kotlin"><code class="sourceCode kotlin"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="kw">val</span> <span class="va">info</span> <span class="op">=</span> PmtilesInfo<span class="op">.</span>read<span class="op">(</span>file<span class="op">)</span> <span class="co">// CantinoException.InvalidFile if not PMTiles v3, .Io if unreadable</span></span>
+<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a>Log<span class="op">.</span>i<span class="op">(</span>TAG<span class="op">,</span> <span class="st">&quot;z</span><span class="ss">${</span>info<span class="op">.</span>minZoom<span class="ss">}</span><span class="st">-</span><span class="ss">${</span>info<span class="op">.</span>maxZoom<span class="ss">}</span><span class="st">, </span><span class="ss">${</span>info<span class="op">.</span>addressedTiles<span class="ss">}</span><span class="st"> tiles, bounds </span><span class="ss">${</span>info<span class="op">.</span>bounds<span class="ss">}</span><span class="st">&quot;</span><span class="op">)</span></span></code></pre></div>
+<p>Useful for basemaps your app ships or downloads itself, and to fit
+the camera to <code>info.bounds</code>.
+<code>AreaMetadata.basemap</code> already records the same facts for
+downloaded basemaps (plus requests and bytes transferred).</p>
+<h2 id="attribution">Attribution</h2>
+<p>Protomaps basemaps are made from OpenStreetMap data (ODbL). Your map
+must show <strong>"© OpenStreetMap contributors"</strong>, and credit
+Protomaps when using its builds. Put it in the source's
+<code>attribution</code> field and keep MapLibre's attribution control
+visible
+(<code>"attribution": "© OpenStreetMap contributors, Protomaps"</code>),
+or show it in your own UI.</p>
+</main>
+</body>
+</html>

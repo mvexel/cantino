@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Concepts - Cantino guide</title>
+<style>
+  :root { color-scheme: light dark; --fg: #1d1d1f; --muted: #5f6368; --bg: #fbfaf7; --code: #efede8; --link: #0b57d0; --line: #d9d6cf; }
+  @media (prefers-color-scheme: dark) { :root { --fg: #e8e6e3; --muted: #a8a49c; --bg: #161616; --code: #262624; --link: #8ab4f8; --line: #3a3a37; } }
+  body { margin: 0; background: var(--bg); color: var(--fg); font: 16px/1.55 system-ui, sans-serif; }
+  nav { max-width: 48rem; margin: 0 auto; padding: 1rem 16px 0; font-size: .9rem; color: var(--muted); }
+  main { max-width: 48rem; margin: 0 auto; padding: 1rem 16px 3rem; }
+  a { color: var(--link); }
+  img { max-width: 100%; height: auto; }
+  pre { background: var(--code); padding: .8rem 1rem; border-radius: 6px; overflow-x: auto; font-size: .88rem; }
+  code { background: var(--code); padding: .05em .3em; border-radius: 4px; font-size: .92em; }
+  pre code { background: none; padding: 0; }
+  pre.mermaid { background: none; text-align: center; }
+  table { border-collapse: collapse; display: block; overflow-x: auto; }
+  th, td { border: 1px solid var(--line); padding: .35rem .6rem; vertical-align: top; text-align: left; }
+  blockquote { margin-left: 0; padding-left: 1rem; border-left: 3px solid var(--line); color: var(--muted); }
+</style>
+</head>
+<body>
+<nav><a href="../">Cantino</a> / <a href="index.html">Guide</a> / <a href="../api/">API reference</a></nav>
+<main>
+<h1 id="concepts">Concepts</h1>
+<h2 id="area">Area</h2>
+<p>An <strong>area</strong> is everything Cantino keeps on the device
+for one rectangle of the world, under an ID your app chooses
+(<code>"city"</code>, <code>"trip-2026"</code>: 1 to 64 characters of
+<code>[A-Za-z0-9_-]</code>).</p>
+<table>
+<thead>
+<tr>
+<th>Part</th>
+<th>File (<code>context.filesDir/cantino-areas/</code>)</th>
+<th>API</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>OSM data: every node, way and relation of the extract, with raw
+tags</td>
+<td><code>&lt;areaId&gt;.sqlite</code></td>
+<td><code>AreaInfo.dataFile</code> → <code>OsmStore.open</code></td>
+</tr>
+<tr>
+<td>Basemap (optional): vector tiles for the same bbox</td>
+<td><code>&lt;areaId&gt;.pmtiles</code></td>
+<td><code>AreaInfo.basemapFile</code>,
+<code>AreaInfo.pmtilesUrl</code></td>
+</tr>
+<tr>
+<td>Metadata: bbox, data age, import report, basemap stats</td>
+<td><code>&lt;areaId&gt;.json</code></td>
+<td><code>AreaInfo.metadata</code></td>
+</tr>
+</tbody>
+</table>
+<p>Each ID has at most one <strong>published</strong> area.
+<code>AreaManager.publishedArea(id)</code> returns it (or null).</p>
+<p>The OSM data is a <strong>raw extract</strong> from <a
+href="https://slice.openstreetmap.us/">SliceOSM</a>: whole objects as
+they are in OpenStreetMap, not a rendering-oriented simplification. Ways
+keep their ordered node lists; relations keep their members and roles.
+Objects that cross the area's edge are included, but the nodes or
+members outside it may be missing.</p>
+<h2 id="snapshot">Snapshot</h2>
+<p>A download captures OpenStreetMap at one moment:
+<code>AreaMetadata.snapshotTimestamp</code> (SliceOSM's replication
+time). Show it to users as the data's age. The data never changes after
+that; to get newer data you <strong>refresh</strong>.</p>
+<h2 id="refresh--full-replace">Refresh = full replace</h2>
+<p>A refresh is just another <code>AreaManager.download(id, …)</code>
+for the same ID. There are no incremental updates in 0.2.0: every part
+(data and basemap) is downloaded and built again, then swapped in.
+Requesting <code>BasemapSource.None</code> on a refresh removes an
+earlier basemap, because the published area always describes one
+download.</p>
+<h2 id="atomic-publish">Atomic publish</h2>
+<pre class="text"><code>download ──&gt; staging dir (.staging/&lt;areaId&gt;/&lt;run&gt;/)   nothing visible yet
+                   │ data imported, basemap built
+                   ▼
+            commit point: journal written  ──&gt;  data + basemap + sidecar renamed into place</code></pre>
+<ul>
+<li>Before the commit point, any failure, cancellation or process death
+leaves the previous area exactly as it was.</li>
+<li>After it, the new area is published completely; if the process dies
+during the few milliseconds of renames, the next access finishes the
+job.</li>
+<li>Readers using <code>AreaManager</code> see either the complete old
+area or the complete new one, never a mix.</li>
+</ul>
+<h2 id="an-open-store-keeps-its-snapshot">An open store keeps its
+snapshot</h2>
+<p>An <code>OsmStore</code> reads the file it opened. When a refresh
+publishes a new file, an already-open store keeps reading the old one
+(the old file stays alive while it is open). To see new data, close the
+store and open <code>publishedArea(id).dataFile</code> again. A
+practical rule: remember <code>AreaMetadata.workId</code> (it changes
+with every refresh) and reopen when it differs. The café app's <a
+href="https://github.com/mvexel/cantino/blob/main/android/cafe-app/src/main/java/lol/osm/cantino/cafe/StoreWorker.kt"><code>StoreWorker</code></a>
+does exactly that.</p>
+<h2 id="what-cantino-is-not">What Cantino is not</h2>
+<ul>
+<li>Not a renderer: draw the basemap with MapLibre Native and your own
+data on top (GeoJSON sources, for example).</li>
+<li>Not an editor: 0.2.0 is read-only.</li>
+<li>Not exact geometry: bbox queries return <strong>candidates</strong>
+(see <a href="querying.html">Querying</a>).</li>
+<li>Not an interpreter of tags: <code>opening_hours</code>,
+<code>outdoor_seating</code> and the like are raw strings; their meaning
+is your app's business.</li>
+</ul>
+</main>
+</body>
+</html>

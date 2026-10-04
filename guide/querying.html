@@ -1,0 +1,351 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Querying - Cantino guide</title>
+<style>
+  :root { color-scheme: light dark; --fg: #1d1d1f; --muted: #5f6368; --bg: #fbfaf7; --code: #efede8; --link: #0b57d0; --line: #d9d6cf; }
+  @media (prefers-color-scheme: dark) { :root { --fg: #e8e6e3; --muted: #a8a49c; --bg: #161616; --code: #262624; --link: #8ab4f8; --line: #3a3a37; } }
+  body { margin: 0; background: var(--bg); color: var(--fg); font: 16px/1.55 system-ui, sans-serif; }
+  nav { max-width: 48rem; margin: 0 auto; padding: 1rem 16px 0; font-size: .9rem; color: var(--muted); }
+  main { max-width: 48rem; margin: 0 auto; padding: 1rem 16px 3rem; }
+  a { color: var(--link); }
+  img { max-width: 100%; height: auto; }
+  pre { background: var(--code); padding: .8rem 1rem; border-radius: 6px; overflow-x: auto; font-size: .88rem; }
+  code { background: var(--code); padding: .05em .3em; border-radius: 4px; font-size: .92em; }
+  pre code { background: none; padding: 0; }
+  pre.mermaid { background: none; text-align: center; }
+  table { border-collapse: collapse; display: block; overflow-x: auto; }
+  th, td { border: 1px solid var(--line); padding: .35rem .6rem; vertical-align: top; text-align: left; }
+  blockquote { margin-left: 0; padding-left: 1rem; border-left: 3px solid var(--line); color: var(--muted); }
+</style>
+</head>
+<body>
+<nav><a href="../">Cantino</a> / <a href="index.html">Guide</a> / <a href="../api/">API reference</a></nav>
+<main>
+<h1 id="querying">Querying</h1>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode kotlin"><code class="sourceCode kotlin"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a>OsmStore<span class="op">.</span><span class="kw">open</span><span class="op">(</span>area<span class="op">.</span>dataFile<span class="op">).</span>use <span class="op">{</span> store <span class="op">-&gt;</span>                       <span class="co">// on a worker thread</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a>    <span class="kw">val</span> <span class="va">cafe</span> <span class="op">=</span> store<span class="op">.</span><span class="kw">get</span><span class="op">(</span>OsmId<span class="op">(</span>OsmKind<span class="op">.</span>NODE<span class="op">,</span> <span class="dv">6611023942</span><span class="op">))</span>          <span class="co">// OsmObject? (null = not in area)</span></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a>    <span class="kw">val</span> <span class="va">inBox</span> <span class="op">=</span> store<span class="op">.</span>query<span class="op">(</span></span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a>        Query<span class="op">(</span></span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a>            tags <span class="op">=</span> listOf<span class="op">(</span>TagFilter<span class="op">.</span>Equals<span class="op">(</span><span class="st">&quot;amenity&quot;</span><span class="op">,</span> <span class="st">&quot;cafe&quot;</span><span class="op">),</span> TagFilter<span class="op">.</span>Exists<span class="op">(</span><span class="st">&quot;outdoor_seating&quot;</span><span class="op">)),</span></span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a>            bbox <span class="op">=</span> Bbox<span class="op">(</span>west <span class="op">=</span> <span class="op">-</span><span class="fl">111.90</span><span class="op">,</span> south <span class="op">=</span> <span class="fl">40.755</span><span class="op">,</span> east <span class="op">=</span> <span class="op">-</span><span class="fl">111.88</span><span class="op">,</span> north <span class="op">=</span> <span class="fl">40.770</span><span class="op">),</span></span>
+<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a>            limit <span class="op">=</span> <span class="dv">500</span><span class="op">,</span></span>
+<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a>        <span class="op">),</span></span>
+<span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a>    <span class="op">)</span></span>
+<span id="cb1-10"><a href="#cb1-10" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<h2 id="threading-rule">Threading rule</h2>
+<p><strong>An <code>OsmStore</code> belongs to the thread that opened
+it.</strong> Every call (<code>get</code>, <code>query</code>,
+<code>wayCoordinates</code>, <code>representativePoint</code>,
+<code>close</code>) must come from that thread; any other thread gets a
+<code>CantinoException.WrongThread</code>, never corrupted state. Calls
+are synchronous.</p>
+<table>
+<thead>
+<tr>
+<th>Pattern</th>
+<th>Code</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>One-shot (open, query, close)</td>
+<td><code>withContext(Dispatchers.IO) { OsmStore.open(f).use { … } }</code>:
+a block without suspension points runs on one thread</td>
+</tr>
+<tr>
+<td>Long-lived store (recommended for apps)</td>
+<td>A single-thread dispatcher that owns the store:
+<code>Executors.newSingleThreadExecutor().asCoroutineDispatcher()</code>,
+and every call goes through
+<code>withContext(thatDispatcher)</code></td>
+</tr>
+</tbody>
+</table>
+<p>Do not hold a store across suspension points on
+<code>Dispatchers.IO</code>: the coroutine can resume on another thread.
+<code>open</code> loads dictionaries, so keep a long-lived store rather
+than opening one per query. Returned objects are plain immutable values:
+they outlive the store and can go to any thread.</p>
+<p>The café app's <a
+href="https://github.com/mvexel/cantino/blob/main/android/cafe-app/src/main/java/lol/osm/cantino/cafe/StoreWorker.kt"><code>StoreWorker</code></a>
+is a complete long-lived pattern, including reopening after a
+refresh.</p>
+<h2 id="query-semantics">Query semantics</h2>
+<p>A <code>Query</code> ANDs every tag filter and, if <code>bbox</code>
+is set, the spatial filter. No filters at all pages through every
+object.</p>
+<table>
+<thead>
+<tr>
+<th>Part</th>
+<th>Behavior</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>TagFilter.Equals(k, v)</code></td>
+<td>Tag <code>k</code> has exactly value <code>v</code>. Raw strings:
+case-sensitive, no trimming</td>
+</tr>
+<tr>
+<td><code>TagFilter.Exists(k)</code></td>
+<td>Tag <code>k</code> is present, any value (an empty value
+counts)</td>
+</tr>
+<tr>
+<td><code>TagFilter.NotExists(k)</code></td>
+<td>Tag <code>k</code> is absent. <strong>Never drives</strong>: it is
+checked on the candidates of another filter. Needs an
+<code>Exists</code>/<code>Equals</code> filter or a <code>bbox</code>
+next to it; alone it throws
+<code>CantinoException.InvalidArgument</code> (it would otherwise scan
+the whole area)</td>
+</tr>
+<tr>
+<td>Several tag filters</td>
+<td>AND. Index-driven from the most selective filter; never a full
+scan</td>
+</tr>
+<tr>
+<td><code>bbox</code> on <strong>tagged nodes</strong></td>
+<td>Exact: the point is inside the box</td>
+</tr>
+<tr>
+<td><code>bbox</code> on <strong>ways and relations</strong></td>
+<td><strong>Candidates</strong>: their bounding box intersects the box.
+A way crossing the box with no node inside is included; one that merely
+bends around the box may be too</td>
+</tr>
+<tr>
+<td><code>bbox</code> on <strong>untagged nodes</strong></td>
+<td><strong>Never returned</strong>: way vertices are not spatially
+indexed. Reach them through their ways
+(<code>store.wayCoordinates(wayId)</code> for coordinates, or
+<code>store.get(way.nodeIds.map { OsmId(OsmKind.NODE, it) })</code> for
+the node objects)</td>
+</tr>
+<tr>
+<td>Objects at the area's edge</td>
+<td>Bounds cover only members present in the extract, so clipped objects
+get smaller boxes and can be missed near the edge</td>
+</tr>
+<tr>
+<td><code>maxCandidates</code> (100 000)</td>
+<td>A bbox that selects more spatial candidates throws
+<code>CantinoException.InvalidArgument</code>; results are never
+silently truncated. Narrow the box or add a tag filter</td>
+</tr>
+<tr>
+<td><code>limit</code></td>
+<td>1..10 000 per call (default 100)</td>
+</tr>
+</tbody>
+</table>
+<p>There is no "OR" and no value pattern matching: run several queries
+and merge, or filter the returned tags in Kotlin.</p>
+<h2 id="pagination">Pagination</h2>
+<p>Results are ordered nodes → ways → relations, then by ascending ID.
+Pass the last result's ID as <code>after</code> to get the next page; a
+page shorter than <code>limit</code> is the last one.</p>
+<div class="sourceCode" id="cb2"><pre
+class="sourceCode kotlin"><code class="sourceCode kotlin"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="kw">fun</span> <span class="fu">OsmStore</span><span class="op">.</span><span class="fu">all</span><span class="op">(</span><span class="va">base</span><span class="op">:</span> <span class="dt">Query</span><span class="op">):</span> <span class="dt">List</span><span class="op">&lt;</span><span class="dt">OsmObject</span><span class="op">&gt;</span> <span class="op">{</span></span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a>    <span class="kw">val</span> <span class="va">out</span> <span class="op">=</span> mutableListOf<span class="op">&lt;</span>OsmObject<span class="op">&gt;()</span></span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a>    <span class="kw">var</span> <span class="va">after</span><span class="op">:</span> OsmId<span class="op">?</span> <span class="op">=</span> <span class="kw">null</span></span>
+<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a>    <span class="cf">while</span> <span class="op">(</span><span class="kw">true</span><span class="op">)</span> <span class="op">{</span></span>
+<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a>        <span class="kw">val</span> <span class="va">page</span> <span class="op">=</span> query<span class="op">(</span>base<span class="op">.</span>copy<span class="op">(</span>after <span class="op">=</span> after<span class="op">))</span></span>
+<span id="cb2-6"><a href="#cb2-6" aria-hidden="true" tabindex="-1"></a>        <span class="kw">out</span> <span class="op">+=</span> page</span>
+<span id="cb2-7"><a href="#cb2-7" aria-hidden="true" tabindex="-1"></a>        <span class="cf">if</span> <span class="op">(</span>page<span class="op">.</span>size <span class="op">&lt;</span> base<span class="op">.</span>limit<span class="op">)</span> <span class="kw">return</span> <span class="kw">out</span></span>
+<span id="cb2-8"><a href="#cb2-8" aria-hidden="true" tabindex="-1"></a>        after <span class="op">=</span> page<span class="op">.</span>last<span class="op">().</span>id</span>
+<span id="cb2-9"><a href="#cb2-9" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb2-10"><a href="#cb2-10" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<h2 id="the-object-model">The object model</h2>
+<pre class="text"><code>OsmObject (sealed)            id: OsmId(kind, id)   tags: Map&lt;String, String&gt;   metadata: ObjectMetadata?
+ ├─ Node      latE7, lonE7 (Int, 1e-7 degrees)  lat, lon (Double)  locationVersion
+ ├─ Way       nodeIds: List&lt;Long&gt;          ordered; repeats significant (closed way repeats its first node)
+ └─ Relation  members: List&lt;Member&gt;        ordered; Member(id: OsmId, role: String), role may be &quot;&quot;</code></pre>
+<ul>
+<li><strong>IDs</strong> are unique only within a kind: node 42 and way
+42 are different objects. Always use <code>OsmId(kind, id)</code>.</li>
+<li><strong>Tags</strong> are exactly as in OpenStreetMap: no
+normalization, no interpretation. A missing key and an empty value are
+different.</li>
+<li><strong>References may dangle.</strong> A way's node or a relation's
+member outside the area (or never in the extract) returns null from
+<code>get</code>. Handle it.</li>
+<li><strong>Coordinates</strong> are stored as integers in 1e-7 degrees;
+<code>lat</code>/<code>lon</code> convert to <code>Double</code>.
+Compare and store <code>latE7</code>/<code>lonE7</code> if you need
+exact values.</li>
+<li><strong>Geometry</strong> is not assembled: a way is a list of node
+IDs; a multipolygon is a relation. The <a
+href="#geometry-helpers">geometry helpers</a> give you a way's
+coordinates and one anchor point per object; build anything else
+yourself.</li>
+</ul>
+<h2 id="geometry-helpers">Geometry helpers</h2>
+<div class="sourceCode" id="cb4"><pre
+class="sourceCode kotlin"><code class="sourceCode kotlin"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a><span class="kw">val</span> <span class="va">line</span><span class="op">:</span> List<span class="op">&lt;</span>Coordinate<span class="op">?&gt;?</span> <span class="op">=</span> store<span class="op">.</span>wayCoordinates<span class="op">(</span>wayId<span class="op">)</span>        <span class="co">// null = way not in area</span></span>
+<span id="cb4-2"><a href="#cb4-2" aria-hidden="true" tabindex="-1"></a><span class="kw">val</span> <span class="va">anchor</span><span class="op">:</span> Coordinate<span class="op">?</span> <span class="op">=</span> store<span class="op">.</span>representativePoint<span class="op">(</span>cafe<span class="op">.</span>id<span class="op">)</span>      <span class="co">// null = nothing in area</span></span>
+<span id="cb4-3"><a href="#cb4-3" aria-hidden="true" tabindex="-1"></a><span class="kw">val</span> <span class="va">objects</span><span class="op">:</span> List<span class="op">&lt;</span>OsmObject<span class="op">?&gt;</span> <span class="op">=</span> store<span class="op">.</span><span class="kw">get</span><span class="op">(</span>listOf<span class="op">(</span>id1<span class="op">,</span> id2<span class="op">,</span> id3<span class="op">))</span>  <span class="co">// input order, null = missing</span></span></code></pre></div>
+<table>
+<thead>
+<tr>
+<th>Call</th>
+<th>Returns</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>wayCoordinates(wayId)</code></td>
+<td>The way's node coordinates in order, repeats kept (a closed way ends
+where it starts), one native call. A <strong>null entry</strong> is a
+node outside the area: do not draw across it. Null for a way not in the
+area</td>
+</tr>
+<tr>
+<td><code>representativePoint(id)</code></td>
+<td>One point for a marker, a label or a distance origin (see below).
+Null when the object, or all of its geometry, is outside the area</td>
+</tr>
+<tr>
+<td><code>get(ids)</code></td>
+<td>One entry per ID in input order, null where the object is not in the
+area. One JNI crossing for the list; at most
+<code>OsmStore.MAX_BATCH</code> (10 000) IDs, more throws
+<code>CantinoException.InvalidArgument</code></td>
+</tr>
+</tbody>
+</table>
+<p><code>Coordinate</code> holds <code>latE7</code>/<code>lonE7</code>
+(exact integers) and <code>lat</code>/<code>lon</code> in degrees.</p>
+<p><strong>The representative point is an anchor, not a guaranteed
+point-on-surface or a true centroid.</strong> For an L-shaped building
+it can lie outside the outline; for a multipolygon it can fall in a
+hole. It is computed in the core as:</p>
+<table>
+<thead>
+<tr>
+<th>Object</th>
+<th>Point</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Node</td>
+<td>Its coordinate</td>
+</tr>
+<tr>
+<td>Closed way (first node = last node)</td>
+<td>Mean of its distinct vertices that are in the area</td>
+</tr>
+<tr>
+<td>Open way</td>
+<td>The point at half the length of the line through its in-area nodes
+(nodes outside the area are skipped, so the line joins across the
+gap)</td>
+</tr>
+<tr>
+<td>Relation</td>
+<td>Mean of the representative points of its distinct in-area members,
+each weighted equally; member relations followed up to 8 levels deep,
+cycles skipped</td>
+</tr>
+</tbody>
+</table>
+<h3 id="metadata">Metadata</h3>
+<p><code>ObjectMetadata</code> = <code>version</code>,
+<code>timestampSeconds</code>, <code>changeset</code>, <code>uid</code>,
+<code>user</code> of the object version in the extract.</p>
+<table>
+<thead>
+<tr>
+<th>Object</th>
+<th><code>metadata</code></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Tagged nodes, all ways and relations</td>
+<td>Always present</td>
+</tr>
+<tr>
+<td>Untagged nodes (way vertices), default import</td>
+<td><strong>null: "metadata not stored"</strong>. Only
+<code>Node.locationVersion</code> (the version at which the node got its
+current position) is kept. This saves a lot of space: most nodes are
+untagged</td>
+</tr>
+<tr>
+<td>Untagged nodes with
+<code>ImportOptions(preserveUntaggedMetadata = true)</code></td>
+<td>Present (larger file)</td>
+</tr>
+</tbody>
+</table>
+<p>For downloaded areas set it through
+<code>AreaConfig(importOptions = ImportOptions(preserveUntaggedMetadata = true))</code>.
+Absent source fields are stored as zero/empty, so a zero may mean
+"unknown".</p>
+<h2 id="errors">Errors</h2>
+<p>Native failures are subtypes of the sealed
+<code>CantinoException</code>; catch the one you can act on, or
+<code>CantinoException</code> for all. The store stays usable after any
+of them.</p>
+<table>
+<thead>
+<tr>
+<th>Exception</th>
+<th>When</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>CantinoException.InvalidArgument</code></td>
+<td>Invalid query (limit outside 1..10 000, invalid bbox, only
+<code>NotExists</code> filters and no bbox), more spatial candidates
+than <code>maxCandidates</code>, a batch <code>get</code> over 10 000
+IDs, a non-positive ID</td>
+</tr>
+<tr>
+<td><code>CantinoException.InvalidFile</code></td>
+<td><code>open</code> of a file that is not an area database or of an
+incompatible format version (re-import / re-download);
+<code>importArea</code> of a corrupt, truncated or non-snapshot input;
+<code>PmtilesInfo.read</code> of a file that is not PMTiles v3</td>
+</tr>
+<tr>
+<td><code>CantinoException.Io</code></td>
+<td>A missing file (<code>open</code> of a path that does not exist, a
+missing import input), permissions, a full disk, read/write errors</td>
+</tr>
+<tr>
+<td><code>CantinoException.WrongThread</code></td>
+<td>A call from a thread other than the store's owner</td>
+</tr>
+<tr>
+<td><code>IllegalStateException</code></td>
+<td>Store already closed; also an internal error of the core (a bug,
+message "Cantino internal error ...": report it)</td>
+</tr>
+</tbody>
+</table>
+<div class="sourceCode" id="cb5"><pre
+class="sourceCode kotlin"><code class="sourceCode kotlin"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a><span class="kw">val</span> <span class="va">store</span> <span class="op">=</span> <span class="cf">try</span> <span class="op">{</span></span>
+<span id="cb5-2"><a href="#cb5-2" aria-hidden="true" tabindex="-1"></a>    OsmStore<span class="op">.</span><span class="kw">open</span><span class="op">(</span>file<span class="op">)</span></span>
+<span id="cb5-3"><a href="#cb5-3" aria-hidden="true" tabindex="-1"></a><span class="op">}</span> <span class="cf">catch</span> <span class="op">(</span>e<span class="op">:</span> CantinoException<span class="op">.</span>InvalidFile<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb5-4"><a href="#cb5-4" aria-hidden="true" tabindex="-1"></a>    redownload<span class="op">()</span>   <span class="co">// not an area, or an old format version</span></span>
+<span id="cb5-5"><a href="#cb5-5" aria-hidden="true" tabindex="-1"></a>    <span class="kw">return</span></span>
+<span id="cb5-6"><a href="#cb5-6" aria-hidden="true" tabindex="-1"></a><span class="op">}</span> <span class="cf">catch</span> <span class="op">(</span>e<span class="op">:</span> CantinoException<span class="op">.</span>Io<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb5-7"><a href="#cb5-7" aria-hidden="true" tabindex="-1"></a>    showError<span class="op">(</span><span class="st">&quot;cannot read offline data: </span><span class="ss">${</span>e<span class="op">.</span>message<span class="ss">}</span><span class="st">&quot;</span><span class="op">)</span></span>
+<span id="cb5-8"><a href="#cb5-8" aria-hidden="true" tabindex="-1"></a>    <span class="kw">return</span></span>
+<span id="cb5-9"><a href="#cb5-9" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<p>The category comes from the native core
+(<code>cantino_last_error_code</code>, see <a href="c-abi.html#errors">C
+ABI</a>); the subtype is never inferred from the message.</p>
+</main>
+</body>
+</html>

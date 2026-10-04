@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html class="no-js" lang="en">
+<head>
+    <meta name="viewport" content="width=device-width, initial-scale=1" charset="UTF-8">
+    <title>CantinoException</title>
+    <link href="../../../images/logo-icon.svg" rel="icon" type="image/svg">
+        <script>var pathToRoot = "../../../";</script>
+    <script>document.documentElement.classList.replace("no-js", "js");</script>
+    <script>const storage = localStorage.getItem("dokka-dark-mode")
+      if (storage == null) {
+        const osDarkSchemePreferred = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches
+        if (osDarkSchemePreferred === true) {
+          document.getElementsByTagName("html")[0].classList.add("theme-dark")
+        }
+      } else {
+        const savedDarkMode = JSON.parse(storage)
+        if (savedDarkMode === true) {
+          document.getElementsByTagName("html")[0].classList.add("theme-dark")
+        }
+      }
+    </script>
+<script type="text/javascript" src="../../../scripts/sourceset_dependencies.js" async="async"></script>
+<link href="../../../styles/style.css" rel="Stylesheet">
+<link href="../../../styles/main.css" rel="Stylesheet">
+<link href="../../../styles/prism.css" rel="Stylesheet">
+<link href="../../../styles/logo-styles.css" rel="Stylesheet">
+<link href="../../../ui-kit/ui-kit.min.css" rel="Stylesheet">
+<script type="text/javascript" src="../../../scripts/safe-local-storage_blocking.js"></script>
+<script type="text/javascript" src="../../../scripts/navigation-loader.js" async="async"></script>
+<script type="text/javascript" src="../../../scripts/platform-content-handler.js" async="async"></script>
+<script type="text/javascript" src="../../../scripts/main.js" defer="defer"></script>
+<script type="text/javascript" src="../../../scripts/prism.js" async="async"></script>
+<script type="text/javascript" src="../../../ui-kit/ui-kit.min.js" defer="defer"></script>
+</head>
+<body>
+<div class="root">
+    <header class="navigation theme-dark" id="navigation-wrapper" role="banner">
+            <a class="library-name--link" href="../../../index.html" tabindex="1">
+                    Cantino
+            </a>
+        <button class="navigation-controls--btn navigation-controls--btn_toc ui-kit_mobile-only" id="toc-toggle"
+                type="button">Toggle table of contents
+        </button>
+        <div class="navigation-controls--break ui-kit_mobile-only"></div>
+        <div class="library-version" id="library-version">
+0.2.0        </div>
+        <div class="navigation-controls">
+        <ul class="filter-section filter-section_loading" id="filter-section" aria-label="Target filter">
+                <button class="platform-tag platform-selector jvm-like" data-active="" aria-pressed="true"
+                        data-filter=":cantino/release">release</button>
+            <div class="dropdown filter-section--dropdown" data-role="dropdown" id="filter-section-dropdown">
+                <button class="button button_dropdown filter-section--dropdown-toggle" role="combobox"
+                        data-role="dropdown-toggle"
+                        aria-controls="platform-tags-listbox"
+                        aria-haspopup="listbox"
+                        aria-expanded="false"
+                        aria-label="Toggle source sets"
+                ></button>
+                <ul role="listbox" id="platform-tags-listbox" class="dropdown--list" data-role="dropdown-listbox" aria-label="Target filter">
+                    <div class="dropdown--header"><span>Target filter</span>
+                        <button class="button" data-role="dropdown-toggle" aria-label="Close target filter">
+                            <i class="ui-kit-icon ui-kit-icon_cross"></i>
+                        </button>
+                    </div>
+                        <li role="option" class="dropdown--option platform-selector-option jvm-like" tabindex="0">
+                            <label class="checkbox">
+                                <input type="checkbox" class="checkbox--input" id=":cantino/release"
+                                       data-filter=":cantino/release"/>
+                                <span class="checkbox--icon"></span>
+                                release
+                            </label>
+                        </li>
+                </ul>
+                <div class="dropdown--overlay"></div>
+            </div>
+        </ul>
+            <button class="navigation-controls--btn navigation-controls--btn_theme" id="theme-toggle-button"
+                    type="button">Switch theme
+            </button>
+            <div class="navigation-controls--btn navigation-controls--btn_search" id="searchBar" role="button">Search in
+                API
+            </div>
+        </div>
+    </header>
+    <div id="container">
+        <nav id="leftColumn" class="sidebar" data-item-type="SECTION" data-item-config='{"defaultSize": 280, "minSize": 200, "maxSize": 400}'>
+            <a class="toc--skip-link" href="#main">Skip to content</a>
+            <div class="dropdown theme-dark_mobile" data-role="dropdown" id="toc-dropdown">
+                <ul role="listbox" id="toc-listbox" class="dropdown--list dropdown--list_toc-list"
+                    data-role="dropdown-listbox" aria-label="Table of contents">
+                    <div class="dropdown--header">
+                            <span>
+                                    Cantino
+                            </span>
+                        <button class="button" data-role="dropdown-toggle" aria-label="Close table of contents">
+                            <i class="ui-kit-icon ui-kit-icon_cross"></i>
+                        </button>
+                    </div>
+                    <div class="sidebar--inner" id="sideMenu"></div>
+                </ul>
+                <div class="dropdown--overlay"></div>
+            </div>
+        </nav>
+        <div id="resizer" class="resizer" data-item-type="BAR"></div>
+        <div id="main" data-item-type="SECTION" role="main">
+<div class="main-content" data-page-type="classlike" id="content" pageIds="Cantino::lol.osm.cantino/CantinoException///PointingToDeclaration//703280004">
+  <div class="breadcrumbs"><a href="../../../index.html">Cantino</a><span class="delimiter">/</span><a href="../index.html">lol.osm.cantino</a><span class="delimiter">/</span><span class="current">CantinoException</span></div>
+  <div class="cover ">
+    <h1 class="cover"><span>Cantino</span><wbr></wbr><span><span>Exception</span></span></h1>
+    <div class="platform-hinted " data-platform-hinted="data-platform-hinted"><div class="content sourceset-dependent-content" data-active="" data-togglable=":cantino/release"><div class="symbol monospace"><span class="token keyword">sealed </span><span class="token keyword">class </span><a href="index.html">CantinoException</a> : <a href="https://developer.android.com/reference/kotlin/java/lang/RuntimeException.html">RuntimeException</a><span class="source-link-wrapper"><span class="source-link" data-element-type="source-link">(<a href="https://github.com/mvexel/cantino/blob/v0.2.0/android/cantino/src/main/java/lol/osm/cantino/OsmStore.kt#L32">source</a>)</span></span></div><p class="paragraph">A failure reported by Cantino's native core, by category. Sealed: catch the subtype you can act on, or <a href="index.html">CantinoException</a> for all of them; a <code class="lang-kotlin">when</code> over it is exhaustive.</p><div class="table--container"><table><thead><tr><th>Subtype</th><th>Meaning</th><th>Typical reaction</th></tr></thead><tbody><tr><td><a href="-invalid-argument/index.html">InvalidArgument</a></td><td>The call was wrong: bad query, bbox, ID or batch size</td><td>Fix the call (a bug, or bad user input)</td></tr><tr><td><a href="-invalid-file/index.html">InvalidFile</a></td><td>A file is not what it should be: not an area, old format, corrupt input, bad PMTiles</td><td>Re-download / re-import</td></tr><tr><td><a href="-io/index.html">Io</a></td><td>The environment failed: missing file, permission, disk full</td><td>Free space, check the path, retry</td></tr><tr><td><a href="-wrong-thread/index.html">WrongThread</a></td><td>A thread-confined handle was used from another thread</td><td>Fix the threading (<a href="../-async-osm-store/index.html">AsyncOsmStore</a>)</td></tr></tbody></table></div><p class="paragraph"><span data-unresolved-link="lol.osm.cantino/CantinoException//#kotlin.String#kotlin.Throwable?/PointingToCallableParameters(0)/">message</span> is a developer-facing description from the core (not localized); <span data-unresolved-link="lol.osm.cantino/CantinoException//#kotlin.String#kotlin.Throwable?/PointingToCallableParameters(1)/">cause</span> is the underlying exception when there is one. An <a href="../-osm-store/index.html">OsmStore</a> remains usable after any of these.</p><p class="paragraph">Not covered: a closed store throws <a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-illegal-state-exception/index.html">IllegalStateException</a>, as do internal errors of the core (a bug or a caught native panic, message starting &quot;Cantino internal error&quot;), which no app can handle meaningfully.</p><p class="paragraph">The native layer throws the subtypes directly (<code class="lang-kotlin">src/android.rs</code>, from the category in <code class="lang-kotlin">cantino_last_error_code</code>); the mapping is never inferred from the message text. Constructors are public so tests and fakes can throw them.</p><h4 class="tableheader">Inheritors</h4><div class="table"><div class="table-row table-row_content" data-filterable-current=":cantino/release" data-filterable-set=":cantino/release"><div class="main-subrow keyValue "><div class=""><span class="inline-flex"><div><a href="-invalid-argument/index.html">InvalidArgument</a></div></span></div><div></div></div></div><div class="table-row table-row_content" data-filterable-current=":cantino/release" data-filterable-set=":cantino/release"><div class="main-subrow keyValue "><div class=""><span class="inline-flex"><div><a href="-invalid-file/index.html">InvalidFile</a></div></span></div><div></div></div></div><div class="table-row table-row_content" data-filterable-current=":cantino/release" data-filterable-set=":cantino/release"><div class="main-subrow keyValue "><div class=""><span class="inline-flex"><div><a href="-io/index.html">Io</a></div></span></div><div></div></div></div><div class="table-row table-row_content" data-filterable-current=":cantino/release" data-filterable-set=":cantino/release"><div class="main-subrow keyValue "><div class=""><span class="inline-flex"><div><a href="-wrong-thread/index.html">WrongThread</a></div></span></div><div></div></div></div></div></div></div>
+  </div>
+  <div class="tabbedcontent">
+    <div class="tabs-section" tabs-section="tabs-section"><button class="section-tab" data-active="" data-togglable="CONSTRUCTOR,TYPE,PROPERTY,FUNCTION">Members</button></div>
+    <div class="tabs-section-body">
+      <div data-togglable="TYPE">
+        <h2 class="tableheader">Types</h2>
+        <div class="table"><a data-name="-1475978129%2FClasslikes%2F703280004" anchor-label="InvalidArgument" id="-1475978129%2FClasslikes%2F703280004" data-filterable-set=":cantino/release"></a>
+          <div class="table-row table-row_content" data-filterable-current=":cantino/release" data-filterable-set=":cantino/release">
+            <div class="main-subrow keyValue ">
+              <div class=""><span class="inline-flex">
+                  <div><a href="-invalid-argument/index.html"><span>Invalid</span><wbr></wbr><span><span>Argument</span></span></a></div>
+<span class="anchor-wrapper"><span class="anchor-icon" pointing-to="-1475978129%2FClasslikes%2F703280004"></span>
+                    <div class="copy-popup-wrapper "><span class="copy-popup-icon"></span><span>Link copied to clipboard</span></div>
+                  </span></span></div>
+              <div>
+                <div class="title">
+                  <div class="platform-hinted " data-platform-hinted="data-platform-hinted"><div class="content sourceset-dependent-content" data-active="" data-togglable=":cantino/release"><div class="symbol monospace"><span class="token keyword">class </span><a href="-invalid-argument/index.html">InvalidArgument</a> <span><span class="token annotation builtin">@</span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin.jvm/-jvm-overloads/index.html"><span class="token annotation builtin">JvmOverloads</span></a> </span><span class="token keyword">constructor</span><span class="token punctuation">(</span><span class="parameters "><span class="parameter ">message<span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-string/index.html">String</a><span class="token punctuation">, </span></span><span class="parameter ">cause<span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-throwable/index.html">Throwable</a><span class="token operator">?</span><span class="token operator"> = </span>null</span></span><span class="token punctuation">)</span> : <a href="index.html">CantinoException</a></div><div class="brief "><p class="paragraph">The caller passed something invalid: a query with a limit outside 1..10 000, only <a href="../-tag-filter/-not-exists/index.html">TagFilter.NotExists</a> filters and no bbox, an invalid bbox, more spatial candidates than <a href="../-query/max-candidates.html">Query.maxCandidates</a>, a batch <a href="../-osm-store/get.html">OsmStore.get</a> over <a href="../-osm-store/-companion/-m-a-x_-b-a-t-c-h.html">OsmStore.MAX_BATCH</a> IDs, a non-positive ID.</p></div></div></div>
+                </div>
+              </div>
+            </div>
+          </div>
+<a data-name="-366022640%2FClasslikes%2F703280004" anchor-label="InvalidFile" id="-366022640%2FClasslikes%2F703280004" data-filterable-set=":cantino/release"></a>
+          <div class="table-row table-row_content" data-filterable-current=":cantino/release" data-filterable-set=":cantino/release">
+            <div class="main-subrow keyValue ">
+              <div class=""><span class="inline-flex">
+                  <div><a href="-invalid-file/index.html"><span>Invalid</span><wbr></wbr><span><span>File</span></span></a></div>
+<span class="anchor-wrapper"><span class="anchor-icon" pointing-to="-366022640%2FClasslikes%2F703280004"></span>
+                    <div class="copy-popup-wrapper "><span class="copy-popup-icon"></span><span>Link copied to clipboard</span></div>
+                  </span></span></div>
+              <div>
+                <div class="title">
+                  <div class="platform-hinted " data-platform-hinted="data-platform-hinted"><div class="content sourceset-dependent-content" data-active="" data-togglable=":cantino/release"><div class="symbol monospace"><span class="token keyword">class </span><a href="-invalid-file/index.html">InvalidFile</a> <span><span class="token annotation builtin">@</span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin.jvm/-jvm-overloads/index.html"><span class="token annotation builtin">JvmOverloads</span></a> </span><span class="token keyword">constructor</span><span class="token punctuation">(</span><span class="parameters "><span class="parameter ">message<span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-string/index.html">String</a><span class="token punctuation">, </span></span><span class="parameter ">cause<span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-throwable/index.html">Throwable</a><span class="token operator">?</span><span class="token operator"> = </span>null</span></span><span class="token punctuation">)</span> : <a href="index.html">CantinoException</a></div><div class="brief "><p class="paragraph">A file is not what it should be: not an area database, an area of an incompatible format version (re-import it), a corrupt, truncated or unreadable OSM PBF/XML input (or one with unsorted or duplicate IDs), a malformed or unsupported PMTiles archive (<a href="../-pmtiles-info/-companion/read.html">PmtilesInfo.read</a>, basemap validation).</p></div></div></div>
+                </div>
+              </div>
+            </div>
+          </div>
+<a data-name="1151352057%2FClasslikes%2F703280004" anchor-label="Io" id="1151352057%2FClasslikes%2F703280004" data-filterable-set=":cantino/release"></a>
+          <div class="table-row table-row_content" data-filterable-current=":cantino/release" data-filterable-set=":cantino/release">
+            <div class="main-subrow keyValue ">
+              <div class=""><span class="inline-flex">
+                  <div><a href="-io/index.html"><span><span>Io</span></span></a></div>
+<span class="anchor-wrapper"><span class="anchor-icon" pointing-to="1151352057%2FClasslikes%2F703280004"></span>
+                    <div class="copy-popup-wrapper "><span class="copy-popup-icon"></span><span>Link copied to clipboard</span></div>
+                  </span></span></div>
+              <div>
+                <div class="title">
+                  <div class="platform-hinted " data-platform-hinted="data-platform-hinted"><div class="content sourceset-dependent-content" data-active="" data-togglable=":cantino/release"><div class="symbol monospace"><span class="token keyword">class </span><a href="-io/index.html">Io</a> <span><span class="token annotation builtin">@</span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin.jvm/-jvm-overloads/index.html"><span class="token annotation builtin">JvmOverloads</span></a> </span><span class="token keyword">constructor</span><span class="token punctuation">(</span><span class="parameters "><span class="parameter ">message<span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-string/index.html">String</a><span class="token punctuation">, </span></span><span class="parameter ">cause<span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-throwable/index.html">Throwable</a><span class="token operator">?</span><span class="token operator"> = </span>null</span></span><span class="token punctuation">)</span> : <a href="index.html">CantinoException</a></div><div class="brief "><p class="paragraph">An I/O failure of the environment: a missing file, a permission problem, a full disk, a read/write error. Opening a path that does not exist is <a href="-io/index.html">Io</a>; opening a file that exists but is no area is <a href="-invalid-file/index.html">InvalidFile</a>.</p></div></div></div>
+                </div>
+              </div>
+            </div>
+          </div>
+<a data-name="434655884%2FClasslikes%2F703280004" anchor-label="WrongThread" id="434655884%2FClasslikes%2F703280004" data-filterable-set=":cantino/release"></a>
+          <div class="table-row table-row_content" data-filterable-current=":cantino/release" data-filterable-set=":cantino/release">
+            <div class="main-subrow keyValue ">
+              <div class=""><span class="inline-flex">
+                  <div><a href="-wrong-thread/index.html"><span>Wrong</span><wbr></wbr><span><span>Thread</span></span></a></div>
+<span class="anchor-wrapper"><span class="anchor-icon" pointing-to="434655884%2FClasslikes%2F703280004"></span>
+                    <div class="copy-popup-wrapper "><span class="copy-popup-icon"></span><span>Link copied to clipboard</span></div>
+                  </span></span></div>
+              <div>
+                <div class="title">
+                  <div class="platform-hinted " data-platform-hinted="data-platform-hinted"><div class="content sourceset-dependent-content" data-active="" data-togglable=":cantino/release"><div class="symbol monospace"><span class="token keyword">class </span><a href="-wrong-thread/index.html">WrongThread</a> <span><span class="token annotation builtin">@</span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin.jvm/-jvm-overloads/index.html"><span class="token annotation builtin">JvmOverloads</span></a> </span><span class="token keyword">constructor</span><span class="token punctuation">(</span><span class="parameters "><span class="parameter ">message<span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-string/index.html">String</a><span class="token punctuation">, </span></span><span class="parameter ">cause<span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-throwable/index.html">Throwable</a><span class="token operator">?</span><span class="token operator"> = </span>null</span></span><span class="token punctuation">)</span> : <a href="index.html">CantinoException</a></div><div class="brief "><p class="paragraph">A thread-confined native handle (an <a href="../-osm-store/index.html">OsmStore</a>, or the basemap engine's internal handles) was used from a thread other than the one that created it. The handle is unaffected; make the call on its owner thread (or use <a href="../-async-osm-store/index.html">AsyncOsmStore</a>).</p></div></div></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div data-togglable="PROPERTY">
+        <h2 class="tableheader">Properties</h2>
+        <div class="table"><a data-name="-654012527%2FProperties%2F703280004" anchor-label="cause" id="-654012527%2FProperties%2F703280004" data-filterable-set=":cantino/release"></a>
+          <div class="table-row table-row_content" data-filterable-current=":cantino/release" data-filterable-set=":cantino/release">
+            <div class="main-subrow keyValue ">
+              <div class=""><span class="inline-flex">
+                  <div><a href="-wrong-thread/index.html#-654012527%2FProperties%2F703280004"><span><span>cause</span></span></a></div>
+<span class="anchor-wrapper"><span class="anchor-icon" pointing-to="-654012527%2FProperties%2F703280004"></span>
+                    <div class="copy-popup-wrapper "><span class="copy-popup-icon"></span><span>Link copied to clipboard</span></div>
+                  </span></span></div>
+              <div>
+                <div class="title">
+                  <div class="platform-hinted " data-platform-hinted="data-platform-hinted"><div class="content sourceset-dependent-content" data-active="" data-togglable=":cantino/release"><div class="symbol monospace"><span class="token keyword">open </span><span class="token keyword">val </span><a href="-wrong-thread/index.html#-654012527%2FProperties%2F703280004">cause</a><span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-throwable/index.html">Throwable</a><span class="token operator">?</span></div></div></div>
+                </div>
+              </div>
+            </div>
+          </div>
+<a data-name="1824300659%2FProperties%2F703280004" anchor-label="message" id="1824300659%2FProperties%2F703280004" data-filterable-set=":cantino/release"></a>
+          <div class="table-row table-row_content" data-filterable-current=":cantino/release" data-filterable-set=":cantino/release">
+            <div class="main-subrow keyValue ">
+              <div class=""><span class="inline-flex">
+                  <div><a href="-wrong-thread/index.html#1824300659%2FProperties%2F703280004"><span><span>message</span></span></a></div>
+<span class="anchor-wrapper"><span class="anchor-icon" pointing-to="1824300659%2FProperties%2F703280004"></span>
+                    <div class="copy-popup-wrapper "><span class="copy-popup-icon"></span><span>Link copied to clipboard</span></div>
+                  </span></span></div>
+              <div>
+                <div class="title">
+                  <div class="platform-hinted " data-platform-hinted="data-platform-hinted"><div class="content sourceset-dependent-content" data-active="" data-togglable=":cantino/release"><div class="symbol monospace"><span class="token keyword">open </span><span class="token keyword">val </span><a href="-wrong-thread/index.html#1824300659%2FProperties%2F703280004">message</a><span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-string/index.html">String</a><span class="token operator">?</span></div></div></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+    <div class="footer">
+        <div class="footer--container">
+            <a href="#content" id="go-to-top-link" class="footer--button footer--button_go-to-top"></a>
+            <div class="footer--content">
+                <div>
+                    <span>Generated by </span>
+                    <a class="footer--link footer--link_external" href="https://github.com/Kotlin/dokka">
+                        Dokka
+                    </a>
+                    <div>Cantino 0.2.0. Map data © OpenStreetMap contributors (ODbL).</div>
+                </div>
+            </div>
+        </div>
+    </div>
+        </div>
+    </div>
+</div>
+</body>
+</html>

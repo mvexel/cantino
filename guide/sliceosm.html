@@ -1,0 +1,152 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SliceOSM in production - Cantino guide</title>
+<style>
+  :root { color-scheme: light dark; --fg: #1d1d1f; --muted: #5f6368; --bg: #fbfaf7; --code: #efede8; --link: #0b57d0; --line: #d9d6cf; }
+  @media (prefers-color-scheme: dark) { :root { --fg: #e8e6e3; --muted: #a8a49c; --bg: #161616; --code: #262624; --link: #8ab4f8; --line: #3a3a37; } }
+  body { margin: 0; background: var(--bg); color: var(--fg); font: 16px/1.55 system-ui, sans-serif; }
+  nav { max-width: 48rem; margin: 0 auto; padding: 1rem 16px 0; font-size: .9rem; color: var(--muted); }
+  main { max-width: 48rem; margin: 0 auto; padding: 1rem 16px 3rem; }
+  a { color: var(--link); }
+  img { max-width: 100%; height: auto; }
+  pre { background: var(--code); padding: .8rem 1rem; border-radius: 6px; overflow-x: auto; font-size: .88rem; }
+  code { background: var(--code); padding: .05em .3em; border-radius: 4px; font-size: .92em; }
+  pre code { background: none; padding: 0; }
+  pre.mermaid { background: none; text-align: center; }
+  table { border-collapse: collapse; display: block; overflow-x: auto; }
+  th, td { border: 1px solid var(--line); padding: .35rem .6rem; vertical-align: top; text-align: left; }
+  blockquote { margin-left: 0; padding-left: 1rem; border-left: 3px solid var(--line); color: var(--muted); }
+</style>
+</head>
+<body>
+<nav><a href="../">Cantino</a> / <a href="index.html">Guide</a> / <a href="../api/">API reference</a></nav>
+<main>
+<h1 id="sliceosm-in-production">SliceOSM in production</h1>
+<p>Cantino downloads its OpenStreetMap data from <a
+href="https://slice.openstreetmap.us/">SliceOSM</a>. This page collects
+what is published about the service, what is not, and how to point
+Cantino at your own instance. Read it before you ship an app that
+depends on the public instance.</p>
+<h2 id="what-it-is">What it is</h2>
+<p>SliceOSM is "a web downloads portal for fresh OpenStreetMap data":
+you submit a bounding box (or a GeoJSON polygon) and get an OSM PBF of
+that area. It is an <a
+href="https://openstreetmap.us/our-work/community-charter-projects/">OpenStreetMap
+US Community Project</a> (formerly Protomaps Extracts). It is built from
+<a href="https://github.com/bdon/OSMExpress">OSM Express</a> (a
+spatially indexed planet database kept current by minutely replication),
+<code>sliceosm-api</code> (a Go web server) and
+<code>sliceosm-frontend</code>; the API and frontend are MIT licensed.
+Sources: the <a
+href="https://github.com/SliceOSM/.github/blob/main/profile/README.md">SliceOSM
+organization README</a> and the <a
+href="https://github.com/SliceOSM/sliceosm-api">sliceosm-api
+README</a>.</p>
+<p>Cantino uses the bbox form of the job protocol
+(<code>POST api/</code>, poll <code>api/&lt;uuid&gt;</code>, fetch
+<code>files/&lt;uuid&gt;.osm.pbf</code>), implemented in
+<code>src/slice.rs</code>.</p>
+<h2 id="terms-and-attribution">Terms and attribution</h2>
+<ul>
+<li><strong>Data licence.</strong> The data is OpenStreetMap data, ODbL.
+Your app must credit "OpenStreetMap contributors"; see the <a
+href="https://github.com/mvexel/cantino/blob/main/README.md#license-and-attribution">attribution
+rules</a> and the <a
+href="https://osmfoundation.org/wiki/Licence/Attribution_Guidelines">OSMF
+guidelines</a>.</li>
+<li><strong>Service terms.</strong> We found no published terms of
+service for API use. There is a <a
+href="https://github.com/SliceOSM/.github/blob/main/PRIVACY.md">privacy
+policy</a> (OpenStreetMap US; it names IP address and usage data
+collected through analytics). Cantino sends the area's bbox, and the
+device's IP address reaches the service; say so in your app's privacy
+policy (<a href="downloading.html#privacy">Downloading areas:
+privacy</a>).</li>
+<li><strong>Credit to SliceOSM itself</strong> is not stated as a
+requirement anywhere we found. Crediting it in an about screen is
+courteous.</li>
+</ul>
+<h2 id="capacity-rate-limits-and-availability">Capacity, rate limits and
+availability</h2>
+<p>Published:</p>
+<ul>
+<li>"The hosted instance is provided on a best-effort, volunteer basis.
+Heavy automated use of the API is discouraged - if you need bulk exports
+please use a weekly planet dump + <a
+href="https://osmcode.org/osmium-tool/">osmium-tool</a> instead."
+(organization README)</li>
+<li>A server-wide <strong>nodes limit</strong> per job. The
+<code>sliceosm-api</code> default is <code>100000000</code> nodes, set
+by the operator; the public instance reports
+<code>"NodesLimit": 100000000</code> on
+<code>GET https://slice.openstreetmap.us/api/</code> (checked
+2026-10-03).</li>
+<li>Task history is kept for 24 hours and result files are meant to be
+deleted after a day (<code>sliceosm-api</code> README).</li>
+</ul>
+<p><strong>Not published</strong> (ask OpenStreetMap US,
+<code>#sliceosm</code> on the <a
+href="https://slack.openstreetmap.us">OSMUS Slack</a>, or <a
+href="mailto:team@openstreetmap.us">team@openstreetmap.us</a>, before
+launch):</p>
+<ul>
+<li>Any per-client or per-IP rate limit, and what "heavy" means.</li>
+<li>An uptime or support commitment (it says best-effort).</li>
+<li>Maximum concurrent jobs and queue behaviour (the status endpoint
+reports <code>QueueSize</code>, nothing more).</li>
+<li>Whether the service stays free or at this address.</li>
+</ul>
+<p>Each download is one slicing job on a volunteer-run server. An app
+that triggers many downloads across many users should talk to
+OpenStreetMap US first, or self-host (below). Cantino retries transient
+failures with backoff and resumes the submitted job instead of
+submitting another (<a href="downloading.html">Downloading
+areas</a>).</p>
+<h2 id="data-lag">Data lag</h2>
+<p>SliceOSM follows minutely replication: "If you've just edited
+OpenStreetMap, a new OSM PBF slice reflects those changes up to the
+minute." How far replication is behind at a given moment is not
+published.</p>
+<p>Cantino records the server's own timestamp as
+<code>AreaMetadata.snapshotTimestamp</code> (the <code>Timestamp</code>
+of the job status). Show that as the data's age, not the download time.
+The data then ages until the app refreshes (full replace; no incremental
+updates in 0.x). See <a href="concepts.html#snapshot">Concepts</a> and
+<a href="editing-apps.html">Editing apps</a>.</p>
+<h2 id="self-hosting">Self-hosting</h2>
+<p><code>AreaConfig.sliceBaseUrl</code> (default
+<code>AreaConfig.DEFAULT_SLICE_BASE_URL</code>,
+<code>https://slice.openstreetmap.us/</code>) is the service root: http
+or https, ending in <code>/</code>. Cantino derives
+<code>&lt;base&gt;api/</code> and <code>&lt;base&gt;files/</code> from
+it, so any server that speaks the same protocol works.</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode kotlin"><code class="sourceCode kotlin"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="kw">val</span> <span class="va">config</span> <span class="op">=</span> AreaConfig<span class="op">(</span>sliceBaseUrl <span class="op">=</span> <span class="st">&quot;https://slice.example.org/&quot;</span><span class="op">)</span></span></code></pre></div>
+<p>To run a compatible server:</p>
+<ol type="1">
+<li>Build an OSM Express database of the planet or your region (<a
+href="https://github.com/bdon/OSMExpress">OSMExpress</a>) and keep it
+current with <code>osmx-update</code> (minutely replication), as the
+<code>sliceosm-api</code> README describes.</li>
+<li>Build and run <code>sliceosm-api</code>
+(<code>./sliceosm-api -bind ADDRESS:PORT -exec PATH_TO_OSMX -filesDir RESULTS_DIR -nodesLimit N</code>;
+the repository has a systemd unit) and serve <code>RESULTS_DIR</code>
+over HTTP.</li>
+<li>Route <code>&lt;base&gt;api/</code> to the API and
+<code>&lt;base&gt;files/</code> to the results directory. The public
+instance's deployment layout is not documented. Cantino's instrumented
+tests (<code>AreaManagerTest</code>) run a small fake server with these
+routes, which shows what the client needs: status JSON with
+<code>Complete</code>, <code>Timestamp</code> and optional progress
+counters, and the PBF at <code>files/&lt;uuid&gt;.osm.pbf</code>.</li>
+</ol>
+<p>The config is copied into each work request, so a download in flight
+keeps the URL it started with. Self-hosting is protocol compatibility,
+tested against a fake server; Cantino has not been run against a
+production self-hosted deployment.</p>
+</main>
+</body>
+</html>
