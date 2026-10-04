@@ -7,10 +7,10 @@ plugins {
 }
 
 android {
-    namespace = "io.github.mvexel.cantino.cafe"
+    namespace = "lol.osm.cantino.cafe"
     compileSdk = 36
     defaultConfig {
-        applicationId = "io.github.mvexel.cantino.cafe"
+        applicationId = "lol.osm.cantino.cafe"
         minSdk = 26
         targetSdk = 36
         versionCode = 1

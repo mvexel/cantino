@@ -59,7 +59,7 @@ android {
 }
 
 dependencies {
-    implementation("io.github.mvexel:cantino:0.1.0")
+    implementation("lol.osm:cantino:0.2.0")
     // Only to show the offline basemap.
     implementation("org.maplibre.gl:android-sdk:13.6.1")
 }
@@ -68,6 +68,11 @@ dependencies {
 The library adds `INTERNET` and `ACCESS_NETWORK_STATE` to your manifest
 (WorkManager adds its own). Nothing else is required; long downloads can opt
 into a [foreground service](docs/guide/downloading.md#foreground-mode).
+
+> 0.1.0 was published as `io.github.mvexel:cantino` (package
+> `io.github.mvexel.cantino`). From 0.2.0 the group is `lol.osm` and the
+> package `lol.osm.cantino`; the 0.1.0 artifacts stay on the Maven repo
+> under the old coordinates.
 
 ## Quickstart
 
@@ -81,7 +86,7 @@ package com.example.cafes
 import android.app.Activity
 import android.os.Bundle
 import android.util.Log
-import io.github.mvexel.cantino.*
+import lol.osm.cantino.*
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
 import org.maplibre.android.MapLibre

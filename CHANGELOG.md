@@ -77,6 +77,11 @@ before 1.0 a minor version may break the API.
 
 ### Breaking
 
+- **Package and Maven coordinates changed**: `io.github.mvexel.cantino` is now
+  `lol.osm.cantino` and `io.github.mvexel:cantino` is now `lol.osm:cantino`
+  (the Android namespace follows; the 0.1.0 artifacts stay where they are).
+  Migrate: replace imports `io.github.mvexel.cantino.*` with
+  `lol.osm.cantino.*`; use the dependency `lol.osm:cantino:0.2.0`.
 - `AreaState.Submitting`, `Importing` and `Cancelled` are classes carrying
   `runId`, no longer objects: write `is AreaState.Cancelled`, not
   `AreaState.Cancelled`. `equals`/`hashCode`/`toString` of every state

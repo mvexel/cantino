@@ -216,7 +216,7 @@ Corporate dependency policies flag the current setup. Outward-facing steps
   hikers
 - [ ] Maven Central with signed artifacts; decide the group ID (personal
   `io.github.mvexel` vs an org namespace) before 1.0
-- [ ] **Namespace → `lol.osm.cantino`** (Martijn 2026-10-03, "if
+- [x] **Namespace → `lol.osm.cantino`** (done 2026-10-03 on v0.2/namespace; 0.1.0 artifacts stay under the old path; Martijn 2026-10-03, "if
   possible"): Kotlin package, Maven group `lol.osm` (artifact `cantino`),
   JNI symbols (`Java_lol_osm_cantino_*` in `src/android.rs`), Dokka/Pages
   paths, README/guide snippets, café/sample apps. Ideally in 0.2 (already
