@@ -68,7 +68,7 @@ that no iOS device or simulator has run yet.
 4. **Import profiles** (§11) — DONE 2026-10-03 (branch `v0.3/import-profiles`). Both dev reviewers; ~75 MB per 10×10 km of
    city is most apps' biggest cost. Done when: profile model decided,
    recorded in area metadata, size savings measured on SLC.
-5. **Large-area evidence** (§14 bench, absorbs the old "import performance
+5. **Large-area evidence** — DONE 2026-10-03 (§14). (§14 bench, absorbs the old "import performance
    & memory", §2b follow-ups). Done when: a 50×50 km rural area is benched
    on the Pixel (disk, peak memory, time) and a size guidance table is
    published. Fix import memory (chunked writes) only if the bench shows
@@ -123,7 +123,7 @@ that no iOS device or simulator has run yet.
 - [x] Android instrumented tests + city bench green on Pixel 8 and emulator through the AAR
 - [x] Update HANDOFF/CLAUDE.md; archive the OSMExpress fork notes
 
-- [ ] Follow-ups from migration: in-app import 8.2 s vs 5.7 s plain binary (cause unknown); import peak memory grows with area (chunk writes); JNI+JSON ≈ 0.08 ms/object; decide whether to drop unused node_way/member_rel (−25 MB)
+- [x] (decided 2026-10-03, see §14: no fix now; node_way/member_rel kept) Follow-ups from migration: in-app import 8.2 s vs 5.7 s plain binary (cause unknown); import peak memory grows with area (chunk writes); JNI+JSON ≈ 0.08 ms/object; decide whether to drop unused node_way/member_rel (−25 MB)
 
 ## 3. iOS vertical slice — restarted 2026-10-03 (see Next up 5)
 - xtool evaluated 2026-10-03 (research): builds/signs SwiftPM apps on Linux and installs on a USB device, but needs Xcode.xip for the SDK (Xcode licence: Apple hardware), no simulator, no iOS test runner (xtool issue #177), binary targets (MapLibre xcframework) and Rust staticlib linking undocumented. Martijn: no Xcode SDK on Linux, so iOS builds go to macOS CI / a Mac
@@ -293,10 +293,20 @@ Corporate dependency policies flag the current setup. Outward-facing steps
 ## 14. Large and rural areas (H)
 Overlaps Next up 3 (import memory). Scope says no country scale; a 50×50 km
 park is in between and needs evidence, not a guess.
-- [ ] Bench a 50×50 km rural area on the Pixel (disk, peak memory, time,
-  SliceOSM limits); publish a size guidance table
+- [x] (2026-10-03) Benched two 50×50 km areas on the Pixel 8
+  (`docs/bench/2026-10-03-{zion,oberland}-50km-pixel8.json`, table in
+  `docs/guide/performance.md` "Large areas"): Zion (sparse) 2.9 MB PBF →
+  27.5 MB, 1.6 s, +68 MB peak, basemap 6.2 MB; Bernese Oberland (dense)
+  26.3 MB PBF → 208.7 MB, 13.4 s, +204 MB peak, basemap 35.2 MB; SliceOSM
+  11 s / 63 s, no limit hit. POI profile: 2.1 / 8.3 MB.
+  **Decision: no chunked-write import-memory fix now** (+204 MB for the
+  dense case is fine on current phones); revisit for 100 km+ dense areas or
+  a low-RAM device target. In-app vs plain-binary import gap still there
+  (SLC 8.24 s in app on 0.2.0) and stays unexplained: not worth chasing at
+  these times. `node_way`/`member_rel` stay (editing needs parent lookups)
 - [ ] Pre-download size estimate (SliceOSM if it offers one, else a density
-  heuristic) so apps can warn before the user commits storage
+  heuristic) so apps can warn before the user commits storage. Note: density
+  varies 8× between the two 50×50 km areas, so a per-km² constant is useless
 
 ## 15. Several files per area (H)
 - [ ] Extra PMTiles per area (raster DEM / hillshade) published in the same
