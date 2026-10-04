@@ -125,7 +125,7 @@ arrives during the final milliseconds of renames is ignored: that run reports
 | An I/O error while publishing | Transient: the next run finishes the commit | `STORAGE` |
 | An unexpected error (a bug), or a failure recorded by Cantino 0.1 | `Failed(retryable = false)` | `UNKNOWN` |
 | Storage low before the run | Not a failure: the work stays `Queued` until storage recovers (WorkManager constraint) | |
-| Process killed | WorkManager reruns the work; a run killed after its commit point is completed on the next access | |
+| Process killed | WorkManager reruns the work, resuming the same SliceOSM job; a run killed after its commit point is completed on the next access. Both are tested with a real `kill -9` (`scripts/kill-test-android.sh`) | |
 
 Branch on `reason` for what to tell the user; `message` is a developer-facing
 description (not localized, not for parsing):

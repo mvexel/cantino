@@ -21,7 +21,9 @@ Verify each `[x]` against the repo before trusting it.
 - Green before any commit: `scripts/check.sh`; `scripts/build-android.sh`;
   `cd android && mise exec -- ./gradlew :cantino:connectedDebugAndroidTest
   :cafe-app:testDebugUnitTest :cafe-app:assembleDebug :sample-app:assembleDebug`
-  on phone + emulator (3 tests skip by design: 2 live, CityBenchmark).
+  on phone + emulator (4 tests skip by design: 2 live, CityBenchmark,
+  ProcessDeathTest). When touching download or commit code also
+  `ANDROID_SERIAL=… scripts/kill-test-android.sh` on both.
 - Release a new version: bump `version` in `Cargo.toml` (single source) +
   CHANGELOG, `scripts/publish-pages.sh --worktree`, then Martijn pushes
   `gh-pages` and the tag (outward-facing steps stay with Martijn).
@@ -34,7 +36,7 @@ that no iOS device or simulator has run yet.
 
 0. **Publish 0.2.0** (Martijn): push `gh-pages`, tag `v0.2.0`. Everything
    below lands after it, as 0.2.x / 0.3.
-1. **Download reliability** (§5). Done when: an instrumented test kills the
+1. **Download reliability** (§5) — DONE 2026-10-03 (`scripts/kill-test-android.sh`). Done when: an instrumented test kills the
    process (`am kill` / `Process.killProcess`) mid-download and mid-commit,
    and the next run resumes or rolls forward with the old area intact,
    green on Pixel 8 + emulator. Byte-range resume and fetching the basemap
@@ -148,8 +150,9 @@ Target onboarding flow (Martijn, 2026-10-03): get location → offer to download
 - [x] Android: WorkManager submit/poll/download/cancel → staged import. `AreaManagerTest` against a fake SliceOSM (happy path; 500s while polling → inline + WorkManager retry resuming the same job; cancel mid-download; corrupt PBF; 400 on submit) green on Pixel 8 and emulator
 - [ ] iOS: URLSession background equivalent (see Next up → iOS)
 - [x] Failed or cancelled replace keeps old area (tested: cancel mid-download, corrupt PBF, cancel during import, basemap 404 after data, server ignoring Range, invalid Url basemap); cancel after the commit point reports Ready (tested)
-- [ ] Kill/restart mid-download recovers: the job checkpoint resume is tested through a WorkManager retry, not an actual process kill; the commit journal roll-forward after a kill mid-commit is not tested by a real kill either
-- [ ] Download follow-ups (`setForeground` DONE in 4a282d3 as opt-in ForegroundConfig): byte-range resume of the PBF and of the basemap (a retried run re-downloads data and basemap; keeping a staged import across retries of the same work ID would save the re-import); basemap could be fetched while SliceOSM slices (now sequential); Rust import staging dirs orphaned by a kill mid-import (now inside the per-run staging dir, which the next run deletes). Fixed 2026-10-03: a cancel during the import no longer publishes
+- [x] (2026-10-03) Kill/restart recovers, tested with real `kill -9`: `scripts/kill-test-android.sh` drives `ProcessDeathTest` in phases against a host fake SliceOSM (`scripts/fake-sliceosm.py`, `adb reverse`). Killed mid-download: the old area stays published and whole, WorkManager reruns the same work, which resumes the checkpointed SliceOSM job (no new submit), downloads again and publishes. Killed right after the commit point: the journal rolls forward on the next read (new area whole, no journal left), the rerun finds its area published and reports Ready without downloading. Green on Pixel 8 and emulator (~1 min per device; run it when touching download/commit code, not part of the default gradle run)
+- [x] Decided 2026-10-03, **not now**: byte-range resume and basemap-while-slicing. At 10×10 km a rerun repeats PBF (7.8 MB, 0.8 s) + import (3.2 s) + basemap (2.3 s) ≈ 6 s, while the expensive part, slicing (19.5 s), is already resumed via the checkpoint; on a 1 MB/s connection resume would save ~15 s per retry, and only on retries. Basemap during slicing would save ~2.3 s of 27.4 s (8%) at the cost of concurrent failure/cancel handling in the worker. Revisit if field reports show slow-network retries
+- [x] (decided above) Download follow-ups (`setForeground` DONE in 4a282d3 as opt-in ForegroundConfig): byte-range resume of the PBF and of the basemap (a retried run re-downloads data and basemap; keeping a staged import across retries of the same work ID would save the re-import); basemap could be fetched while SliceOSM slices (now sequential); Rust import staging dirs orphaned by a kill mid-import (now inside the per-run staging dir, which the next run deletes). Fixed 2026-10-03: a cancel during the import no longer publishes
 
 ## 6. Café reference app
 `android/cafe-app` (2026-10-03); see HANDOFF.md "Café reference app". Evidence: Pixel 8 screenshots `docs/screenshots/2026-10-03-cafe-*.png`.
