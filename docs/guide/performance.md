@@ -48,7 +48,8 @@ about 13 MB per ABI if you use it. Ship only the ABIs you need (`arm64-v8a`, `ar
 ## Rules of thumb
 
 - Disk ≈ 10× the PBF size, and ≈ 75 MB per 10×10 km of dense city, plus
-  ~6.5 MB of basemap at z15.
+  ~6.5 MB of basemap at z15. An [import profile](downloading.md#keep-only-what-you-need-import-profiles)
+  cuts that to ~7% for a POI app.
 - Import memory grows with the area; city scale is fine, country scale is not
   a 0.x goal.
 - Keep one store open; `open` costs more than a query.

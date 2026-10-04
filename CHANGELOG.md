@@ -3,6 +3,17 @@
 All notable changes to Cantino (formerly osm-framework). Versions follow semantic versioning;
 before 1.0 a minor version may break the API.
 
+## Unreleased
+
+### Added
+
+- Import profiles: `ImportOptions(profile = ImportProfile(listOf(KeepRule(kinds, key, values))))`
+  keeps only matching objects plus everything they reference (osmium
+  `tags-filter` semantics). A POI profile makes the 30×15 km Salt Lake City
+  area 8.8 MB instead of 128.5 MB. The profile is recorded in the area
+  (`ImportReport.profile`, Rust `Store::profile`, a new `profile` table that
+  older readers ignore). C ABI: `"profile"` in the import options JSON.
+
 ## 0.2.0 — 2026-10-03
 
 ### Added

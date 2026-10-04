@@ -204,6 +204,42 @@ a 10×10 km box around downtown Salt Lake City (Pixel 8, live services,
 A refresh of the same area took 14.0 s. Slicing time depends on SliceOSM's
 load. More numbers: [Performance and sizes](performance.md).
 
+### Keep only what you need: import profiles
+
+Most of an area file is buildings, way vertices and other objects a given app
+never reads. The basemap draws all of that anyway, so a POI app can keep just
+its POIs:
+
+```kotlin
+val poi = ImportProfile(
+    listOf("amenity", "shop", "tourism", "leisure", "craft", "office", "healthcare", "historic")
+        .map { KeepRule(OsmKind.entries.toSet(), it) },
+)
+AreaConfig(importOptions = ImportOptions(profile = poi))
+```
+
+An object is kept when any rule matches it (`KeepRule(kinds, key, values)`;
+`values = null` accepts any value). References are kept too, as
+`osmium tags-filter` does: a kept way keeps all its nodes, a kept relation
+keeps all its members (nested relations included), and those are stored whole,
+with all their tags. Object counts match osmium's on the extract below.
+
+Measured on the 30×15 km Salt Lake City extract (13 MB PBF), desktop import:
+
+| Profile | Rules | Area file | Import |
+| --- | --- | --- | --- |
+| none | | 128.5 MB | 2.7 s |
+| outdoor | `highway`, `natural`, `waterway`, `landuse`, `leisure`, `tourism`, `amenity`, `place`, `boundary`; route relations | 61.6 MB (48%) | 1.8 s |
+| routing | `highway`; route and restriction relations | 41.4 MB (32%) | 1.4 s |
+| POI | the eight keys above | 8.8 MB (7%) | 0.7 s |
+
+The download itself does not shrink (SliceOSM always sends the full extract);
+the import reads it three times, which is still faster than storing
+everything. A missing object in a filtered area may be filtered out *or*
+outside the area: `AreaInfo.metadata.report.profile` (and
+`ImportReport.profile`) records the profile the file was built with. Changing
+the profile means downloading the area again.
+
 ## Privacy
 
 A download sends the **bbox** to SliceOSM (`slice.openstreetmap.us`, run by

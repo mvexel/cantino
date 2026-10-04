@@ -1,0 +1,19 @@
+<osm version="0.6" generator="cantino-test">
+ <node id="1" lat="40.0" lon="-111.0" version="1"><tag k="amenity" v="cafe"/></node>
+ <node id="2" lat="40.001" lon="-111.0" version="1"/>
+ <node id="3" lat="40.001" lon="-111.001" version="1"/>
+ <node id="4" lat="40.0" lon="-111.001" version="1"/>
+ <node id="5" lat="40.002" lon="-111.0" version="1"><tag k="amenity" v="bench"/></node>
+ <node id="6" lat="40.003" lon="-111.0" version="1"/>
+ <node id="7" lat="40.003" lon="-111.001" version="1"/>
+ <node id="8" lat="40.004" lon="-111.0" version="1"/>
+ <node id="9" lat="40.004" lon="-111.001" version="1"/>
+ <node id="10" lat="40.005" lon="-111.0" version="1"><tag k="shop" v="bakery"/></node>
+ <way id="10" version="1"><nd ref="2"/><nd ref="3"/><nd ref="4"/><nd ref="2"/><tag k="shop" v="supermarket"/></way>
+ <way id="11" version="1"><nd ref="6"/><nd ref="7"/><tag k="building" v="yes"/></way>
+ <way id="12" version="1"><nd ref="7"/><nd ref="9"/><tag k="note" v="kept by reference"/></way>
+ <relation id="20" version="1"><member type="way" ref="12" role="outer"/><member type="relation" ref="21" role=""/><member type="node" ref="999" role="gone"/><tag k="amenity" v="cafe"/><tag k="type" v="multipolygon"/></relation>
+ <relation id="21" version="1"><member type="node" ref="8" role=""/><member type="relation" ref="22" role=""/><tag k="name" v="child"/></relation>
+ <relation id="22" version="1"><member type="relation" ref="21" role="cycle"/><member type="node" ref="9" role=""/></relation>
+ <relation id="23" version="1"><member type="way" ref="11" role=""/><tag k="type" v="route"/></relation>
+</osm>

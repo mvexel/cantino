@@ -528,6 +528,8 @@ internal class AreaDownloadWorker(context: Context, parameters: WorkerParameters
             .putLong("backoff", config.backoffDelayMillis)
             .putBoolean("preserve_untagged_metadata", config.importOptions.preserveUntaggedMetadata)
             .putInt("cache_mb", config.importOptions.cacheMiB)
+            // Small (a few hundred bytes for typical profiles); WorkManager caps Data at 10 KB.
+            .putString("import_profile", config.importOptions.profile?.toJson()?.toString())
             .putInt("basemap_parallelism", config.basemapParallelism)
             .apply {
                 config.foreground?.let { foreground ->
@@ -571,6 +573,7 @@ internal class AreaDownloadWorker(context: Context, parameters: WorkerParameters
                         importOptions = ImportOptions(
                             data.getBoolean("preserve_untagged_metadata", false),
                             data.getInt("cache_mb", ImportOptions().cacheMiB),
+                            data.getString("import_profile")?.let { ImportProfile.fromJson(JSONObject(it)) },
                         ),
                         basemapParallelism = data.getInt("basemap_parallelism", defaults.basemapParallelism),
                         // smallIcon is resolved from foregroundIcon at run time; the ID here is unused.

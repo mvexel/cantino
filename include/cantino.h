@@ -88,8 +88,10 @@ int32_t cantino_representative_point(CantinoStore *store,int32_t kind,int64_t id
 int32_t cantino_query(CantinoStore *store,const char *request,char **json,char **error);
 // Imports an OSM PBF/XML file into an area database at `destination`,
 // published atomically (a failure leaves an existing file intact), and writes
-// {"counts":{"nodes","ways","relations"},"database_bytes"} to *report.
-// Options: {"preserve_untagged_metadata":bool,"cache_mb":MiB}.
+// {"counts":{"nodes","ways","relations"},"database_bytes"[,"profile"]} to *report.
+// Options: {"preserve_untagged_metadata":bool,"cache_mb":MiB,"profile":P}, where
+// P = {"keep":[{"kinds":"nwr","key":"amenity","values":["cafe"]}]} keeps
+// matching objects plus everything they reference ("values" optional).
 // Import options may be NULL for defaults or a JSON object. Import is synchronous
 // and performs disk/CPU work; the adapter must schedule it off the UI thread.
 int32_t cantino_import(const char *input,const char *destination,const char *options,char **report,char **error);

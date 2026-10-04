@@ -49,7 +49,7 @@ pub struct Metadata {
     pub user: String,
 }
 
-/// Coordinates use integer units of 10⁻⁷ degrees to match OSMExpress/libosmium storage without float drift.
+/// Coordinates use integer units of 10⁻⁷ degrees (the OSM API's precision, and PBF's) without float drift.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Coordinate {
     pub lat_e7: i32,

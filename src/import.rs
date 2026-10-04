@@ -34,7 +34,7 @@ use std::{collections::HashMap, path::Path};
 /// Import tuning. Unknown JSON fields are ignored (`serde` default), so options
 /// written for the earlier OSMExpress backend (`map_size`, `sort_pairs`) are
 /// still accepted and have no effect.
-#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct ImportOptions {
     /// Keep version, timestamp, changeset and user for untagged nodes too.
@@ -47,13 +47,99 @@ pub struct ImportOptions {
     /// held by the importer itself (node coordinates, side-index rows) are not
     /// bounded by this.
     pub cache_mb: u32,
+    /// Keep only the objects an app needs (see [`ImportProfile`]). `None`
+    /// imports everything in one pass, as before profiles existed.
+    pub profile: Option<ImportProfile>,
 }
 impl Default for ImportOptions {
     fn default() -> Self {
         Self {
             preserve_untagged_metadata: false,
             cache_mb: 16,
+            profile: None,
         }
+    }
+}
+
+/// A tag-filtered import: which objects an app keeps.
+///
+/// Semantics are those of `osmium tags-filter` with its default reference
+/// closure: an object is kept when any rule matches it; a kept relation keeps
+/// all its members, recursively (relations in relations, cycles included);
+/// a kept way keeps all its nodes, including ways kept through a relation.
+/// Objects kept as references are stored whole, with all their tags.
+///
+/// The result is still a plain area file. An object missing from it may be
+/// filtered out *or* outside the area; the file records its profile
+/// ([`crate::Store::profile`], [`ImportReport::profile`]) so apps can tell
+/// which question they are asking.
+///
+/// JSON form (C ABI, Kotlin): `{"keep":[{"kinds":"nwr","key":"amenity"},
+/// {"kinds":"w","key":"highway","values":["path","footway"]}]}`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ImportProfile {
+    /// Keep rules; an object matching any of them is kept. Must not be empty.
+    pub keep: Vec<KeepRule>,
+}
+
+/// One keep rule of an [`ImportProfile`].
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct KeepRule {
+    /// Object kinds the rule applies to: any of `n`, `w`, `r`, e.g. `"nwr"`.
+    pub kinds: String,
+    /// Tag key the object must have.
+    pub key: String,
+    /// If set, the key's value must be one of these.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub values: Option<Vec<String>>,
+}
+
+impl ImportProfile {
+    /// Checks the rules and puts them in canonical form (kinds as a subset of
+    /// `"nwr"` in that order), so the recorded profile compares by value.
+    pub fn normalized(&self) -> Result<Self> {
+        if self.keep.is_empty() {
+            return Err(Error::Invalid("import profile: keep has no rules".into()));
+        }
+        let mut keep = Vec::with_capacity(self.keep.len());
+        for rule in &self.keep {
+            if rule.key.is_empty() {
+                return Err(Error::Invalid("import profile: empty key".into()));
+            }
+            if rule.kinds.is_empty() || rule.kinds.chars().any(|c| !"nwr".contains(c)) {
+                return Err(Error::Invalid(format!(
+                    "import profile: kinds {:?} must be a non-empty subset of \"nwr\"",
+                    rule.kinds
+                )));
+            }
+            if rule.values.as_ref().is_some_and(Vec::is_empty) {
+                return Err(Error::Invalid(format!(
+                    "import profile: rule for {:?} has an empty values list (omit it to match any value)",
+                    rule.key
+                )));
+            }
+            keep.push(KeepRule {
+                kinds: "nwr".chars().filter(|c| rule.kinds.contains(*c)).collect(),
+                ..rule.clone()
+            });
+        }
+        Ok(Self { keep })
+    }
+
+    /// Whether an object of `kind` with `tags` matches any rule (before
+    /// reference closure).
+    fn matches(&self, kind: i64, tags: &[(&str, &str)]) -> bool {
+        let letter = ['n', 'w', 'r'][kind as usize];
+        self.keep.iter().any(|rule| {
+            rule.kinds.contains(letter)
+                && tags.iter().any(|(key, value)| {
+                    *key == rule.key
+                        && rule
+                            .values
+                            .as_ref()
+                            .is_none_or(|values| values.iter().any(|v| v == value))
+                })
+        })
     }
 }
 
@@ -69,6 +155,9 @@ pub struct ImportReport {
     pub counts: Counts,
     /// Size of the published file.
     pub database_bytes: u64,
+    /// The profile the area was imported with (normalized), if any.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub profile: Option<ImportProfile>,
 }
 
 /// Import into a private sibling directory, validate the result, sync it, then
@@ -89,6 +178,13 @@ pub fn import_area(
 ) -> Result<ImportReport> {
     let input = input.as_ref();
     let destination = destination.as_ref();
+    // Validate before touching the file system: a bad profile is the caller's
+    // mistake and must not leave a staging directory behind.
+    let profile = options
+        .profile
+        .as_ref()
+        .map(ImportProfile::normalized)
+        .transpose()?;
     if destination.file_name().is_none() {
         return Err(Error::Invalid("destination must be a file".into()));
     }
@@ -105,7 +201,7 @@ pub fn import_area(
     let build = staging.path().join("build.sqlite");
     let staged = staging.path().join("area.sqlite");
 
-    let expected = build_database(input, &build, &staged, options)?;
+    let expected = build_database(input, &build, &staged, &options, profile.as_ref())?;
     std::fs::remove_file(&build)?;
 
     // Validate through the same code path readers use.
@@ -129,16 +225,25 @@ pub fn import_area(
     Ok(ImportReport {
         counts,
         database_bytes,
+        profile,
     })
 }
 
 /// Steps 1-3 of the pipeline. Returns the counts the importer wrote.
+///
+/// With a profile, the keep sets are computed first by two extra read-only
+/// passes over the input ([`Keep::scan`]); the import pass then skips every
+/// object outside them. Without one, the input is read exactly once.
 fn build_database(
     input: &Path,
     build: &Path,
     staged: &Path,
-    options: ImportOptions,
+    options: &ImportOptions,
+    profile: Option<&ImportProfile>,
 ) -> Result<Counts> {
+    let keep = profile
+        .map(|profile| Keep::scan(input, profile))
+        .transpose()?;
     let connection = Connection::open(build)?;
     let cache_kib = i64::from(options.cache_mb.max(1)) * 1024;
     connection.execute_batch(&format!(
@@ -153,7 +258,7 @@ fn build_database(
     // cannot be rolled back, which is fine: the file is discarded.
     connection.execute_batch("BEGIN")?;
     let counts = {
-        let mut importer = Importer::new(&connection, options)?;
+        let mut importer = Importer::new(&connection, options.clone(), keep)?;
         input::read(input, &mut importer)?;
         importer.finish()?
     };
@@ -217,6 +322,220 @@ impl Interner {
     }
 }
 
+/// Receives objects from a reader (`input`) in file order: the importer
+/// itself, or one of the profile scans that precede it.
+pub(crate) trait Sink {
+    fn node<'t>(
+        &mut self,
+        id: i64,
+        lat_e7: i32,
+        lon_e7: i32,
+        tags: impl IntoIterator<Item = (&'t str, &'t str)>,
+        info: &SourceInfo,
+    ) -> Result<()>;
+    fn way<'t>(
+        &mut self,
+        id: i64,
+        refs: impl IntoIterator<Item = i64>,
+        tags: impl IntoIterator<Item = (&'t str, &'t str)>,
+        info: &SourceInfo,
+    ) -> Result<()>;
+    /// Members are `(kind, id, role)` with kind codes from `schema`.
+    fn relation<'t>(
+        &mut self,
+        id: i64,
+        members: impl IntoIterator<Item = (i64, i64, &'t str)>,
+        tags: impl IntoIterator<Item = (&'t str, &'t str)>,
+        info: &SourceInfo,
+    ) -> Result<()>;
+}
+
+/// What a profiled import keeps: the profile plus the IDs kept by reference
+/// closure, each sorted and deduplicated for binary search.
+///
+/// Invariant: `ways` and `relations` are complete (an object of those kinds
+/// is stored iff its ID is listed); `nodes` lists only nodes kept as
+/// references, and the import pass additionally keeps nodes the profile
+/// matches directly. Closure never adds nodes after the import pass has seen
+/// them, which is what makes the single filtered pass correct: every way and
+/// relation that could pull a node in was already read by the scans.
+struct Keep {
+    profile: ImportProfile,
+    nodes: Vec<i64>,
+    ways: Vec<i64>,
+    relations: Vec<i64>,
+}
+
+impl Keep {
+    /// Two read-only passes over `input`. Relations come last in a snapshot
+    /// but decide which ways (and nodes) are kept, so they are read first;
+    /// the ways pass then knows its full way set and collects their nodes.
+    ///
+    /// Memory: the member lists of *all* relations (relations are few; about
+    /// 1.5k in a 30×15 km city), plus the kept IDs. Way node lists are not
+    /// held, only the IDs of nodes that kept ways reference.
+    fn scan(input: &Path, profile: &ImportProfile) -> Result<Self> {
+        let mut relations = RelationScan {
+            profile,
+            matched: Vec::new(),
+            members: HashMap::new(),
+        };
+        input::read(input, &mut relations)?;
+        let (relations, member_ways, member_nodes) = relations.closure();
+
+        let mut ways = WayScan {
+            profile,
+            member_ways: &member_ways,
+            ways: Vec::new(),
+            nodes: member_nodes,
+        };
+        input::read(input, &mut ways)?;
+        let WayScan {
+            ways: mut kept_ways,
+            mut nodes,
+            ..
+        } = ways;
+        kept_ways.sort_unstable();
+        kept_ways.dedup();
+        nodes.sort_unstable();
+        nodes.dedup();
+        Ok(Self {
+            profile: profile.clone(),
+            nodes,
+            ways: kept_ways,
+            relations,
+        })
+    }
+}
+
+fn collect_tags<'t>(tags: impl IntoIterator<Item = (&'t str, &'t str)>) -> Vec<(&'t str, &'t str)> {
+    tags.into_iter().collect()
+}
+
+/// Pass 1: relations matched by the profile and every relation's members.
+struct RelationScan<'p> {
+    profile: &'p ImportProfile,
+    matched: Vec<i64>,
+    /// Relation ID → its members as `(kind, id)`.
+    members: HashMap<i64, Vec<(i64, i64)>>,
+}
+
+impl RelationScan<'_> {
+    /// Kept relations (matched ones and, transitively, their child
+    /// relations; the visited set makes cycles terminate), then the ways and
+    /// nodes those relations reference. All three sorted and deduplicated.
+    fn closure(self) -> (Vec<i64>, Vec<i64>, Vec<i64>) {
+        let mut kept = std::collections::HashSet::new();
+        let mut stack = self.matched;
+        let (mut ways, mut nodes) = (Vec::new(), Vec::new());
+        while let Some(relation) = stack.pop() {
+            if !kept.insert(relation) {
+                continue;
+            }
+            // A child missing from the input has no entry: it is "kept" (and
+            // harmlessly listed) but never stored, like any absent member.
+            for &(kind, id) in self.members.get(&relation).into_iter().flatten() {
+                match kind {
+                    NODE => nodes.push(id),
+                    WAY => ways.push(id),
+                    _ => stack.push(id),
+                }
+            }
+        }
+        let mut relations: Vec<i64> = kept.into_iter().collect();
+        for list in [&mut relations, &mut ways, &mut nodes] {
+            list.sort_unstable();
+            list.dedup();
+        }
+        (relations, ways, nodes)
+    }
+}
+
+impl Sink for RelationScan<'_> {
+    fn node<'t>(
+        &mut self,
+        _: i64,
+        _: i32,
+        _: i32,
+        _: impl IntoIterator<Item = (&'t str, &'t str)>,
+        _: &SourceInfo,
+    ) -> Result<()> {
+        Ok(())
+    }
+    fn way<'t>(
+        &mut self,
+        _: i64,
+        _: impl IntoIterator<Item = i64>,
+        _: impl IntoIterator<Item = (&'t str, &'t str)>,
+        _: &SourceInfo,
+    ) -> Result<()> {
+        Ok(())
+    }
+    fn relation<'t>(
+        &mut self,
+        id: i64,
+        members: impl IntoIterator<Item = (i64, i64, &'t str)>,
+        tags: impl IntoIterator<Item = (&'t str, &'t str)>,
+        _: &SourceInfo,
+    ) -> Result<()> {
+        if self.profile.matches(RELATION, &collect_tags(tags)) {
+            self.matched.push(id);
+        }
+        let members = members
+            .into_iter()
+            .map(|(kind, id, _)| (kind, id))
+            .collect();
+        self.members.insert(id, members);
+        Ok(())
+    }
+}
+
+/// Pass 2: kept ways (matched, or members of kept relations) and the nodes
+/// they reference, on top of the nodes kept relations reference directly.
+struct WayScan<'p> {
+    profile: &'p ImportProfile,
+    member_ways: &'p [i64],
+    ways: Vec<i64>,
+    nodes: Vec<i64>,
+}
+
+impl Sink for WayScan<'_> {
+    fn node<'t>(
+        &mut self,
+        _: i64,
+        _: i32,
+        _: i32,
+        _: impl IntoIterator<Item = (&'t str, &'t str)>,
+        _: &SourceInfo,
+    ) -> Result<()> {
+        Ok(())
+    }
+    fn way<'t>(
+        &mut self,
+        id: i64,
+        refs: impl IntoIterator<Item = i64>,
+        tags: impl IntoIterator<Item = (&'t str, &'t str)>,
+        _: &SourceInfo,
+    ) -> Result<()> {
+        if self.member_ways.binary_search(&id).is_ok()
+            || self.profile.matches(WAY, &collect_tags(tags))
+        {
+            self.ways.push(id);
+            self.nodes.extend(refs);
+        }
+        Ok(())
+    }
+    fn relation<'t>(
+        &mut self,
+        _: i64,
+        _: impl IntoIterator<Item = (i64, i64, &'t str)>,
+        _: impl IntoIterator<Item = (&'t str, &'t str)>,
+        _: &SourceInfo,
+    ) -> Result<()> {
+        Ok(())
+    }
+}
+
 struct TagRow {
     key: u32,
     value: u32,
@@ -234,6 +553,9 @@ struct TagRow {
 /// use binary search over the IDs seen so far.
 pub(crate) struct Importer<'c> {
     options: ImportOptions,
+    /// Set for a profiled import: objects outside it are skipped after the
+    /// order checks (so a filtered import validates the input like a full one).
+    keep: Option<Keep>,
     insert_node: Statement<'c>,
     insert_way: Statement<'c>,
     insert_relation: Statement<'c>,
@@ -263,9 +585,10 @@ pub(crate) struct Importer<'c> {
 }
 
 impl<'c> Importer<'c> {
-    fn new(connection: &'c Connection, options: ImportOptions) -> Result<Self> {
+    fn new(connection: &'c Connection, options: ImportOptions, keep: Option<Keep>) -> Result<Self> {
         Ok(Self {
             options,
+            keep,
             insert_node: connection.prepare("INSERT INTO nodes VALUES(?1, ?2, ?3, ?4, ?5)")?,
             insert_way: connection.prepare("INSERT INTO ways VALUES(?1, ?2, ?3)")?,
             insert_relation: connection.prepare("INSERT INTO relations VALUES(?1, ?2, ?3)")?,
@@ -382,7 +705,8 @@ impl<'c> Importer<'c> {
         Ok(())
     }
 
-    pub(crate) fn node<'t>(
+    /// Stores one node (already admitted and, for a profile, kept).
+    fn store_node<'t>(
         &mut self,
         id: i64,
         lat_e7: i32,
@@ -390,7 +714,6 @@ impl<'c> Importer<'c> {
         tags: impl IntoIterator<Item = (&'t str, &'t str)>,
         info: &SourceInfo,
     ) -> Result<()> {
-        self.admit(NODE, id, info.visible)?;
         Coordinate::new(lat_e7, lon_e7)
             .map_err(|_| Error::Input(format!("node {id} has coordinates outside WGS84")))?;
         if info.version < 0 || info.version > i64::from(i32::MAX) {
@@ -425,14 +748,14 @@ impl<'c> Importer<'c> {
             .map(|index| self.node_points[index])
     }
 
-    pub(crate) fn way<'t>(
+    /// Stores one way (already admitted and, for a profile, kept).
+    fn store_way<'t>(
         &mut self,
         id: i64,
         refs: impl IntoIterator<Item = i64>,
         tags: impl IntoIterator<Item = (&'t str, &'t str)>,
         info: &SourceInfo,
     ) -> Result<()> {
-        self.admit(WAY, id, info.visible)?;
         self.payload.clear();
         self.tags(WAY, id, tags)?;
         self.metadata(info, true)?;
@@ -461,15 +784,14 @@ impl<'c> Importer<'c> {
         Ok(())
     }
 
-    /// Members are `(kind, id, role)` with kind codes from `schema`.
-    pub(crate) fn relation<'t>(
+    /// Stores one relation (already admitted and, for a profile, kept).
+    fn store_relation<'t>(
         &mut self,
         id: i64,
         members: impl IntoIterator<Item = (i64, i64, &'t str)>,
         tags: impl IntoIterator<Item = (&'t str, &'t str)>,
         info: &SourceInfo,
     ) -> Result<()> {
-        self.admit(RELATION, id, info.visible)?;
         self.payload.clear();
         self.tags(RELATION, id, tags)?;
         self.metadata(info, true)?;
@@ -585,6 +907,12 @@ impl<'c> Importer<'c> {
         ] {
             insert.execute(params![key, value as i64])?;
         }
+        if let Some(keep) = &self.keep {
+            connection.execute(
+                "INSERT INTO profile VALUES(?1)",
+                [serde_json::to_string(&keep.profile)?],
+            )?;
+        }
         Ok(counts)
     }
 
@@ -611,6 +939,65 @@ impl<'c> Importer<'c> {
                 break;
             }
         }
+    }
+}
+
+impl Sink for Importer<'_> {
+    fn node<'t>(
+        &mut self,
+        id: i64,
+        lat_e7: i32,
+        lon_e7: i32,
+        tags: impl IntoIterator<Item = (&'t str, &'t str)>,
+        info: &SourceInfo,
+    ) -> Result<()> {
+        self.admit(NODE, id, info.visible)?;
+        let Some(keep) = &self.keep else {
+            return self.store_node(id, lat_e7, lon_e7, tags, info);
+        };
+        // Only a profiled import collects the tags first: it must see them
+        // to decide, and the unfiltered path stays allocation-free here.
+        let tags = collect_tags(tags);
+        if keep.nodes.binary_search(&id).is_err() && !keep.profile.matches(NODE, &tags) {
+            return Ok(());
+        }
+        self.store_node(id, lat_e7, lon_e7, tags, info)
+    }
+
+    fn way<'t>(
+        &mut self,
+        id: i64,
+        refs: impl IntoIterator<Item = i64>,
+        tags: impl IntoIterator<Item = (&'t str, &'t str)>,
+        info: &SourceInfo,
+    ) -> Result<()> {
+        self.admit(WAY, id, info.visible)?;
+        if self
+            .keep
+            .as_ref()
+            .is_some_and(|keep| keep.ways.binary_search(&id).is_err())
+        {
+            return Ok(());
+        }
+        self.store_way(id, refs, tags, info)
+    }
+
+    fn relation<'t>(
+        &mut self,
+        id: i64,
+        members: impl IntoIterator<Item = (i64, i64, &'t str)>,
+        tags: impl IntoIterator<Item = (&'t str, &'t str)>,
+        info: &SourceInfo,
+    ) -> Result<()> {
+        self.admit(RELATION, id, info.visible)?;
+        if self
+            .keep
+            .as_ref()
+            .is_some_and(|keep| keep.relations.binary_search(&id).is_err())
+        {
+            return Ok(());
+        }
+        self.store_relation(id, members, tags, info)
     }
 }
 

@@ -389,17 +389,82 @@ public data class Query(
  * the database noticeably smaller. [cacheMiB] is SQLite's page cache during
  * the import in MiB: resident memory, not a cap on the import's total memory.
  *
+ * [profile] keeps only the objects the app needs (see [ImportProfile]); a POI
+ * profile makes a city area about 15× smaller.
+ *
  * @property preserveUntaggedMetadata Keep full editing metadata for untagged nodes (larger file).
  * @property cacheMiB SQLite page cache during the import, in MiB.
+ * @property profile Tag filter for the import; null imports everything.
  */
 public data class ImportOptions(
     val preserveUntaggedMetadata: Boolean = false,
     val cacheMiB: Int = 16,
+    val profile: ImportProfile? = null,
 ) {
     internal fun toJson(): String = JSONObject()
         .put("preserve_untagged_metadata", preserveUntaggedMetadata)
         .put("cache_mb", cacheMiB)
+        .apply { profile?.let { put("profile", it.toJson()) } }
         .toString()
+}
+
+/**
+ * A tag-filtered import: which objects an area keeps.
+ *
+ * An object is kept when any rule in [keep] matches it. References are
+ * closed over, as `osmium tags-filter` does by default: a kept relation keeps
+ * all its members (recursively, nested relations included), a kept way keeps
+ * all its nodes. Objects kept as references are stored whole, with all tags.
+ *
+ * Measured on a 30×15 km Salt Lake City extract (128.5 MB unfiltered):
+ * points of interest (`amenity`, `shop`, `tourism`, `leisure`, `craft`,
+ * `office`, `healthcare`, `historic`) 8.8 MB; routing (`highway` plus route
+ * and restriction relations) 41.4 MB; outdoor 61.6 MB.
+ *
+ * An object missing from a filtered area may be filtered out *or* outside
+ * the area; [ImportReport.profile] says which filter the area was built with.
+ *
+ * @property keep Keep rules; must not be empty.
+ */
+public data class ImportProfile(val keep: List<KeepRule>) {
+    internal fun toJson(): JSONObject = JSONObject().put("keep", JSONArray().apply { keep.forEach { put(it.toJson()) } })
+
+    internal companion object {
+        fun fromJson(json: JSONObject): ImportProfile {
+            val rules = json.getJSONArray("keep")
+            return ImportProfile((0 until rules.length()).map { KeepRule.fromJson(rules.getJSONObject(it)) })
+        }
+    }
+}
+
+/**
+ * One rule of an [ImportProfile]: objects of [kinds] that have tag [key]
+ * (with a value in [values], if given).
+ *
+ * @property kinds Object kinds the rule applies to; must not be empty.
+ * @property key Tag key the object must have.
+ * @property values Accepted values; null accepts any value. Must not be empty if given.
+ */
+public data class KeepRule(
+    val kinds: Set<OsmKind>,
+    val key: String,
+    val values: List<String>? = null,
+) {
+    internal fun toJson(): JSONObject = JSONObject()
+        .put("kinds", OsmKind.entries.filter { it in kinds }.joinToString("") { it.wire.take(1) })
+        .put("key", key)
+        .apply { values?.let { put("values", JSONArray(it)) } }
+
+    internal companion object {
+        fun fromJson(json: JSONObject): KeepRule {
+            val kinds = json.getString("kinds")
+            return KeepRule(
+                OsmKind.entries.filter { it.wire.take(1) in kinds }.toSet(),
+                json.getString("key"),
+                json.optJSONArray("values")?.let { array -> (0 until array.length()).map { array.getString(it) } },
+            )
+        }
+    }
 }
 
 /** Number of objects per kind. */
@@ -425,23 +490,27 @@ public class ImportReport internal constructor(
     public val counts: ObjectCounts,
     /** Size of the published database file in bytes. */
     public val databaseBytes: Long,
+    /** The profile the area was filtered with (normalized), or null for a full import. */
+    public val profile: ImportProfile? = null,
 ) {
     override fun equals(other: Any?): Boolean = this === other || other is ImportReport &&
-        counts == other.counts && databaseBytes == other.databaseBytes
+        counts == other.counts && databaseBytes == other.databaseBytes && profile == other.profile
 
-    override fun hashCode(): Int = hash(counts, databaseBytes)
+    override fun hashCode(): Int = hash(counts, databaseBytes, profile)
 
-    override fun toString(): String = "ImportReport(counts=$counts, databaseBytes=$databaseBytes)"
+    override fun toString(): String = "ImportReport(counts=$counts, databaseBytes=$databaseBytes, profile=$profile)"
 
     /** Same shape as the Rust report, so it round-trips through [fromJson]. */
     internal fun toJson(): JSONObject = JSONObject()
         .put("counts", JSONObject().put("nodes", counts.nodes).put("ways", counts.ways).put("relations", counts.relations))
         .put("database_bytes", databaseBytes)
+        .apply { profile?.let { put("profile", it.toJson()) } }
 
     internal companion object {
         fun fromJson(json: JSONObject) = ImportReport(
             json.getJSONObject("counts").let { ObjectCounts(it.getLong("nodes"), it.getLong("ways"), it.getLong("relations")) },
             json.getLong("database_bytes"),
+            json.optJSONObject("profile")?.let { ImportProfile.fromJson(it) },
         )
     }
 }

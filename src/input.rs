@@ -1,4 +1,5 @@
-//! Streaming readers for OSM snapshot files. Both feed `Importer` in file
+//! Streaming readers for OSM snapshot files. Both feed a `Sink` (the
+//! `Importer`, or a profile scan before it) in file
 //! order and hold at most one PBF block or one XML element in memory.
 //!
 //! Readers only translate formats. Content rules (ID order, duplicates,
@@ -6,7 +7,7 @@
 //! so PBF and XML enforce exactly the same contract.
 use crate::{
     Error, Result,
-    import::{Importer, SourceInfo},
+    import::{Sink, SourceInfo},
     schema::{NODE, RELATION, WAY},
 };
 use osmpbf::{BlobDecode, BlobReader, Element, RelMemberType};
@@ -17,7 +18,7 @@ use quick_xml::{
 use std::{fs::File, io::BufReader, io::Read, path::Path};
 
 /// Sniffs the format and streams `path` into `importer`.
-pub(crate) fn read(path: &Path, importer: &mut Importer) -> Result<()> {
+pub(crate) fn read(path: &Path, importer: &mut impl Sink) -> Result<()> {
     let mut head = [0u8; 64];
     let length = File::open(path)?.read(&mut head)?;
     let text = head[..length]
@@ -54,7 +55,7 @@ fn pbf_error(error: osmpbf::Error) -> Error {
 /// because ignoring a required feature could misread the data.
 const SUPPORTED_FEATURES: [&str; 2] = ["OsmSchema-V0.6", "DenseNodes"];
 
-fn read_pbf(path: &Path, importer: &mut Importer) -> Result<()> {
+fn read_pbf(path: &Path, importer: &mut impl Sink) -> Result<()> {
     let reader = BlobReader::from_path(path).map_err(pbf_error)?;
     let mut header = false;
     for blob in reader {
@@ -96,7 +97,7 @@ fn read_pbf(path: &Path, importer: &mut Importer) -> Result<()> {
     Ok(())
 }
 
-fn pbf_element(element: Element, importer: &mut Importer) -> Result<()> {
+fn pbf_element(element: Element, importer: &mut impl Sink) -> Result<()> {
     match element {
         Element::DenseNode(node) => {
             // Dense nodes without an info block carry no metadata; zeros are
@@ -190,7 +191,7 @@ fn xml_error(error: impl std::fmt::Display) -> Error {
     Error::Input(format!("XML: {error}"))
 }
 
-fn read_xml(path: &Path, importer: &mut Importer) -> Result<()> {
+fn read_xml(path: &Path, importer: &mut impl Sink) -> Result<()> {
     let file = BufReader::with_capacity(1 << 16, File::open(path)?);
     let mut reader = quick_xml::Reader::from_reader(file);
     let mut buffer = Vec::new();
@@ -367,7 +368,7 @@ fn child(pending: &mut Pending, name: &str, element: &BytesStart) -> Result<()> 
     Ok(())
 }
 
-fn flush(pending: &mut Pending, importer: &mut Importer) -> Result<()> {
+fn flush(pending: &mut Pending, importer: &mut impl Sink) -> Result<()> {
     let info = SourceInfo {
         version: pending.version,
         timestamp: pending.timestamp,

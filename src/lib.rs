@@ -17,7 +17,7 @@ mod model;
 mod schema;
 pub mod slice;
 mod store;
-pub use import::{Counts, ImportOptions, ImportReport, import_area};
+pub use import::{Counts, ImportOptions, ImportProfile, ImportReport, KeepRule, import_area};
 pub use model::*;
 pub use store::*;
 

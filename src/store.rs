@@ -288,6 +288,29 @@ impl Store {
         Ok(counts)
     }
 
+    /// The [`ImportProfile`] this area was imported with, or `None` for an
+    /// unfiltered import (including files written before profiles existed,
+    /// which have no `profile` table).
+    pub fn profile(&self) -> Result<Option<ImportProfile>> {
+        let has_table: bool = self.connection.query_row(
+            "SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'profile')",
+            [],
+            |row| row.get(0),
+        )?;
+        if !has_table {
+            return Ok(None);
+        }
+        let mut statement = self.connection.prepare_cached("SELECT json FROM profile")?;
+        let mut rows = statement.query([])?;
+        let Some(row) = rows.next()? else {
+            return Ok(None);
+        };
+        let json: String = row.get(0)?;
+        serde_json::from_str(&json)
+            .map(Some)
+            .map_err(|error| Error::Corrupt(format!("recorded import profile: {error}")))
+    }
+
     /// Recorded counts, checked against the tables (a full pass over each
     /// table's B-tree). Import uses this before publishing.
     pub(crate) fn verify_counts(&self) -> Result<Counts> {

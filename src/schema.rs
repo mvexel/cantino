@@ -17,6 +17,7 @@
 //! tag_index  (k, v, kind, id)         WITHOUT ROWID; k = dict id, v = raw text
 //! geo        rtree_i32(id, minx, maxx, miny, maxy)   id = osm_id*4 + kind
 //! area       (key PK, value)          object counts written at import
+//! profile    (json)                   0 or 1 row: the import profile, if any
 //! ```
 //!
 //! `node_way` and `member_rel` are not queried by the current read-only API.
@@ -28,6 +29,9 @@
 //! at least one resolvable node, and every relation with at least one
 //! resolvable member. Untagged nodes (way vertices) are deliberately absent:
 //! they are most of the file and are reached through their ways.
+//!
+//! `profile` was added without a format bump: older readers ignore unknown
+//! tables, and a file without the table (or row) was imported unfiltered.
 //!
 //! The header's `application_id` and `user_version` identify the format so a
 //! foreign or older file fails at open instead of returning garbage.
@@ -58,5 +62,6 @@ CREATE TABLE member_rel(member INTEGER, rel_id INTEGER, PRIMARY KEY(member, rel_
 CREATE TABLE tag_index(k INTEGER, v TEXT, kind INTEGER, id INTEGER,
                        PRIMARY KEY(k, v, kind, id)) WITHOUT ROWID;
 CREATE VIRTUAL TABLE geo USING rtree_i32(id, minx, maxx, miny, maxy);
+CREATE TABLE profile(json TEXT NOT NULL);
 CREATE TABLE area(key TEXT PRIMARY KEY, value INTEGER NOT NULL) WITHOUT ROWID;
 ";

@@ -65,7 +65,7 @@ that no iOS device or simulator has run yet.
    c. Café demo builds for iOS.
    Linux part done: parity corpus + Rust, Kotlin and Swift runners
    (240 calls byte-identical), Swift package tested on Linux.
-4. **Import profiles** (§11) — both dev reviewers; ~75 MB per 10×10 km of
+4. **Import profiles** (§11) — DONE 2026-10-03 (branch `v0.3/import-profiles`). Both dev reviewers; ~75 MB per 10×10 km of
    city is most apps' biggest cost. Done when: profile model decided,
    recorded in area metadata, size savings measured on SLC.
 5. **Large-area evidence** (§14 bench, absorbs the old "import performance
@@ -233,9 +233,22 @@ this itself today. Replaces 0.2's "way geometry / batch get" candidate (§7).
 
 ## 11. Import profiles / tag-filtered import (both)
 ~75 MB per 10×10 km of city; POI-only and outdoor apps want a fraction.
-- [ ] Decide the profile model (keep-tag predicates plus referential
-  closure: kept ways keep their nodes), record the profile in area metadata,
-  measure size savings on SLC (POIs only, "outdoor" without buildings)
+- [x] (2026-10-03) Profile model: `ImportProfile { keep: [KeepRule { kinds, key, values? }] }`,
+  `osmium tags-filter` semantics with reference closure (kept relations keep
+  members recursively, cycle-safe; kept ways keep their nodes; references
+  stored whole). Two read-only scans (relations, then ways) compute the keep
+  sets, then the normal import pass skips the rest; no profile = one pass as
+  before. Recorded in a new `profile` table (no format bump: old readers
+  ignore it), `ImportReport.profile`, `Store::profile`, and so in the area
+  sidecar on Android. Kotlin `ImportProfile`/`KeepRule`, carried through the
+  WorkRequest. Not in the Swift adapter / parity corpus yet (those live on
+  `ios/main`; add when it merges)
+- [x] Measured on SLC 30×15 km (13 MB PBF, desktop): none 128.5 MB / 2.7 s;
+  outdoor 61.6 MB / 1.8 s; routing 41.4 MB / 1.4 s; POI 8.8 MB / 0.7 s.
+  Object counts identical to `osmium tags-filter` for all three profiles
+  (POI 97,522 / 8,745 / 103)
+- [ ] Download stays full size (SliceOSM has no tag filter); only worth
+  pursuing if download size becomes the complaint
 
 ## 12. Distribution and platforms (both)
 Corporate dependency policies flag the current setup. Outward-facing steps

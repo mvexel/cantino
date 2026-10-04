@@ -1,15 +1,24 @@
 use cantino::*;
 
 // Desktop harness around the same headless API intended for mobile bindings.
-// Run `cargo run --release --example offline -- import input.osm.pbf area.sqlite`,
+// Run `cargo run --release --example offline -- import input.osm.pbf area.sqlite [profile.json]`,
 // then `cargo run --release --example offline -- cafes area.sqlite` with
 // connectivity disabled. `offline get area.sqlite node 1` prints one raw object.
 fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
     let args: Vec<String> = std::env::args().collect();
     match args.get(1).map(String::as_str) {
-        Some("import") if args.len() == 4 => {
+        // Optional 4th argument: an import profile as JSON, e.g.
+        // '{"keep":[{"kinds":"nwr","key":"amenity"}]}'.
+        Some("import") if args.len() == 4 || args.len() == 5 => {
+            let options = ImportOptions {
+                profile: args
+                    .get(4)
+                    .map(|json| serde_json::from_str(json))
+                    .transpose()?,
+                ..ImportOptions::default()
+            };
             let start = std::time::Instant::now();
-            let report = import_area(&args[2], &args[3], ImportOptions::default())?;
+            let report = import_area(&args[2], &args[3], options)?;
             println!("{report:?} in {:.2} s", start.elapsed().as_secs_f64());
         }
         Some("cafes") if args.len() == 3 => {
