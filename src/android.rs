@@ -815,7 +815,7 @@ pub extern "system" fn Java_lol_osm_cantino_NativeBridge_areaCommit<'local>(
     root: JString<'local>,
     area_id: JString<'local>,
     work_id: JString<'local>,
-    has_basemap: jboolean,
+    parts: jint,
     hook: JObject<'local>,
 ) -> jboolean {
     env.with_env(|env| -> Result<jboolean, BridgeError> {
@@ -832,7 +832,7 @@ pub extern "system" fn Java_lol_osm_cantino_NativeBridge_areaCommit<'local>(
                 root.as_ptr(),
                 area_id.as_ptr(),
                 work_id.as_ptr(),
-                i32::from(has_basemap),
+                parts,
                 Some(kotlin_commit_hook),
                 context_ptr,
                 error,

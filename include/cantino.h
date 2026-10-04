@@ -158,7 +158,7 @@ int32_t cantino_basemap_asm_free(CantinoBasemapAssembler *assembler,char **error
 // "min_zoom","max_zoom","addressed_tiles","tile_entries","tile_contents",
 // "tile_type","tile_compression","clustered","file_bytes"}. Any thread.
 int32_t cantino_basemap_info(const char *path,char **json,char **error);
-// --- Area store (unreleased) -------------------------------------------------
+// --- Area store ---------------------------------------------------------------
 // The on-disk layout of one app's downloaded areas under `root` (Android:
 // filesDir/cantino-areas) and its crash-safe commit, shared by every adapter.
 // No handles: any thread; calls on the same area serialize on the area lock
@@ -190,23 +190,28 @@ int32_t cantino_area_write_staged_metadata(const char *root,const char *area_id,
 #define CANTINO_AREA_STAGE_BEFORE_COMMIT 0      /* non-zero return aborts; nothing changed */
 #define CANTINO_AREA_STAGE_AFTER_COMMIT_POINT 1 /* committed; return value ignored */
 typedef int32_t (*cantino_area_commit_hook)(void *context,int32_t stage);
-// Publishes the run's staged data + sidecar (+ basemap when has_basemap != 0;
-// without one a published basemap is removed) together, via the roll-forward
-// journal. Returns 0 published, 1 aborted by the hook (nothing changed), < 0
+// Parts of a version (cantino_area_commit's parts, at least one bit).
+#define CANTINO_AREA_PART_DATA 1    /* area.sqlite: OSM data */
+#define CANTINO_AREA_PART_BASEMAP 2 /* basemap.pmtiles */
+// Publishes the run's staged sidecar and the parts it names together, via the
+// roll-forward journal; a published part the version lacks is removed (a
+// basemap-only version removes old data, and the other way round). Returns 0
+// published, 1 aborted by the hook (nothing changed), < 0
 // error: invalid IDs or an incomplete staged version fail before the commit
 // point (nothing changed); an I/O error after it (a failed rename) leaves the
 // version committed for the next recover to finish. hook may be NULL.
-int32_t cantino_area_commit(const char *root,const char *area_id,const char *work_id,int32_t has_basemap,cantino_area_commit_hook hook,void *context,char **error);
+int32_t cantino_area_commit(const char *root,const char *area_id,const char *work_id,int32_t parts,cantino_area_commit_hook hook,void *context,char **error);
 // Finishes a commit interrupted by a kill or a failed rename. Leaves staging
 // directories without a journal alone (a live run may own one).
 int32_t cantino_area_recover(const char *root,const char *area_id,char **error);
 // The published area (recovers first, reads under the lock): writes
-// {"data":path,"basemap":path|null,"metadata":sidecar|null}, or returns 1 (no
-// JSON) when none is published. metadata is null unless the sidecar parses
-// and describes the files (report.database_bytes = data file size;
-// basemap.bytes = basemap file size, or both absent).
+// {"data":path|null,"basemap":path|null,"metadata":sidecar|null} (at least
+// one path), or returns 1 (no JSON) when none is published. metadata is null
+// unless the sidecar parses and describes the files: report.database_bytes =
+// data file size, or report null and no data; basemap.bytes = basemap file
+// size, or basemap null and no basemap.
 int32_t cantino_area_published(const char *root,const char *area_id,char **json,char **error);
-// --- Download failure classification (unreleased) ---------------------------
+// --- Download failure classification -----------------------------------------
 // input: {"http":status,"context":"job"|"request"|"range"} |
 //        {"io":"network"|"storage"} |
 //        {"native":CANTINO_ERROR_* 1..5,"context":"default"|"engine"|

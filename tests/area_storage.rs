@@ -23,7 +23,7 @@
 //!
 //! Every test copies its scenario into a temporary directory first; the
 //! fixture itself is never modified.
-use cantino::area_storage::{AreaStorage, Sidecar};
+use cantino::area_storage::{AreaStorage, Parts, Sidecar};
 use std::{
     collections::BTreeMap,
     fs,
@@ -96,7 +96,7 @@ fn sidecar_text(root: &Path) -> String {
 /// The published area is exactly `(data, basemap)` with the sidecar of `run`.
 fn assert_area(storage: &AreaStorage, data: &[u8], basemap: Option<&[u8]>, run: &str) -> Sidecar {
     let published = storage.published("city").unwrap().expect("an area");
-    assert_eq!(fs::read(&published.data).unwrap(), data);
+    assert_eq!(fs::read(published.data.as_ref().unwrap()).unwrap(), data);
     assert_eq!(
         published
             .basemap
@@ -123,8 +123,11 @@ fn reads_a_published_0_2_0_area() {
         Some("2026-10-03T20:30:01Z")
     );
     assert_eq!(metadata.imported_at_millis, 1_759_523_401_000);
-    assert_eq!(metadata.report.counts.nodes, 15912);
-    assert_eq!(metadata.report.database_bytes, OLD_DATA.len() as i64);
+    assert_eq!(metadata.report.unwrap().counts.nodes, 15912);
+    assert_eq!(
+        metadata.report.unwrap().database_bytes,
+        OLD_DATA.len() as i64
+    );
     let basemap = metadata.basemap.expect("basemap metadata");
     assert_eq!(basemap.kind, "extract");
     assert_eq!(
@@ -165,7 +168,7 @@ fn finishes_a_0_2_0_roll_forward_killed_halfway() {
     // the 0.2.0 reader would have flagged it, and a reader here never sees
     // it because published() recovers first.
     let old = Sidecar::parse(&sidecar_text(&root)).unwrap();
-    assert_ne!(old.report.database_bytes, NEW_DATA.len() as i64);
+    assert_ne!(old.report.unwrap().database_bytes, NEW_DATA.len() as i64);
     assert_area(&storage, NEW_DATA, Some(NEW_BASEMAP), NEW);
     assert!(!root.join("city.commit").exists());
 }
@@ -204,7 +207,10 @@ fn a_0_2_0_kill_before_the_commit_point_keeps_the_old_area() {
 fn a_0_2_0_sidecar_that_does_not_describe_the_files_is_unknown() {
     let (_guard, storage, _root) = scenario("metadata-unknown");
     let published = storage.published("city").unwrap().expect("an area");
-    assert_eq!(fs::read(&published.data).unwrap(), NEW_DATA);
+    assert_eq!(
+        fs::read(published.data.as_ref().unwrap()).unwrap(),
+        NEW_DATA
+    );
     assert_eq!(published.metadata, None);
 
     let (_guard, storage, _root) = scenario("hand-published");
@@ -237,7 +243,7 @@ fn commits_over_a_0_2_0_area_with_the_same_layout() {
         .unwrap();
     let mut journal = None;
     storage
-        .commit("city", run, false, |stage| {
+        .commit("city", run, Parts::new(true, false), |stage| {
             if stage == cantino::area_storage::CommitStage::AfterCommitPoint {
                 journal = Some(fs::read_to_string(root.join("city.commit")).unwrap());
             }

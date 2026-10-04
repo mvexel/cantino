@@ -7,7 +7,7 @@
 //! and the reading of the published area behave identically by construction.
 //!
 //! ```text
-//! <root>/<areaId>.sqlite        published OSM data
+//! <root>/<areaId>.sqlite        published OSM data (only when the version has data)
 //! <root>/<areaId>.pmtiles       published basemap (only when the version has one)
 //! <root>/<areaId>.json          metadata sidecar describing both
 //! <root>/<areaId>.commit        commit journal, present only while publishing
@@ -23,7 +23,11 @@
 //! `tests/fixtures/area-storage-0.2.0/`). The lock file is new and ignored by
 //! 0.2.0 (it never lists the directory), so a downgrade still works too.
 //!
-//! ## Publishing (the area is data + basemap + sidecar)
+//! ## Publishing (the area is data and/or basemap, plus the sidecar)
+//!
+//! A version has OSM data, a basemap, or both ([`Parts`]; at least one).
+//! A part the new version lacks is removed when it is published, so the
+//! published area is always exactly one version.
 //!
 //! A run (identified by a work ID, a UUID: WorkManager's on Android) builds
 //! the complete next version in its own staging directory, on the same file
@@ -39,9 +43,9 @@
 //!    fsync, rename, directory fsync). **The rename is the commit point.**
 //!    From there on the new version is published, whatever happens to the
 //!    process.
-//! 3. Roll forward: rename basemap (or delete the old one when the new
-//!    version has none), data, sidecar into place; fsync the directory;
-//!    delete the journal and the staging directory.
+//! 3. Roll forward: rename basemap and data into place (or delete the old
+//!    one when the new version has none), then the sidecar; fsync the
+//!    directory; delete the journal and the staging directory.
 //!
 //! Every reader ([`AreaStorage::published`]) and every new run
 //! ([`AreaStorage::prepare_staging`]) first finishes step 3 for a journal
@@ -249,8 +253,8 @@ fn no_steps(_: Step) -> Result<bool> {
 /// The published area: file paths plus the metadata, if it describes them.
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct Published {
-    /// The OSM data file (always present: no data file means no area).
-    pub data: String,
+    /// The OSM data file, or null for a basemap-only area.
+    pub data: Option<String>,
     /// The basemap, or null when none is published.
     pub basemap: Option<String>,
     /// The sidecar, or null when it is missing, malformed or does not
@@ -268,7 +272,8 @@ pub struct Sidecar {
     /// The server's timestamp string as received (not parsed here).
     pub snapshot_timestamp: Option<String>,
     pub imported_at_millis: i64,
-    pub report: SidecarReport,
+    /// The import report; null for a version without OSM data.
+    pub report: Option<SidecarReport>,
     pub basemap: Option<SidecarBasemap>,
     /// The run that published the area, lower-case UUID; null when the area
     /// was published by hand.
@@ -327,8 +332,6 @@ impl Sidecar {
         let json = json.as_object()?;
         let bbox = json.get("bbox")?.as_object()?;
         let float = |key: &str| bbox.get(key)?.as_f64();
-        let report = json.get("report")?.as_object()?;
-        let counts = report.get("counts")?.as_object()?;
         let basemap = match json.get("basemap") {
             Some(Value::Object(basemap)) => Some(SidecarBasemap {
                 kind: match basemap.get("kind")?.as_str()? {
@@ -359,14 +362,18 @@ impl Sidecar {
                 value.as_str().map(str::to_owned)
             })?,
             imported_at_millis: json.get("imported_at_millis")?.as_i64()?,
-            report: SidecarReport {
-                counts: SidecarCounts {
-                    nodes: counts.get("nodes")?.as_i64()?,
-                    ways: counts.get("ways")?.as_i64()?,
-                    relations: counts.get("relations")?.as_i64()?,
-                },
-                database_bytes: report.get("database_bytes")?.as_i64()?,
-            },
+            // Absent or null: a version without OSM data.
+            report: optional(json.get("report"), |report| {
+                let counts = report.get("counts")?;
+                Some(SidecarReport {
+                    counts: SidecarCounts {
+                        nodes: counts.get("nodes")?.as_i64()?,
+                        ways: counts.get("ways")?.as_i64()?,
+                        relations: counts.get("relations")?.as_i64()?,
+                    },
+                    database_bytes: report.get("database_bytes")?.as_i64()?,
+                })
+            })?,
             basemap,
             work_id: optional(json.get("work_id"), |value| parse_uuid(value.as_str()?))?,
         })
@@ -382,21 +389,39 @@ fn optional<T>(value: Option<&Value>, read: impl FnOnce(&Value) -> Option<T>) ->
     }
 }
 
-/// The commit journal, `{"work_id":"<uuid>","basemap":<bool>}`.
+/// Which parts a version has. At least one: an area without data and
+/// without a basemap is no area.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Parts {
+    /// OSM data (`area.sqlite`).
+    pub data: bool,
+    /// A basemap (`basemap.pmtiles`).
+    pub basemap: bool,
+}
+
+impl Parts {
+    pub const fn new(data: bool, basemap: bool) -> Self {
+        Self { data, basemap }
+    }
+}
+
+/// The commit journal, `{"work_id":"<uuid>","basemap":<bool>}` plus
+/// `"data":false` for a version without OSM data (absent means data).
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct Journal {
     work_id: String,
     basemap: bool,
+    data: bool,
 }
 
 impl Journal {
-    /// The exact bytes 0.2.0 wrote (Android's org.json keeps insertion
-    /// order and has no whitespace), so a journal written here is also
-    /// readable by 0.2.0 after a downgrade.
+    /// No whitespace, fixed key order. A version with data writes exactly
+    /// the bytes 0.2.0 wrote (the `data` key appears only when false).
     fn text(&self) -> String {
+        let data = if self.data { "" } else { r#","data":false"# };
         format!(
-            r#"{{"work_id":"{}","basemap":{}}}"#,
-            self.work_id, self.basemap
+            r#"{{"work_id":"{}","basemap":{}{}}}"#,
+            self.work_id, self.basemap, data
         )
     }
 
@@ -415,13 +440,22 @@ impl Journal {
         let parse = || {
             let json: Value = serde_json::from_str(&text).ok()?;
             let work_id = parse_uuid(json.get("work_id")?.as_str()?)?;
-            let basemap = match json.get("basemap")? {
-                Value::Bool(value) => *value,
-                Value::String(text) if text.eq_ignore_ascii_case("true") => true,
-                Value::String(text) if text.eq_ignore_ascii_case("false") => false,
-                _ => return None,
+            let flag = |value: &Value| match value {
+                Value::Bool(value) => Some(*value),
+                Value::String(text) if text.eq_ignore_ascii_case("true") => Some(true),
+                Value::String(text) if text.eq_ignore_ascii_case("false") => Some(false),
+                _ => None,
             };
-            Some(Self { work_id, basemap })
+            let basemap = flag(json.get("basemap")?)?;
+            let data = match json.get("data") {
+                None => true,
+                Some(value) => flag(value)?,
+            };
+            Some(Self {
+                work_id,
+                basemap,
+                data,
+            })
         };
         parse().map(Some).ok_or_else(|| {
             Error::Io(io::Error::new(
@@ -584,12 +618,12 @@ impl AreaStorage {
     /// Publishes run `work_id`'s staged version (see the module comment).
     /// `hook` runs under the lock at [`CommitStage::BeforeCommit`] (return
     /// `false` to abort with nothing changed) and at
-    /// [`CommitStage::AfterCommitPoint`] (answer ignored). `has_basemap` says
-    /// whether the version includes `basemap.pmtiles`; without one, a
-    /// previously published basemap is removed.
+    /// [`CommitStage::AfterCommitPoint`] (answer ignored). `parts` says
+    /// whether the version includes `area.sqlite` and `basemap.pmtiles`; a
+    /// published part the version lacks is removed.
     ///
-    /// Errors: invalid IDs, or a staged version missing its data, sidecar or
-    /// (with `has_basemap`) basemap, are invalid arguments, reported before
+    /// Errors: invalid IDs, no parts, or a staged version missing its
+    /// sidecar or a part `parts` names, are invalid arguments, reported before
     /// the commit point with nothing changed. I/O errors can happen before
     /// the commit point (finishing an earlier journal, writing this one:
     /// nothing changed) or after it (a roll-forward rename: the version is
@@ -598,10 +632,10 @@ impl AreaStorage {
         &self,
         area_id: &str,
         work_id: &str,
-        has_basemap: bool,
+        parts: Parts,
         mut hook: impl FnMut(CommitStage) -> bool,
     ) -> Result<Commit> {
-        self.commit_steps(area_id, work_id, has_basemap, &mut |step| {
+        self.commit_steps(area_id, work_id, parts, &mut |step| {
             Ok(match step {
                 Step::BeforeCommit => hook(CommitStage::BeforeCommit),
                 Step::AfterCommitPoint => {
@@ -618,11 +652,16 @@ impl AreaStorage {
         &self,
         area_id: &str,
         work_id: &str,
-        has_basemap: bool,
+        parts: Parts,
         steps: &mut Steps,
     ) -> Result<Commit> {
         validate_area_id(area_id)?;
         let work_id = normalize_work_id(work_id)?;
+        if !parts.data && !parts.basemap {
+            return Err(Error::Invalid(
+                "a version needs OSM data, a basemap or both".into(),
+            ));
+        }
         let _lock = self.lock(area_id);
         // A journal of an earlier run (a dead process) completes first, so
         // this journal never overwrites one that is still owed a roll-forward.
@@ -632,10 +671,10 @@ impl AreaStorage {
         }
         let staged_data = self.staged_data(area_id, &work_id);
         let staged_metadata = self.staged_metadata(area_id, &work_id);
-        if !staged_data.is_file() || !staged_metadata.is_file() {
+        if (parts.data && !staged_data.is_file()) || !staged_metadata.is_file() {
             return Err(Error::Invalid("staged area incomplete".into()));
         }
-        if has_basemap && !self.staged_basemap(area_id, &work_id).is_file() {
+        if parts.basemap && !self.staged_basemap(area_id, &work_id).is_file() {
             return Err(Error::Invalid("staged basemap missing".into()));
         }
         // Not in 0.2.0 (see "Durability"): make the staged entries durable
@@ -644,7 +683,8 @@ impl AreaStorage {
         steps(Step::StagingSynced)?;
         let journal = Journal {
             work_id: work_id.clone(),
-            basemap: has_basemap,
+            basemap: parts.basemap,
+            data: parts.data,
         };
         write_atomically(
             &self.journal(area_id),
@@ -684,7 +724,8 @@ impl AreaStorage {
         self.roll_forward(area_id, steps)
     }
 
-    /// The published area, or `None` when no data file exists. Completes a
+    /// The published area, or `None` when neither a data file nor a basemap
+    /// exists. Completes a
     /// pending commit first and fails (I/O error, journal kept) if it cannot:
     /// a half-finished commit is never returned. Reads under the area lock,
     /// so the answer describes one version. The metadata is returned only if it describes the files
@@ -698,20 +739,23 @@ impl AreaStorage {
     /// its snapshot).
     pub fn published(&self, area_id: &str) -> Result<Option<Published>> {
         validate_area_id(area_id)?;
-        // Neither a journal nor data: nothing is published (or being
+        // No journal, data or basemap: nothing is published (or being
         // published) at this instant. Answered without the lock, so reading
         // an unknown area ID creates no lock file. A commit whose journal
         // appears after this check is ordered after this read.
-        if !self.journal(area_id).exists() && !self.data(area_id).exists() {
+        if !self.journal(area_id).exists()
+            && !self.data(area_id).exists()
+            && !self.basemap(area_id).exists()
+        {
             return Ok(None);
         }
         let _lock = self.lock(area_id);
         self.roll_forward(area_id, &mut no_steps)?;
-        let data = self.data(area_id);
-        if !data.is_file() {
+        let data = Some(self.data(area_id)).filter(|path| path.is_file());
+        let basemap = Some(self.basemap(area_id)).filter(|path| path.is_file());
+        if data.is_none() && basemap.is_none() {
             return Ok(None);
         }
-        let basemap = Some(self.basemap(area_id)).filter(|path| path.is_file());
         // Java's File.length(): 0 when unreadable.
         let length = |path: &Path| fs::metadata(path).map_or(0, |meta| meta.len() as i64);
         let sidecar = self.sidecar(area_id);
@@ -721,12 +765,14 @@ impl AreaStorage {
             .flatten()
             .and_then(|text| Sidecar::parse(&text))
             .filter(|metadata| {
-                metadata.report.database_bytes == length(&data)
+                // Each recorded part (or its absence) matches the files.
+                metadata.report.as_ref().map(|report| report.database_bytes)
+                    == data.as_deref().map(length)
                     && metadata.basemap.as_ref().map(|basemap| basemap.bytes)
                         == basemap.as_deref().map(length)
             });
         Ok(Some(Published {
-            data: data.to_string_lossy().into_owned(),
+            data: data.map(|path| path.to_string_lossy().into_owned()),
             basemap: basemap.map(|path| path.to_string_lossy().into_owned()),
             metadata,
         }))
@@ -752,7 +798,13 @@ impl AreaStorage {
             remove_if_present(&self.basemap(area_id))?;
         }
         steps(Step::BasemapPlaced)?;
-        move_if_present(&self.staged_data(area_id, work_id), &self.data(area_id))?;
+        if journal.data {
+            move_if_present(&self.staged_data(area_id, work_id), &self.data(area_id))?;
+        } else {
+            // A basemap-only version: no data from an older version may
+            // survive next to it.
+            remove_if_present(&self.data(area_id))?;
+        }
         steps(Step::DataPlaced)?;
         move_if_present(
             &self.staged_metadata(area_id, work_id),

@@ -224,15 +224,33 @@ with tempfile.TemporaryDirectory() as directory:
         return next(answers) if stage == 0 else 0
     callback = HOOK(hook)
     error = ptr()
-    assert lib.cantino_area_commit(root,b'city',run,0,callback,None,c.byref(error)) == 1
+    DATA, BASEMAP = 1, 2  # CANTINO_AREA_PART_*
+    assert lib.cantino_area_commit(root,b'city',run,0,callback,None,c.byref(error)) == -INVALID_ARGUMENT
+    lib.cantino_free(error)
+    assert lib.cantino_area_commit(root,b'city',run,DATA,callback,None,c.byref(error)) == 1
     lib.cantino_free(error)
     assert call(lib.cantino_area_published,root,b'city') == (1, None)
-    assert lib.cantino_area_commit(root,b'city',run,0,callback,None,c.byref(error)) == 0
+    assert lib.cantino_area_commit(root,b'city',run,DATA,callback,None,c.byref(error)) == 0
     lib.cantino_free(error)
     assert stages == [0, 0, 1], stages
     _, published = call(lib.cantino_area_published,root,b'city')
     assert published['metadata']['work_id'] == '7c9e6679-7425-40de-944b-e07fc1f90ae7'
     assert pathlib.Path(published['data']).read_bytes() == b'12345'
+    # A basemap-only version replaces it: the old data goes, report is null.
+    run2 = b'8d9e6679-7425-40de-944b-e07fc1f90ae8'
+    _, layout = call(lib.cantino_area_prepare_staging,root,b'city',run2)
+    pathlib.Path(layout['staged_basemap']).write_bytes(b'tiles')
+    basemap_only = ('{"bbox":{"west":0,"south":0,"east":1,"north":1},"name":"n","snapshot_timestamp":null,'
+                    '"imported_at_millis":2,"report":null,"basemap":{"kind":"url","source_url":"https://x/b.pmtiles",'
+                    '"bytes":5,"addressed_tiles":1,"min_zoom":0,"max_zoom":0,"requests":1,"transferred_bytes":5},'
+                    '"work_id":"8d9e6679-7425-40de-944b-e07fc1f90ae8"}')
+    status_call(lib.cantino_area_write_staged_metadata,root,b'city',run2,basemap_only.encode())
+    status = lib.cantino_area_commit(root,b'city',run2,BASEMAP,HOOK(),None,c.byref(error))  # HOOK(): a NULL hook
+    assert status == 0, (status, c.string_at(error).decode() if error.value else None)
+    lib.cantino_free(error)
+    _, published = call(lib.cantino_area_published,root,b'city')
+    assert published['data'] is None and published['metadata']['report'] is None, published
+    assert pathlib.Path(published['basemap']).read_bytes() == b'tiles'
 _, storage = call(lib.cantino_classify_failure,b'{"io":"storage"}')
 assert storage == {'class':'storage','reason':'storage','inline_retry':False,'scheduler_retry':True}
 assert call(lib.cantino_classify_failure,b'{"http":206,"context":"range"}') == (1, None)

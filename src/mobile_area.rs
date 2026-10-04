@@ -8,7 +8,7 @@
 //! (`protect`): the negative `CANTINO_ERROR_*` category and an owned
 //! message.
 use crate::Result;
-use crate::area_storage::{AreaStorage, Commit, CommitStage, validate_area_id};
+use crate::area_storage::{AreaStorage, Commit, CommitStage, Parts, validate_area_id};
 use crate::failure::{Failure, classify};
 use crate::mobile_api::{output, protect, text};
 use std::{
@@ -141,7 +141,12 @@ pub unsafe extern "C" fn cantino_area_write_staged_metadata(
     })
 }
 
-/// Publishes the run's staged version. Returns 0 when published, 1 when
+/// `CANTINO_AREA_PART_*` bits of `cantino_area_commit`'s `parts`.
+const AREA_PART_DATA: i32 = 1;
+const AREA_PART_BASEMAP: i32 = 2;
+
+/// Publishes the run's staged version (`parts`: `CANTINO_AREA_PART_*` bits,
+/// at least one). Returns 0 when published, 1 when
 /// `hook` aborted at `CANTINO_AREA_STAGE_BEFORE_COMMIT` (nothing changed),
 /// a negative `CANTINO_ERROR_*` on error. `hook` may be NULL (no check); it runs on the calling
 /// thread, under the area lock, and must not call `cantino_area_*` for the
@@ -156,7 +161,7 @@ pub unsafe extern "C" fn cantino_area_commit(
     root: *const c_char,
     area_id: *const c_char,
     work_id: *const c_char,
-    has_basemap: i32,
+    parts: i32,
     hook: CantinoAreaCommitHook,
     context: *mut c_void,
     error: *mut *mut c_char,
@@ -166,7 +171,7 @@ pub unsafe extern "C" fn cantino_area_commit(
         let outcome = storage.commit(
             unsafe { text(area_id)? },
             unsafe { text(work_id)? },
-            has_basemap != 0,
+            Parts::new(parts & AREA_PART_DATA != 0, parts & AREA_PART_BASEMAP != 0),
             |stage| match hook {
                 None => true,
                 Some(hook) => {

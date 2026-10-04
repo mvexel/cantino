@@ -15,24 +15,40 @@ const NEXT_RUN: &str = "33333333-3333-4333-8333-333333333333";
 #[derive(Clone)]
 struct Version {
     run: &'static str,
-    data: Vec<u8>,
+    data: Option<Vec<u8>>,
     basemap: Option<Vec<u8>>,
 }
 
+/// The shapes a version can have: data only, data and basemap, basemap only.
+const SHAPES: [Parts; 3] = [
+    Parts::new(true, false),
+    Parts::new(true, true),
+    Parts::new(false, true),
+];
+
 impl Version {
     fn old(basemap: bool) -> Self {
-        Self {
-            run: OLD_RUN,
-            data: b"old data".to_vec(),
-            basemap: basemap.then(|| b"old basemap".to_vec()),
-        }
+        Self::old_shaped(Parts::new(true, basemap))
     }
     fn new(basemap: bool) -> Self {
+        Self::new_shaped(Parts::new(true, basemap))
+    }
+    fn old_shaped(parts: Parts) -> Self {
+        Self {
+            run: OLD_RUN,
+            data: parts.data.then(|| b"old data".to_vec()),
+            basemap: parts.basemap.then(|| b"old basemap".to_vec()),
+        }
+    }
+    fn new_shaped(parts: Parts) -> Self {
         Self {
             run: NEW_RUN,
-            data: b"the new data, longer".to_vec(),
-            basemap: basemap.then(|| b"the new basemap, longer".to_vec()),
+            data: parts.data.then(|| b"the new data, longer".to_vec()),
+            basemap: parts.basemap.then(|| b"the new basemap, longer".to_vec()),
         }
+    }
+    fn parts(&self) -> Parts {
+        Parts::new(self.data.is_some(), self.basemap.is_some())
     }
 
     /// The sidecar as 0.2.0's Kotlin wrote it (org.json: insertion order,
@@ -47,19 +63,25 @@ impl Version {
             ),
             None => "null".into(),
         };
+        let report = match &self.data {
+            Some(data) => format!(
+                r#"{{"counts":{{"nodes":3,"ways":1,"relations":0}},"database_bytes":{}}}"#,
+                data.len()
+            ),
+            None => "null".into(),
+        };
         format!(
-            r#"{{"bbox":{{"west":-111.9,"south":40,"east":-111.8,"north":40.8}},"name":"{}","snapshot_timestamp":"2026-10-03T20:30:01Z","imported_at_millis":1759523401000,"report":{{"counts":{{"nodes":3,"ways":1,"relations":0}},"database_bytes":{}}},"basemap":{},"work_id":"{}"}}"#,
-            self.run,
-            self.data.len(),
-            basemap,
-            self.run
+            r#"{{"bbox":{{"west":-111.9,"south":40,"east":-111.8,"north":40.8}},"name":"{}","snapshot_timestamp":"2026-10-03T20:30:01Z","imported_at_millis":1759523401000,"report":{},"basemap":{},"work_id":"{}"}}"#,
+            self.run, report, basemap, self.run
         )
     }
 
     /// Builds this version in its staging directory, as a download run does.
     fn stage(&self, storage: &AreaStorage) {
         let layout = storage.prepare_staging(AREA, self.run).unwrap();
-        fs::write(layout.staged_data.unwrap(), &self.data).unwrap();
+        if let Some(data) = &self.data {
+            fs::write(layout.staged_data.unwrap(), data).unwrap();
+        }
         if let Some(basemap) = &self.basemap {
             fs::write(layout.staged_basemap.unwrap(), basemap).unwrap();
         }
@@ -71,7 +93,7 @@ impl Version {
     fn publish(&self, storage: &AreaStorage) {
         self.stage(storage);
         let outcome = storage
-            .commit(AREA, self.run, self.basemap.is_some(), |_| true)
+            .commit(AREA, self.run, self.parts(), |_| true)
             .unwrap();
         assert_eq!(outcome, Commit::Published);
     }
@@ -85,7 +107,7 @@ fn assert_published(storage: &AreaStorage, version: &Version, context: &str) {
         .unwrap()
         .unwrap_or_else(|| panic!("{context}: no area"));
     assert_eq!(
-        fs::read(&published.data).unwrap(),
+        published.data.as_ref().map(|path| fs::read(path).unwrap()),
         version.data,
         "{context}: data"
     );
@@ -128,22 +150,24 @@ fn committed(step: Step) -> bool {
 /// recovery (a "restarted process": a new `AreaStorage`, nothing in memory),
 /// leaves either the complete old area or the complete new one. Before the
 /// journal rename it is the old one, from it on the new one. For every
-/// combination of old/new with and without a basemap.
+/// combination of old/new shapes (data, data + basemap, basemap only).
 #[test]
 fn a_kill_at_any_commit_step_recovers_old_or_new_never_mixed() {
-    for old_basemap in [false, true] {
-        for new_basemap in [false, true] {
+    for old_parts in SHAPES {
+        for new_parts in SHAPES {
             for step in Step::ALL {
-                let context =
-                    format!("old basemap {old_basemap}, new {new_basemap}, kill at {step:?}");
+                let context = format!("old {old_parts:?}, new {new_parts:?}, kill at {step:?}");
                 let directory = tempfile::tempdir().unwrap();
                 let storage = AreaStorage::new(directory.path());
-                let (old, new) = (Version::old(old_basemap), Version::new(new_basemap));
+                let (old, new) = (
+                    Version::old_shaped(old_parts),
+                    Version::new_shaped(new_parts),
+                );
                 old.publish(&storage);
                 new.stage(&storage);
 
                 let error = storage
-                    .commit_steps(AREA, NEW_RUN, new_basemap, &mut kill_at(step))
+                    .commit_steps(AREA, NEW_RUN, new_parts, &mut kill_at(step))
                     .unwrap_err();
                 assert!(error.to_string().contains("simulated kill"), "{context}");
 
@@ -173,19 +197,19 @@ fn a_kill_at_any_commit_step_recovers_old_or_new_never_mixed() {
 /// same (new) version.
 #[test]
 fn a_kill_during_recovery_still_recovers_the_new_area() {
-    for new_basemap in [false, true] {
+    for new_parts in SHAPES {
         for commit_step in Step::ALL.into_iter().filter(|&step| committed(step)) {
             for recover_step in Step::ROLL_FORWARD {
                 let context = format!(
-                    "new basemap {new_basemap}, commit killed at {commit_step:?}, recover killed at {recover_step:?}"
+                    "new {new_parts:?}, commit killed at {commit_step:?}, recover killed at {recover_step:?}"
                 );
                 let directory = tempfile::tempdir().unwrap();
                 let storage = AreaStorage::new(directory.path());
-                let (old, new) = (Version::old(true), Version::new(new_basemap));
+                let (old, new) = (Version::old(true), Version::new_shaped(new_parts));
                 old.publish(&storage);
                 new.stage(&storage);
                 storage
-                    .commit_steps(AREA, NEW_RUN, new_basemap, &mut kill_at(commit_step))
+                    .commit_steps(AREA, NEW_RUN, new_parts, &mut kill_at(commit_step))
                     .unwrap_err();
                 // The journal is deleted at JournalDeleted: a later recover
                 // has nothing to do, so the injected kill never fires.
@@ -210,7 +234,12 @@ fn published_rolls_a_pending_commit_forward() {
     let new = Version::new(false);
     new.stage(&storage);
     storage
-        .commit_steps(AREA, NEW_RUN, false, &mut kill_at(Step::DataPlaced))
+        .commit_steps(
+            AREA,
+            NEW_RUN,
+            Parts::new(true, false),
+            &mut kill_at(Step::DataPlaced),
+        )
         .unwrap_err();
     assert_published(&storage, &new, "published after a kill");
     assert!(!storage.basemap(AREA).exists(), "old basemap must go");
@@ -236,7 +265,7 @@ fn a_failed_roll_forward_fails_closed_and_keeps_the_journal() {
         Ok(true)
     };
     let error = storage
-        .commit_steps(AREA, NEW_RUN, true, &mut obstruct)
+        .commit_steps(AREA, NEW_RUN, Parts::new(true, true), &mut obstruct)
         .unwrap_err();
     assert_eq!(error.kind(), crate::ErrorKind::Io, "{error}");
     assert_eq!(
@@ -289,7 +318,7 @@ fn a_hook_abort_changes_nothing_and_stages_until_discarded() {
     Version::new(true).stage(&storage);
     let mut stages = Vec::new();
     let outcome = storage
-        .commit(AREA, NEW_RUN, true, |stage| {
+        .commit(AREA, NEW_RUN, Parts::new(true, true), |stage| {
             stages.push(stage);
             false
         })
@@ -309,7 +338,7 @@ fn the_hook_sees_both_stages_in_order() {
     Version::new(false).stage(&storage);
     let mut stages = Vec::new();
     storage
-        .commit(AREA, NEW_RUN, false, |stage| {
+        .commit(AREA, NEW_RUN, Parts::new(true, false), |stage| {
             if stage == CommitStage::AfterCommitPoint {
                 // Committed: the journal exists, nothing renamed yet.
                 assert!(storage.journal(AREA).exists());
@@ -334,13 +363,17 @@ fn an_incomplete_staged_version_is_refused_before_the_commit_point() {
     let layout = storage.prepare_staging(AREA, NEW_RUN).unwrap();
     fs::write(layout.staged_data.unwrap(), b"x").unwrap();
     // No sidecar.
-    let error = storage.commit(AREA, NEW_RUN, false, |_| true).unwrap_err();
+    let error = storage
+        .commit(AREA, NEW_RUN, Parts::new(true, false), |_| true)
+        .unwrap_err();
     assert_eq!(error.kind(), crate::ErrorKind::InvalidArgument);
     // Sidecar but no basemap although one was announced.
     storage
         .write_staged_metadata(AREA, NEW_RUN, &Version::new(false).sidecar())
         .unwrap();
-    let error = storage.commit(AREA, NEW_RUN, true, |_| true).unwrap_err();
+    let error = storage
+        .commit(AREA, NEW_RUN, Parts::new(true, true), |_| true)
+        .unwrap_err();
     assert_eq!(
         error.to_string(),
         "invalid argument: staged basemap missing"
@@ -358,7 +391,12 @@ fn discard_keeps_the_staging_of_a_pending_commit() {
     let new = Version::new(true);
     new.stage(&storage);
     storage
-        .commit_steps(AREA, NEW_RUN, true, &mut kill_at(Step::AfterCommitPoint))
+        .commit_steps(
+            AREA,
+            NEW_RUN,
+            Parts::new(true, true),
+            &mut kill_at(Step::AfterCommitPoint),
+        )
         .unwrap_err();
     storage.discard_staging(AREA, NEW_RUN).unwrap();
     assert!(storage.staged_data(AREA, NEW_RUN).exists());
@@ -383,7 +421,12 @@ fn prepare_staging_deletes_other_runs_and_rolls_forward() {
     let new = Version::new(true);
     new.stage(&storage);
     storage
-        .commit_steps(AREA, NEW_RUN, true, &mut kill_at(Step::JournalRenamed))
+        .commit_steps(
+            AREA,
+            NEW_RUN,
+            Parts::new(true, true),
+            &mut kill_at(Step::JournalRenamed),
+        )
         .unwrap_err();
     // A stale run directory and a stray file under the area's staging root.
     let stale = storage.staging_dir(AREA, OLD_RUN);
@@ -432,7 +475,12 @@ fn the_journal_is_byte_identical_to_0_2_0() {
     let storage = AreaStorage::new(directory.path());
     Version::new(true).stage(&storage);
     storage
-        .commit_steps(AREA, NEW_RUN, true, &mut kill_at(Step::AfterCommitPoint))
+        .commit_steps(
+            AREA,
+            NEW_RUN,
+            Parts::new(true, true),
+            &mut kill_at(Step::AfterCommitPoint),
+        )
         .unwrap_err();
     assert_eq!(
         fs::read_to_string(storage.journal(AREA)).unwrap(),
@@ -514,14 +562,16 @@ fn concurrent_readers_see_old_or_new_never_mixed() {
                     Version::old(true)
                 };
                 let layout = storage.prepare_staging(AREA, &run).unwrap();
-                fs::write(layout.staged_data.unwrap(), &base.data).unwrap();
+                fs::write(layout.staged_data.unwrap(), base.data.as_ref().unwrap()).unwrap();
                 if let Some(basemap) = &base.basemap {
                     fs::write(layout.staged_basemap.unwrap(), basemap).unwrap();
                 }
                 let sidecar = base.sidecar().replace(base.run, &run);
                 storage.write_staged_metadata(AREA, &run, &sidecar).unwrap();
                 storage
-                    .commit(AREA, &run, base.basemap.is_some(), |_| true)
+                    .commit(AREA, &run, Parts::new(true, base.basemap.is_some()), |_| {
+                        true
+                    })
                     .unwrap();
             }
         })
@@ -600,4 +650,83 @@ fn sidecar_parsing_follows_kotlin_from_json() {
     assert!(Sidecar::parse(&text.replace(r#""kind":"url""#, r#""kind":"ftp""#)).is_none());
     assert!(Sidecar::parse(&text.replace(NEW_RUN, "nope")).is_none());
     assert!(Sidecar::parse(&text.replace(r#""name":"#, r#""nom":"#)).is_none());
+}
+
+/// A basemap-only version publishes without data and removes data an older
+/// version had; a later full version brings data back. The journal of a
+/// version with data keeps its 0.2.0 bytes; `data:false` appears otherwise.
+#[test]
+fn a_basemap_only_version_replaces_data_and_back() {
+    let directory = tempfile::tempdir().unwrap();
+    let storage = AreaStorage::new(directory.path());
+    Version::old(true).publish(&storage);
+    let basemap_only = Version::new_shaped(Parts::new(false, true));
+    basemap_only.stage(&storage);
+    let mut journal = None;
+    storage
+        .commit(AREA, NEW_RUN, basemap_only.parts(), |stage| {
+            if stage == CommitStage::AfterCommitPoint {
+                journal = Some(fs::read_to_string(storage.journal(AREA)).unwrap());
+            }
+            true
+        })
+        .unwrap();
+    assert_eq!(
+        journal.unwrap(),
+        format!(r#"{{"work_id":"{NEW_RUN}","basemap":true,"data":false}}"#)
+    );
+    assert_published(&storage, &basemap_only, "basemap only");
+    assert!(!storage.data(AREA).exists());
+    let published = storage.published(AREA).unwrap().unwrap();
+    assert_eq!(published.data, None);
+    assert_eq!(published.metadata.unwrap().report, None);
+
+    let full = Version {
+        run: NEXT_RUN,
+        data: Some(b"data again".to_vec()),
+        basemap: Some(b"basemap again".to_vec()),
+    };
+    full.stage(&storage);
+    storage
+        .commit(AREA, NEXT_RUN, full.parts(), |_| true)
+        .unwrap();
+    assert_published(&storage, &full, "full again");
+}
+
+/// A version must have at least one part, and every part it names must be
+/// staged; both are refused before the commit point.
+#[test]
+fn parts_are_checked_before_the_commit_point() {
+    let directory = tempfile::tempdir().unwrap();
+    let storage = AreaStorage::new(directory.path());
+    let old = Version::old(false);
+    old.publish(&storage);
+    let basemap_only = Version::new_shaped(Parts::new(false, true));
+    basemap_only.stage(&storage);
+    let none = storage.commit(AREA, NEW_RUN, Parts::new(false, false), |_| true);
+    assert_eq!(none.unwrap_err().kind(), crate::ErrorKind::InvalidArgument);
+    // Names data that was never staged.
+    let missing = storage.commit(AREA, NEW_RUN, Parts::new(true, true), |_| true);
+    assert_eq!(
+        missing.unwrap_err().kind(),
+        crate::ErrorKind::InvalidArgument
+    );
+    assert_published(&storage, &old, "refused commits");
+}
+
+/// A sidecar whose report and data disagree (a report but no data file, or
+/// data but no report) reads as unknown metadata, never as wrong metadata.
+#[test]
+fn a_report_must_match_the_presence_of_data() {
+    let directory = tempfile::tempdir().unwrap();
+    let storage = AreaStorage::new(directory.path());
+    let basemap_only = Version::new_shaped(Parts::new(false, true));
+    basemap_only.publish(&storage);
+    // A sidecar claiming data, next to a basemap-only area.
+    fs::write(storage.sidecar(AREA), Version::new(true).sidecar()).unwrap();
+    assert_eq!(storage.published(AREA).unwrap().unwrap().metadata, None);
+    // A data file appears next to a basemap-only sidecar.
+    fs::write(storage.sidecar(AREA), basemap_only.sidecar()).unwrap();
+    fs::write(storage.data(AREA), b"stray").unwrap();
+    assert_eq!(storage.published(AREA).unwrap().unwrap().metadata, None);
 }

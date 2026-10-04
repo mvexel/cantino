@@ -146,13 +146,13 @@ One download run, as the Android worker drives it:
 ```text
 prepare_staging(root, area, run)          rolls a pending commit forward, deletes other runs' staging,
                                           creates this run's; writes the layout (staged_data, ...)
-  import into staged_data, basemap into staged_basemap
-write_staged_metadata(root, area, run, sidecar JSON)
-commit(root, area, run, has_basemap, hook, context)
+  import into staged_data and/or basemap into staged_basemap
+write_staged_metadata(root, area, run, sidecar JSON)   report null without data
+commit(root, area, run, parts, hook, context)          parts: CANTINO_AREA_PART_DATA | _BASEMAP
   ├ hook(context, BEFORE_COMMIT)          under the lock; non-zero = abort, nothing changed (returns 1)
   ├ journal written atomically            ← the commit point
   ├ hook(context, AFTER_COMMIT_POINT)     answer ignored
-  └ rename basemap (or delete the old one), data, sidecar; fsync; delete journal and staging
+  └ rename basemap and data (or delete an old part the version lacks), sidecar; fsync; delete journal and staging
 discard_staging(root, area, run)          always at the end of a run; keeps a pending commit's staging
 ```
 
