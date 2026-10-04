@@ -1,18 +1,19 @@
 #!/bin/sh
-# Builds the Rust core for Linux and runs the Swift adapter's tests
-# (swift/, SwiftPM package `Cantino`) in Docker, in one command.
+# Builds the Rust core for the host and runs the Swift adapter's tests
+# (swift/, SwiftPM package `Cantino`) in one command: natively on macOS
+# (Xcode's Swift), in Docker elsewhere.
 #
 #   scripts/swift-test.sh                 # build core, swift test
 #   scripts/swift-test.sh --filter Bbox   # extra arguments go to `swift test`
 #
-# Needs: cargo (rust-toolchain.toml pins 1.99.0) and Docker. No Swift
-# toolchain on the host: the official swift image provides it.
+# Needs: cargo (rust-toolchain.toml pins 1.99.0), and on Linux Docker (no
+# Swift toolchain on the host: the official swift image provides it).
 #
 # Recipe and why:
 # - The core is built on the host (`cargo build --release --lib`) and only
 #   `libcantino.a` is copied into target/swift/, the directory Package.swift
-#   links from. target/release also holds libcantino.so, which the linker
-#   would prefer over the .a.
+#   links from. target/release also holds libcantino.so/.dylib, which the
+#   linker would prefer over the .a.
 # - A static library built on the host is linked inside the container, so
 #   the container's glibc must be at least as new as the host's (versioned
 #   glibc symbols resolve at that final link). swift:6.4 is Ubuntu 26.04
@@ -31,7 +32,15 @@ image=${SWIFT_IMAGE:-swift:6.4}
 
 cargo build --release --lib
 mkdir -p target/swift target/swift-build
-cp target/release/libcantino.a target/swift/libcantino.a
+# Named libcantino_core.a: on case-insensitive macOS file systems
+# -lcantino would find SwiftPM's own libCantino.a (the Swift target) first.
+rm -f target/swift/libcantino.a
+cp target/release/libcantino.a target/swift/libcantino_core.a
+
+if [ "$(uname -s)" = Darwin ]; then
+    cd swift
+    exec swift test --scratch-path "$root/target/swift-build" "$@"
+fi
 
 docker run --rm \
     --user "$(id -u):$(id -g)" \

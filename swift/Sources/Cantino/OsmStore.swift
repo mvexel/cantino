@@ -184,33 +184,6 @@ public final class OsmStore {
         }
     }
 
-    /// A single point to put a marker or label for the object with `id`, or
-    /// to measure a distance from. Nil when the object is not in this area
-    /// or none of its geometry is.
-    ///
-    /// **This is an anchor point, not a guaranteed point-on-surface or a
-    /// true centroid**: for a concave building or a multipolygon it can lie
-    /// outside the shape. Computed in the native core:
-    /// - **Node**: its coordinate.
-    /// - **Closed way** (first node = last node): the mean of its distinct
-    ///   vertices that are in the area.
-    /// - **Open way**: the point at half the length of the line through its
-    ///   in-area nodes (nodes outside the area are skipped).
-    /// - **Relation**: the mean of the representative points of its distinct
-    ///   members that are in the area, each member weighted equally. Member
-    ///   relations are followed up to 8 levels deep; cycles are skipped.
-    ///
-    /// Throws ``CantinoError/invalidArgument(_:)`` for a non-positive ID,
-    /// ``CantinoError/wrongThread(_:)`` off the owner thread,
-    /// ``CantinoStateError/closed(_:)`` if the store is closed.
-    public func representativePoint(_ id: OsmId) throws -> Coordinate? {
-        let handle = try live()
-        var call = NativeCall()
-        let status = try call.check(cantino_representative_point(handle, id.kind.rawValue, id.id, &call.result, &call.error))
-        if status == 1 { return nil }
-        return try Wire.decode(WireCoordinate.self, call.resultString()).model
-    }
-
     /// Runs `query` and returns at most ``Query/limit`` objects; see
     /// ``Query`` for ordering, pagination and the candidate semantics of a
     /// bbox.

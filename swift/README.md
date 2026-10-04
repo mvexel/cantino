@@ -6,13 +6,10 @@ API in [`android/cantino`](../android/cantino) (`OsmStore`, `AsyncOsmStore`,
 the models), which is the reference: same names, same semantics, same
 defaults, except for the deviations listed below.
 
-**Status: platform-neutral slice, built and tested on Linux.** No Xcode or
-iOS SDK is involved yet. The iOS parts (an xcframework binary target,
-background `URLSession` downloads, `BGTaskScheduler`, the area manager)
-come in a later slice on macOS CI. Nothing in `Sources/` uses an
-Apple-only API, so the package is ready to be built for iOS once the binary
-target exists; Apple-only code will go behind `#if os(iOS)` /
-`#if canImport(Darwin)`.
+**Status: platform-neutral slice, built and tested on macOS (native) and
+Linux (Docker).** The iOS parts (an xcframework binary target, background
+`URLSession` downloads, the area manager) come next. Nothing in `Sources/`
+uses an Apple-only API.
 
 ```swift
 import Cantino
@@ -37,7 +34,7 @@ try await shared.close()
 Package.swift                 targets, Linux link flags (see below)
 Sources/CCantino/             module.modulemap -> ../../../include/cantino.h (the header is not copied)
 Sources/Cantino/
-  OsmStore.swift              OsmStore: open, importArea, get, get(batch), query, wayCoordinates, representativePoint, close
+  OsmStore.swift              OsmStore: open, importArea, get, get(batch), query, wayCoordinates, close
   AsyncOsmStore.swift         AsyncOsmStore actor + StoreBox
   OwnerThread.swift           the dedicated thread AsyncOsmStore runs the store on
   Models.swift                OsmKind, OsmId, OsmObject (+ Node/Way/Relation/Member), ObjectMetadata,
@@ -57,28 +54,30 @@ Tests/CantinoTests/           ports of OsmStoreTest, AsyncOsmStoreTest, BboxArou
 
 ## Build and test
 
-One command, from the repository root (needs cargo and Docker, no Swift on
-the host):
+One command, from the repository root. On macOS it runs Xcode's `swift
+test` natively; elsewhere it needs Docker (no Swift on the host):
 
 ```sh
-scripts/swift-test.sh                 # cargo build --release, then swift test in swift:6.4
+scripts/swift-test.sh                 # cargo build --release, then swift test (native on macOS, swift:6.4 elsewhere)
 scripts/swift-test.sh --filter Bbox   # extra arguments go to swift test
 ```
 
-What it does, if you want to do it by hand:
+What it does on Linux, if you want to do it by hand:
 
 ```sh
 cargo build --release --lib
-mkdir -p target/swift && cp target/release/libcantino.a target/swift/
+mkdir -p target/swift && cp target/release/libcantino.a target/swift/libcantino_core.a
 docker run --rm --user "$(id -u):$(id -g)" -e HOME=/tmp -v "$PWD":/work -w /work/swift \
     swift:6.4 swift test --scratch-path /work/target/swift-build
 ```
 
-**Linking (Linux).** `Package.swift` links the Rust staticlib with
-`-L <repo>/target/swift -lcantino -lm -ldl -lpthread` (Linux only, via
-`linkerSettings`). Only `libcantino.a` is copied to `target/swift/`
-because `target/release/` also holds `libcantino.so`, which the linker
-would pick over the `.a`. `CANTINO_LIB_DIR` overrides the directory. The
+**Linking (host builds).** `Package.swift` links the Rust staticlib with
+`-L <repo>/target/swift -lcantino_core` on macOS and Linux, plus `-lm -ldl
+-lpthread` on Linux. Only `libcantino.a` is copied to `target/swift/`
+(as `libcantino_core.a`) because `target/release/` also holds the cdylib,
+which the linker would pick over the `.a`; the new name avoids
+`-lcantino` matching SwiftPM's own `libCantino.a` on case-insensitive
+macOS file systems. `CANTINO_LIB_DIR` overrides the directory. The
 result has the core linked in statically: the test binary does not need
 `libcantino.so` at run time. `-lm` is for the bundled SQLite; `-ldl` and
 `-lpthread` for Rust std (stubs on glibc 2.34+, harmless).

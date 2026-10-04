@@ -94,8 +94,7 @@ public struct ObjectMetadata: Hashable, Sendable {
     }
 }
 
-/// A WGS84 point, as returned by ``OsmStore/wayCoordinates(_:)`` and
-/// ``OsmStore/representativePoint(_:)``. Integers in 1e-7 degrees
+/// A WGS84 point, as returned by ``OsmStore/wayCoordinates(_:)``. Integers in 1e-7 degrees
 /// (`latE7`, `lonE7`), the storage format, so they compare exactly; `lat`
 /// and `lon` are the same values in degrees.
 public struct Coordinate: Hashable, Sendable {

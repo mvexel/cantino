@@ -15,8 +15,7 @@
 //   success without one (open, close,
 //     plan_new, write_range, finish,
 //     *_free)                          -> {"ok": null}
-//   nil from get / wayCoordinates /
-//     representativePoint              -> {"missing": true}
+//   nil from get / wayCoordinates      -> {"missing": true}
 //   CantinoError / internal error      -> {"error": {"code": N, "kind": "<name>"}}
 //     (the CANTINO_ERROR_* code and its name; the message is not part of
 //     the contract)
@@ -83,8 +82,8 @@ extension JSONValue {
 }
 
 extension CantinoError {
-    /// The `CANTINO_ERROR_*` code of this category (what
-    /// `cantino_last_error_code()` returned when it was thrown).
+    /// The `CANTINO_ERROR_*` code of this category (the negated status of
+    /// the failed call).
     var code: Int32 {
         switch self {
         case .invalidArgument: CANTINO_ERROR_INVALID_ARGUMENT

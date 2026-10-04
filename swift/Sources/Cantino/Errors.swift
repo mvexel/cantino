@@ -14,8 +14,8 @@ import CCantino
 /// The associated string is a developer-facing message from the core (not
 /// localized). An ``OsmStore`` remains usable after any of these.
 ///
-/// The category comes from `cantino_last_error_code()` (read on the failing
-/// thread right after the call), never from the message text.
+/// The category is the failed call's negative status
+/// (`-CANTINO_ERROR_*`), never inferred from the message text.
 ///
 /// Not covered: a closed store and internal errors of the core throw
 /// ``CantinoStateError`` (the Kotlin adapter's `IllegalStateException`).
@@ -100,13 +100,11 @@ struct NativeCall: ~Copyable {
         cantino_free(error)
     }
 
-    /// Checks a status code: 0 or 1 are returned as-is, -1 becomes the
-    /// typed error. Must be called right after the ABI call on the same
-    /// thread, because the category is thread-local and overwritten by the
-    /// next ABI call (errno-style).
+    /// Checks a status code: 0 or 1 are returned as-is, a negative status
+    /// `-CANTINO_ERROR_*` becomes the typed error.
     func check(_ status: Int32) throws -> Int32 {
         if status >= 0 { return status }
-        let code = cantino_last_error_code()
+        let code = -status
         let message = error.map { String(cString: $0) } ?? "unknown error"
         throw mapError(code: code, message: message)
     }
@@ -132,8 +130,8 @@ func mapError(code: Int32, message: String) -> any Error {
     case CANTINO_ERROR_WRONG_THREAD: return CantinoError.wrongThread(message)
     case CANTINO_ERROR_INTERNAL: return CantinoStateError.internalError("Cantino internal error: \(message)")
     default:
-        // A code this adapter does not know (the core appended a category,
-        // or NONE after a -1): version skew, so a bug, not a domain error.
+        // A code this adapter does not know (the core appended a
+        // category): version skew, so a bug, not a domain error.
         return CantinoStateError.internalError("Cantino internal error (category \(code)): \(message)")
     }
 }

@@ -3,19 +3,19 @@
 // Cantino's Swift adapter: a thin layer over the Rust core's C ABI
 // (include/cantino.h), mirroring the Kotlin store API (android/cantino).
 //
-// This slice is platform-neutral and built/tested on Linux (Docker, see
-// scripts/swift-test.sh). iOS packaging comes later: an xcframework
-// `.binaryTarget` replaces the Linux link settings below, and the iOS-only
-// parts (background URLSession, BGTaskScheduler) live behind
-// `#if os(iOS)`. Nothing in Sources/ uses an Apple-only API today.
+// Host builds (macOS natively, Linux in Docker; see scripts/swift-test.sh)
+// link the Rust static library from target/swift. iOS packaging comes
+// later: an xcframework `.binaryTarget`. Nothing in Sources/ uses an
+// Apple-only API today.
 import PackageDescription
 
 // Where the Rust static library lives. `scripts/swift-test.sh` builds the
 // core with `cargo build --release` and copies ONLY `libcantino.a` into
-// `target/swift/`: target/release also holds `libcantino.so` (the crate is
-// built as cdylib too), and the linker prefers a shared library over a
-// static one when both sit in a `-L` directory, which would leave the test
-// binary needing the .so at run time. Override with CANTINO_LIB_DIR.
+// `target/swift/`, renamed `libcantino_core.a`: target/release also holds
+// the cdylib (.so/.dylib), which the linker would prefer, and on a
+// case-insensitive macOS file system `-lcantino` would resolve to SwiftPM's
+// own `libCantino.a` (this package's Swift target). Override the directory
+// with CANTINO_LIB_DIR.
 let libDir = Context.environment["CANTINO_LIB_DIR"]
     ?? "\(Context.packageDirectory)/../target/swift"
 
@@ -45,8 +45,9 @@ let package = Package(
                 // two are stubs, harmless). unsafeFlags is fine for a root
                 // package and for local path dependencies; a remote package
                 // dependency will instead get the binary target.
-                .unsafeFlags(["-L", libDir], .when(platforms: [.linux])),
-                .linkedLibrary("cantino", .when(platforms: [.linux])),
+                // macOS: the same staticlib; libSystem covers the rest.
+                .unsafeFlags(["-L", libDir], .when(platforms: [.linux, .macOS])),
+                .linkedLibrary("cantino_core", .when(platforms: [.linux, .macOS])),
                 .linkedLibrary("m", .when(platforms: [.linux])),
                 .linkedLibrary("dl", .when(platforms: [.linux])),
                 .linkedLibrary("pthread", .when(platforms: [.linux])),

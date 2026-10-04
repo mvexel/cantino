@@ -8,12 +8,12 @@ import Testing
 // (Canonical.swift) and compares the result file byte for byte with
 // tests/parity/expected.json minus the `abi_only` calls, which a typed API
 // cannot express (NULL pointers, invalid kind codes, malformed JSON for a
-// typed argument, legacy import options). Skipping is decided by that flag
+// typed argument, unknown import options). Skipping is decided by that flag
 // alone.
 //
 // API used per op (README "Op → platform API"):
 //   import, open, close, get, get_many, query, way_coordinates,
-//   representative_point, get_from_other_thread
+//   get_from_other_thread
 //                          public OsmStore (synchronous; the wrong-thread
 //                          call uses the same store from a new Thread)
 //   basemap_info           public PmtilesInfo.read
@@ -213,8 +213,6 @@ private final class ParityRunner {
             let coordinates = try store(args).wayCoordinates(args.required("id").requiredInt())
             return coordinates == nil ? .missing : .ok(canonicalWayCoordinates(coordinates))
 
-        case "representative_point":
-            return .okOrMissing(try store(args).representativePoint(osmId(kind: args.required("kind"), id: args.required("id"))))
 
         case "slice_job_request":
             let request = try SliceProtocol.jobRequest(

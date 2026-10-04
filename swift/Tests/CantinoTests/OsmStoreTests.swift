@@ -89,15 +89,6 @@ import Testing
         #expect(abs(second.lat - 40.001) < 1e-9)
         #expect(try store.wayCoordinates(42) == nil) // not in the area
 
-        #expect(try store.representativePoint(node(2)) == node2)
-        // Closed way: mean of its distinct vertices (nodes 1 and 2).
-        let ring = Coordinate(latE7: 400_005_000, lonE7: -1_110_005_000)
-        #expect(try store.representativePoint(way(1)) == ring)
-        // Open way 2 runs from 39.9 to 40.1 along -111: halfway is 40.0.
-        #expect(try store.representativePoint(way(2)) == Coordinate(latE7: 400_000_000, lonE7: -1_110_000_000))
-        // Relation 1: way 1 counts, the missing node 99 does not.
-        #expect(try store.representativePoint(relation(1)) == ring)
-        #expect(try store.representativePoint(node(99)) == nil)
     }
 
     @Test func batchGetKeepsOrderAndReportsMissing() throws {
