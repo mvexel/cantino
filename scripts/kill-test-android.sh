@@ -9,7 +9,8 @@
 # exits non-zero if any phase fails.
 set -eu
 root=$(CDPATH= cd -- "$(dirname "$0")/.." && pwd)
-adb="${ANDROID_HOME:-$HOME/Android/Sdk}/platform-tools/adb"
+case "$(uname -s)" in Darwin) default_sdk=$HOME/Library/Android/sdk ;; *) default_sdk=$HOME/Android/Sdk ;; esac
+adb="${ANDROID_HOME:-$default_sdk}/platform-tools/adb"
 port="${KILL_TEST_PORT:-8765}"
 package=lol.osm.cantino.test
 runner="$package/androidx.test.runner.AndroidJUnitRunner"

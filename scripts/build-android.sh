@@ -9,8 +9,12 @@
 set -eu
 root=$(CDPATH= cd -- "$(dirname "$0")/.." && pwd)
 # Default to the SDK-managed NDK that Gradle also uses for stripping.
-: "${ANDROID_NDK_ROOT:=${ANDROID_HOME:-$HOME/Android/Sdk}/ndk/29.0.14206865}"
-toolchain="$ANDROID_NDK_ROOT/toolchains/llvm/prebuilt/linux-x86_64/bin"
+case "$(uname -s)" in
+Darwin) default_sdk=$HOME/Library/Android/sdk; host=darwin-x86_64 ;; # universal binaries
+*) default_sdk=$HOME/Android/Sdk; host=linux-x86_64 ;;
+esac
+: "${ANDROID_NDK_ROOT:=${ANDROID_HOME:-$default_sdk}/ndk/29.0.14206865}"
+toolchain="$ANDROID_NDK_ROOT/toolchains/llvm/prebuilt/$host/bin"
 api=26 # minSdk of the AAR
 [ -d "$toolchain" ] || { echo "NDK toolchain not found: $toolchain" >&2; exit 2; }
 [ "$#" -gt 0 ] || set -- arm64-v8a x86_64
