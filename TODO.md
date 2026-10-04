@@ -28,8 +28,10 @@ Verify each `[x]` against the repo before trusting it.
    candidate is decided (do / won't), the "do" ones ship with KDoc + tests,
    the quickstart drops its `dropWhile` workaround, CHANGELOG has a 0.2.0
    section. Must-haves: run identity in `AreaState` (or `state(runId)`),
-   coroutines as an `api` dependency, `Bbox` around a point, way geometry /
-   batch get from Kotlin, a store owner-thread wrapper.
+   coroutines as an `api` dependency, `Bbox` around a point, a store
+   owner-thread wrapper, **§9 geometry helpers** (way coordinates,
+   representative point, batch get), and typed errors (§13; breaking). The
+   ⚡ quick wins from §10–§13 ride along as one slice in this release.
 2. **Download reliability** (§5). Done when: an instrumented test kills the
    process mid-download (`am kill`/`Process.killProcess`) and mid-commit and
    the next run resumes or rolls forward with the old area intact; decision
@@ -49,6 +51,10 @@ Verify each `[x]` against the repo before trusting it.
    read-only base (`docs/research/2026-10-03-prebaked-dataset-format.md`),
    versions are stored for every object.
 7. **Offline routing research** (§8) — not started; research before any code.
+8. **Dev-review backlog** (§10–§17, in priority order; §9 and the ⚡ items
+   are part of 1): new features from two persona reviews of 0.1.0
+   (2026-10-03). Each still needs scoping and a done-criterion before it
+   becomes a slice; several need a `CLAUDE.md` scope change first (marked).
 
 ## Parked
 - Server-side pre-baked area files (proposal in `docs/research/`); only if
@@ -152,3 +158,99 @@ Target onboarding flow (Martijn, 2026-10-03): get location → offer to download
 ## 8. Offline routing (later — not started; added 2026-10-03 by Martijn)
 - [ ] Research: on-device routing engines (e.g. Valhalla, GraphHopper, OSRM, Ferrostar/Valhalla mobile, pure-Rust options), their data models/graph formats vs our SQLite raw graph (build graph on device from the area db, or download pre-built tiles?), size/import cost for a ~10×10 km area, licensing, Android/iOS fit, and amount of work
 - [ ] Café app feature: real distance and travel time per chosen mode (walk/bike/car) in the nearby list, and "route to…" drawn on the map
+
+---
+
+# Dev-review backlog (added 2026-10-03, not started)
+
+Source: two persona reviews of the public 0.1.0 (site, Dokka, GitHub guide;
+no checkout): an offline hiking app (H) and an `opening_hours` field editor
+(E). Reports: `docs/research/2026-10-03-hiking-dev-review.md`,
+`docs/research/2026-10-03-editor-dev-review.md`.
+Ranked by how many apps we expect to hit the gap, not by how loud one
+reviewer was. Already-planned items both reviewers also raised (reinforced,
+not repeated here): run identity in `AreaState`, owner-thread/suspend store
+wrapper, batch get (Next up 1, both); byte-range resume (2, H); iOS (5, both;
+both asked about Kotlin Multiplatform over the C ABI); edit overlay that
+exports osmChange (6, E); routing (7, H).
+
+**Quick wins** (⚡, roughly ≤ ½ day each, no scope change): §9 way
+coordinates over JNI + representative point; §10 `NotExists` filter; §12
+armeabi-v7a build; §13 Dokka defaults, guide on Pages, the three doc pages,
+repo description/topics/Discussions (Martijn). Rule: do them as one slice
+within 0.2 (Next up 1), not one by one in backlog order.
+
+## 9. Geometry helpers (both) — highest reach; part of 0.2 (Next up 1)
+Every app with features mapped as ways (shops as buildings, trails) writes
+this itself today. Replaces 0.2's "way geometry / batch get" candidate (§7).
+- [ ] ⚡ Expose `way_coordinates` (already in the Rust core, `src/store.rs`)
+  through C ABI + JNI + Kotlin: one call per way, not one per node
+- [ ] ⚡ Core-computed representative point for ways and relations (what the
+  café app does by hand); define it honestly (not a guaranteed
+  point-on-surface)
+- [ ] Batch `get(ids)` / coordinate-only fast path to cut per-object JNI+JSON cost
+
+## 10. Query expressiveness (E; every POI app)
+- [ ] ⚡ `TagFilter.NotExists(key)` as a non-driving filter (filters are
+  already post-checks on a driver key's index range), e.g. "amenities
+  without `opening_hours`"
+- [ ] Key/value OR (`ExistsAny(keys)` or any-of values) as a driver: union
+  of index ranges
+- [ ] Nearest-N / distance-ordered query around a point (uses §9's
+  representative point; candidates semantics stay)
+
+## 11. Import profiles / tag-filtered import (both)
+~75 MB per 10×10 km of city; POI-only and outdoor apps want a fraction.
+- [ ] Decide the profile model (keep-tag predicates plus referential
+  closure: kept ways keep their nodes), record the profile in area metadata,
+  measure size savings on SLC (POIs only, "outdoor" without buildings)
+
+## 12. Distribution and platforms (both)
+Corporate dependency policies flag the current setup. Outward-facing steps
+(Sonatype account, signing keys, group ID) are Martijn's.
+- [ ] ⚡ armeabi-v7a (`armv7-linux-androideabi` in `scripts/build-android.sh`,
+  tests on the emulator) — cheap budget phones used by field mappers and
+  hikers
+- [ ] Maven Central with signed artifacts; decide the group ID (personal
+  `io.github.mvexel` vs an org namespace) before 1.0
+
+## 13. Docs and developer experience (both)
+- [ ] ⚡ Dokka renders non-literal defaults (`Query.maxCandidates`,
+  `AreaConfig` timeouts/intervals look required); fix or document them in
+  KDoc
+- [ ] ⚡ Move the guide onto the Pages site next to `/api/`
+- [ ] ⚡ Doc pages: SliceOSM in production (terms, rate limits, lag,
+  self-hosting via `sliceBaseUrl`); pairing with an `opening_hours` library;
+  "editing apps: what Cantino gives you" (versions in snapshots, freshness)
+- [ ] ⚡ Roadmap/maintenance page (who maintains, path to 1.0, expected
+  breaking minors); repo description, topics, Discussions (Martijn)
+- [ ] Typed errors (codes or a sealed exception hierarchy) instead of one
+  type with a string; breaking, so part of 0.2 (Next up 1)
+- [ ] Testability: an interface or fake for `OsmStore`, and a host-side
+  native lib for JVM/Robolectric tests (or document instrumented-only)
+- [ ] Compose sample
+
+## 14. Large and rural areas (H)
+Overlaps Next up 3 (import memory). Scope says no country scale; a 50×50 km
+park is in between and needs evidence, not a guess.
+- [ ] Bench a 50×50 km rural area on the Pixel (disk, peak memory, time,
+  SliceOSM limits); publish a size guidance table
+- [ ] Pre-download size estimate (SliceOSM if it offers one, else a density
+  heuristic) so apps can warn before the user commits storage
+
+## 15. Several files per area (H)
+- [ ] Extra PMTiles per area (raster DEM / hillshade) published in the same
+  atomic commit as data + basemap; generalise `BasemapSource` to a list
+
+## 16. Route relation assembly (H; hiking and transit apps)
+Needs a scope line in `CLAUDE.md` (multipolygon assembly is out; ordered
+route linestrings are a different thing).
+- [ ] Assemble `route=*` relations into ordered linestrings with gap and
+  "continues outside the area" reporting; a hiking sample on top
+
+## 17. Area shapes and several areas (H, E asked) — scope change
+`CLAUDE.md`: one area per app, overlapping areas out.
+- [ ] Decide on several non-overlapping areas per app (multi-region trips,
+  "user moved out of the area")
+- [ ] Polygon / corridor areas (long-distance trails); check what SliceOSM
+  accepts first
