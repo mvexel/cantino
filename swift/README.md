@@ -6,9 +6,8 @@ API in [`android/cantino`](../android/cantino) (`OsmStore`, `AsyncOsmStore`,
 the models), which is the reference: same names, same semantics, same
 defaults, except for the deviations listed below.
 
-**Status: platform-neutral slice, built and tested on macOS (native) and
-Linux (Docker).** The iOS parts (an xcframework binary target, background
-`URLSession` downloads, the area manager) come next. Nothing in `Sources/`
+**Status: store API built and tested on iOS (simulator), macOS and Linux.**
+Background `URLSession` downloads and the area manager come next. Nothing in `Sources/`
 uses an Apple-only API.
 
 ```swift
@@ -32,7 +31,7 @@ try await shared.close()
 
 ```text
 Package.swift                 targets, Linux link flags (see below)
-Sources/CCantino/             module.modulemap -> ../../../include/cantino.h (the header is not copied)
+Sources/CCantino/             Linux only: module.modulemap -> ../../../include/cantino.h (Apple: the xcframework)
 Sources/Cantino/
   OsmStore.swift              OsmStore: open, importArea, get, get(batch), query, wayCoordinates, close
   AsyncOsmStore.swift         AsyncOsmStore actor + StoreBox
@@ -54,15 +53,25 @@ Tests/CantinoTests/           ports of OsmStoreTest, AsyncOsmStoreTest, BboxArou
 
 ## Build and test
 
-One command, from the repository root. On macOS it runs Xcode's `swift
-test` natively; elsewhere it needs Docker (no Swift on the host):
+One command, from the repository root. On macOS it builds the xcframework
+and runs Xcode's Swift natively; on Linux it needs Docker:
 
 ```sh
-scripts/swift-test.sh                 # cargo build --release, then swift test (native on macOS, swift:6.4 elsewhere)
-scripts/swift-test.sh --filter Bbox   # extra arguments go to swift test
+scripts/swift-test.sh                            # build the core, then swift test (native on macOS, swift:6.4 elsewhere)
+scripts/swift-test.sh --filter Bbox              # extra arguments go to swift test
+SIMULATOR="iPhone 18 Pro" scripts/swift-test.sh  # macOS: the same tests on an iOS simulator
 ```
 
-What it does on Linux, if you want to do it by hand:
+**Apple platforms: the xcframework.** `scripts/build-xcframework.sh`
+builds `Artifacts/CCantino.xcframework` (git-ignored): the Rust core as a
+static library for iOS device (arm64), iOS simulator (arm64) and macOS
+(arm64), each slice with `cantino.h` and a module map declaring
+`CCantino`. On Apple platforms `Package.swift` uses it as the binary
+target `CCantino`, so the same package serves `swift test` on the Mac and
+apps or `xcodebuild test` on iOS. Deployment floors (iOS 15, macOS 12) are
+passed to rustc and to the C compiler building SQLite.
+
+**Linux.** By hand, the script does:
 
 ```sh
 cargo build --release --lib
@@ -71,27 +80,18 @@ docker run --rm --user "$(id -u):$(id -g)" -e HOME=/tmp -v "$PWD":/work -w /work
     swift:6.4 swift test --scratch-path /work/target/swift-build
 ```
 
-**Linking (host builds).** `Package.swift` links the Rust staticlib with
-`-L <repo>/target/swift -lcantino_core` on macOS and Linux, plus `-lm -ldl
--lpthread` on Linux. Only `libcantino.a` is copied to `target/swift/`
-(as `libcantino_core.a`) because `target/release/` also holds the cdylib,
-which the linker would pick over the `.a`; the new name avoids
-`-lcantino` matching SwiftPM's own `libCantino.a` on case-insensitive
-macOS file systems. `CANTINO_LIB_DIR` overrides the directory. The
-result has the core linked in statically: the test binary does not need
-`libcantino.so` at run time. `-lm` is for the bundled SQLite; `-ldl` and
-`-lpthread` for Rust std (stubs on glibc 2.34+, harmless).
+`Package.swift` links the staticlib with `-L <repo>/target/swift
+-lcantino_core -lm -ldl -lpthread` through a system library target whose
+module map points at the repository's `include/cantino.h`. Only
+`libcantino.a` is copied, because `target/release/` also holds
+`libcantino.so`, which the linker would pick over the `.a`.
+`CANTINO_LIB_DIR` overrides the directory. `-lm` is for the bundled
+SQLite; `-ldl` and `-lpthread` for Rust std (stubs on glibc 2.34+).
 
-**Docker image and glibc.** The core is built on the host with the pinned
-Rust 1.99.0 and linked in the container, so the container's glibc must be
-at least the host's. `swift:6.4` (Swift 6.4, Ubuntu 26.04, glibc 2.43)
-matches the development host. Set `SWIFT_IMAGE` for another image; on a
-host newer than the image, build the core inside a container with the
-image's glibc instead.
-
-`unsafeFlags` is fine for this root package and for local path
-dependencies. A remote package dependency will get the xcframework binary
-target instead (later slice).
+The core is built on the host with the pinned Rust 1.99.0 and linked in
+the container, so the container's glibc must be at least the host's.
+`swift:6.4` (Ubuntu 26.04, glibc 2.43) matches the development host. Set
+`SWIFT_IMAGE` for another image.
 
 ## Deviations from the Kotlin API
 

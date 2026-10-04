@@ -68,17 +68,22 @@ The Swift adapter in `swift/` is tested natively on macOS (Xcode's Swift)
 and in Docker on Linux:
 
 ```sh
-scripts/swift-test.sh          # cargo build --release, then `swift test`
+scripts/swift-test.sh                              # build the core, then `swift test`
+SIMULATOR="iPhone 18 Pro" scripts/swift-test.sh    # macOS: the same tests on an iOS simulator
+scripts/build-xcframework.sh                       # macOS: only build swift/Artifacts/CCantino.xcframework
 ```
 
-It needs cargo, plus Xcode on macOS or Docker on Linux. The script copies
+It needs cargo, plus Docker on Linux, or on macOS Xcode and the Rust
+targets `aarch64-apple-ios`, `aarch64-apple-ios-sim` and
+`aarch64-apple-darwin`. On Apple platforms Package.swift uses the binary
+target `CCantino.xcframework` (iOS device, iOS simulator and macOS arm64
+slices; git-ignored, rebuilt by the script). On Linux the script copies
 only `libcantino.a` to `target/swift/libcantino_core.a`, which
-Package.swift links statically, and keeps SwiftPM's build products in
+Package.swift links statically. SwiftPM's build products go to
 `target/swift-build`. On Linux the container's glibc must be at least the
 host's (`SWIFT_IMAGE` selects another image). Not part of
 `scripts/check.sh`, which needs only cargo. Details and the deviations from the Kotlin API:
-[`swift/README.md`](../../swift/README.md). The iOS build (xcframework,
-simulator tests) is a later slice on macOS.
+[`swift/README.md`](../../swift/README.md).
 
 Sample apps need the offline style assets first:
 

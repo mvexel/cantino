@@ -5,6 +5,8 @@
 #
 #   scripts/swift-test.sh                 # build core, swift test
 #   scripts/swift-test.sh --filter Bbox   # extra arguments go to `swift test`
+#   SIMULATOR="iPhone 18 Pro" scripts/swift-test.sh   # macOS: on an iOS simulator
+#                                         # (xcodebuild test; extra arguments go to xcodebuild)
 #
 # Needs: cargo (rust-toolchain.toml pins 1.99.0), and on Linux Docker (no
 # Swift toolchain on the host: the official swift image provides it).
@@ -30,17 +32,23 @@ root=$(CDPATH= cd -- "$(dirname "$0")/.." && pwd)
 cd "$root"
 image=${SWIFT_IMAGE:-swift:6.4}
 
-cargo build --release --lib
-mkdir -p target/swift target/swift-build
-# Named libcantino_core.a: on case-insensitive macOS file systems
-# -lcantino would find SwiftPM's own libCantino.a (the Swift target) first.
-rm -f target/swift/libcantino.a
-cp target/release/libcantino.a target/swift/libcantino_core.a
-
 if [ "$(uname -s)" = Darwin ]; then
+    # Apple platforms link the xcframework (see Package.swift).
+    scripts/build-xcframework.sh
     cd swift
+    if [ -n "${SIMULATOR:-}" ]; then
+        exec xcodebuild test -scheme Cantino -destination "platform=iOS Simulator,name=$SIMULATOR" \
+            -derivedDataPath "$root/target/ios-derived" "$@"
+    fi
     exec swift test --scratch-path "$root/target/swift-build" "$@"
 fi
+
+cargo build --release --lib
+mkdir -p target/swift target/swift-build
+# Named libcantino_core.a so -lcantino can never pick up another library
+# (on macOS, SwiftPM's own libCantino.a matched it case-insensitively).
+rm -f target/swift/libcantino.a
+cp target/release/libcantino.a target/swift/libcantino_core.a
 
 docker run --rm \
     --user "$(id -u):$(id -g)" \
