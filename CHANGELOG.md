@@ -13,6 +13,9 @@ formats may change without compatibility layers. See the [guide](docs/guide/READ
 - C ABI: `cantino_area_commit` takes `CANTINO_AREA_PART_*` bits instead of
   `has_basemap`; `cantino_area_published` returns `"data": null` for a
   basemap-only area; the sidecar's `report` is null without data.
+- Café apps (Android, iOS) import points of interest only (`CafeProfile`:
+  amenity, shop, tourism, leisure, craft, office, healthcare, historic) and
+  still show the basemap; SLC area database 5.1 MB instead of 61 MB.
 
 ## 0.4.0 — 2026-10-04
 
