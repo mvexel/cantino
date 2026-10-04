@@ -7,6 +7,8 @@ import Foundation
 ///
 ///     xcrun simctl launch booted lol.osm.cantino.cafe -lat 40.7608 -lon -111.8910 \
 ///         -auto_download YES                 # accept the download offer
+///     xcrun simctl launch booted lol.osm.cantino.cafe -radius 2.5 -auto_download YES
+///                                            # preselect this area radius (km, one of AreaRadius.choicesKm)
 ///     xcrun simctl launch booted lol.osm.cantino.cafe \
 ///         -list YES -outdoor yes -now open   # list view with filters set
 ///     xcrun simctl launch booted lol.osm.cantino.cafe -object way/123456   # open the inspector
@@ -15,6 +17,8 @@ import Foundation
 ///
 /// Unlike the location override (``DebugLocation``) none of this is sticky.
 struct DebugLaunch: Sendable {
+    /// The offer's preselected area radius in km (``AreaRadius``); ignored unless it is one of the choices.
+    var radiusKm: Double?
     var autoDownload = false
     var showList = false
     var outdoor: MapModel.OutdoorFilter?
@@ -32,6 +36,7 @@ struct DebugLaunch: Sendable {
             return arguments[index + 1]
         }
         func flag(_ name: String) -> Bool { ["yes", "true", "1"].contains(value(name)?.lowercased() ?? "") }
+        launch.radiusKm = AreaRadius.choice(value("-radius").flatMap(Double.init))
         launch.autoDownload = flag("-auto_download")
         launch.showList = flag("-list")
         launch.outdoor = value("-outdoor").flatMap { v in MapModel.OutdoorFilter.allCases.first { $0.rawValue.lowercased() == v.lowercased() } }

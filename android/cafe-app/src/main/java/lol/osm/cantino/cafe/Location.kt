@@ -64,6 +64,31 @@ object DebugLocation {
     }
 }
 
+/**
+ * The offer screen's preselected radius, debuggable builds only, not sticky:
+ *
+ *     adb shell am start -n lol.osm.cantino.cafe/.MainActivity --ef radius 2.5
+ *
+ * Must be one of [AreaRadius.CHOICES_KM] (km, half the side of the square);
+ * anything else is ignored. The same option exists on iOS (`-radius 2.5`)
+ * and in the Inspector app.
+ */
+object DebugRadius {
+    fun read(context: Context, intent: Intent?): Double? {
+        val debuggable = context.applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE != 0
+        if (!debuggable || intent == null || !intent.hasExtra("radius")) return null
+        return AreaRadius.choice(intent.getFloatExtra("radius", Float.NaN).toDouble())
+    }
+}
+
+/** "lat,lon" in degrees (the location chooser), or null. */
+fun parseLatLon(input: String): LatLon? {
+    val parts = input.split(',').map { it.trim().toDoubleOrNull() }
+    if (parts.size != 2 || parts.any { it == null }) return null
+    val (lat, lon) = parts.map { it!! }
+    return if (lat in -85.0..85.0 && lon in -180.0..180.0) LatLon(lat, lon) else null
+}
+
 object DeviceLocation {
     val PERMISSIONS = arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION)
 

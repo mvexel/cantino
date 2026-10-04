@@ -6,7 +6,8 @@ import Observation
 /// MainActivity):
 ///
 ///   location permission → one CoreLocation fix
-///     → offer "download ~10×10 km around you (map data + basemap)?"
+///     → offer "download a square around you (map data + basemap)?", with a
+///       radius choice (``AreaRadius``: 1, 2.5, 5 (default) or 10 km)
 ///     → AreaManager.download(…, .extract(latest Protomaps build, z15)),
 ///       importing points of interest only (``CafeProfile``)
 ///       with honest progress (phase, bytes, fraction when known)
@@ -47,6 +48,8 @@ final class AppModel {
 
     let debugLocation = DebugLocation.read()
     let debugLaunch = DebugLaunch.read()
+    /// The radius selected on the offer screen, in km (kept while the app runs).
+    var radiusKm = DebugLaunch.read().radiusKm ?? AreaRadius.defaultKm
     @ObservationIgnored let device = DeviceLocation()
     /// Downloads started here import points of interest only (``CafeProfile``).
     @ObservationIgnored private let areas = AreaManager(config: CafeProfile.areaConfig)
@@ -73,7 +76,7 @@ final class AppModel {
         var states = stream.makeAsyncIterator()
         guard let first = await states.next() else { return }
         if first.isRunning {
-            showProgress(requested: Settings.requested)
+            showProgress(requested: Settings.requested, radiusKm: Settings.requestedRadiusKm)
             onAreaState(first)
         } else if published != nil {
             showMap()
@@ -114,13 +117,13 @@ final class AppModel {
         screen = .chooser(reason: reason)
     }
 
-    /// The offer, with the one-line privacy note (``OfferView``).
+    /// The offer: the radius choice and the one-line privacy note (``OfferView``).
     func offerDownload(_ center: LatLon, source: LocationSource) {
         screen = .offer(center: center, source: source)
         if debugLaunch.autoDownload {
             Task {
                 try? await Task.sleep(for: .seconds(1)) // long enough to see (and screenshot) the offer
-                if screen == .offer(center: center, source: source) { startDownload(center: center) }
+                if screen == .offer(center: center, source: source) { startDownload(center: center, radiusKm: radiusKm) }
             }
         }
     }
@@ -136,11 +139,12 @@ final class AppModel {
 
     // MARK: - download
 
-    /// Downloads the default-size area around `center`, or exactly `bbox`
+    /// Downloads the square of `radiusKm` around `center`, or exactly `bbox`
     /// (refresh: the published area's bbox, full replace).
-    func startDownload(center: LatLon, bbox: Bbox? = nil) {
+    func startDownload(center: LatLon, radiusKm: Double, bbox: Bbox? = nil) {
         Settings.requested = center
-        let screen = showProgress(requested: center)
+        Settings.requestedRadiusKm = radiusKm
+        let screen = showProgress(requested: center, radiusKm: radiusKm)
         screen.phase("Finding the newest basemap build")
         if let delay = debugLaunch.cancelAfter {
             Task {
@@ -163,7 +167,8 @@ final class AppModel {
             }
             guard !Task.isCancelled else { return }
             do {
-                let area = try bbox ?? Bbox.around(lat: center.lat, lon: center.lon, widthKm: Geo.areaSizeKm)
+                let area = try bbox ?? AreaRadius.bbox(center, radiusKm: radiusKm)
+                Log.download.info("area radius \(radiusKm) km, bbox \(String(describing: area), privacy: .public)")
                 currentRun = try areas.download(
                     areaId: CafeStore.areaId, bbox: area,
                     name: String(format: "cafes %.4f,%.4f", center.lat, center.lon),
@@ -192,7 +197,7 @@ final class AppModel {
             // after a relaunch): show it.
             if state.isRunning {
                 currentRun = state.runId
-                showProgress(requested: Settings.requested).update(state)
+                showProgress(requested: Settings.requested, radiusKm: Settings.requestedRadiusKm).update(state)
             }
             return
         }
@@ -228,8 +233,8 @@ final class AppModel {
     }
 
     @discardableResult
-    private func showProgress(requested: LatLon?) -> ProgressModel {
-        let model = ProgressModel(requested: requested)
+    private func showProgress(requested: LatLon?, radiusKm: Double?) -> ProgressModel {
+        let model = ProgressModel(requested: requested, radiusKm: radiusKm)
         progress = model
         screen = .progress
         return model
@@ -247,7 +252,7 @@ final class AppModel {
 
     func retry() {
         guard let requested = Settings.requested else { return showChooser("") }
-        startDownload(center: requested)
+        startDownload(center: requested, radiusKm: Settings.requestedRadiusKm ?? AreaRadius.defaultKm)
     }
 
     // MARK: - map
@@ -268,10 +273,12 @@ final class AppModel {
             debugRefreshDone = true
         }
         guard let bbox = area.metadata?.bbox else {
-            if let requested = Settings.requested { startDownload(center: requested) }
+            if let requested = Settings.requested {
+                startDownload(center: requested, radiusKm: Settings.requestedRadiusKm ?? AreaRadius.defaultKm)
+            }
             return
         }
-        startDownload(center: Geo.center(bbox), bbox: bbox)
+        startDownload(center: Geo.center(bbox), radiusKm: AreaRadius.of(bbox), bbox: bbox)
     }
 
     private func loadPublished() async -> AreaInfo? {
@@ -290,7 +297,7 @@ extension AreaState {
     }
 }
 
-/// The centre of the last requested download, for Retry and for a relaunch mid-download.
+/// The centre and radius of the last requested download, for Retry and for a relaunch mid-download.
 enum Settings {
     static var requested: LatLon? {
         get {
@@ -303,6 +310,11 @@ enum Settings {
             UserDefaults.standard.set(newValue?.lon, forKey: "requested_lon")
         }
     }
+
+    static var requestedRadiusKm: Double? {
+        get { UserDefaults.standard.object(forKey: "requested_radius_km") as? Double }
+        set { UserDefaults.standard.set(newValue, forKey: "requested_radius_km") }
+    }
 }
 
 /// The download progress screen's model. Shows the current phase with what
@@ -313,6 +325,7 @@ enum Settings {
 @Observable
 final class ProgressModel {
     let requested: LatLon?
+    let radiusKm: Double?
     private(set) var phaseName = ""
     private(set) var detail = ""
     /// 0...1, or nil for an indeterminate bar.
@@ -321,7 +334,10 @@ final class ProgressModel {
     let startedAt = Date()
     private(set) var currentStart = Date()
 
-    init(requested: LatLon?) { self.requested = requested }
+    init(requested: LatLon?, radiusKm: Double?) {
+        self.requested = requested
+        self.radiusKm = radiusKm
+    }
 
     /// Starts a new named phase, closing the previous one.
     func phase(_ name: String) {

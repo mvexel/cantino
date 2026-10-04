@@ -55,26 +55,28 @@ struct ChooserView: View {
     }
 }
 
-/// The offer, with the one-line privacy note.
+/// The offer: the area centred on `center`, the radius choice
+/// (``AreaRadius/choicesKm``) and the one-line privacy note.
 struct OfferView: View {
-    let model: AppModel
+    @Bindable var model: AppModel
     let center: LatLon
     let source: LocationSource
-
-    private var km: String {
-        Geo.areaSizeKm.truncatingRemainder(dividingBy: 1) == 0 ? "\(Int(Geo.areaSizeKm))" : "\(Geo.areaSizeKm)"
-    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text("Download an offline area?").font(.title2.bold())
             Text("Area centre (\(center.description), \(source.label)).").font(.footnote).foregroundStyle(Palette.muted)
-            Text("About \(km) × \(km) km around \(center.description): map data (to find cafés) and a basemap, "
-                + "so the app works without a connection. Of the map data, only points of interest "
-                + "(cafés, shops, other places) are kept; the basemap shows the rest.")
+            Text("Radius").bold()
+            Picker("Radius", selection: $model.radiusKm) {
+                ForEach(AreaRadius.choicesKm, id: \.self) { Text(AreaRadius.label($0)).tag($0) }
+            }
+            .pickerStyle(.segmented)
+            Text("About \(AreaRadius.sideLabel(model.radiusKm)) around \(center.description) (radius \(AreaRadius.label(model.radiusKm))): "
+                + "map data (to find cafés) and a basemap, so the app works without a connection. Of the map data, "
+                + "only points of interest (cafés, shops, other places) are kept; the basemap shows the rest.")
             Text("Privacy: the area's bounds (≈ your location) are sent to SliceOSM and the Protomaps tile host.")
                 .font(.callout)
-            Button("Download") { model.startDownload(center: center) }
+            Button("Download") { model.startDownload(center: center, radiusKm: model.radiusKm) }
                 .buttonStyle(.borderedProminent)
             Button("Choose another place") { model.showChooser("") }
                 .buttonStyle(.bordered)
@@ -94,8 +96,8 @@ struct ProgressScreen: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 12) {
                 Text("Downloading your offline area").font(.title2.bold())
-                if let requested = progress.requested {
-                    Text("\(Int(Geo.areaSizeKm)) × \(Int(Geo.areaSizeKm)) km around \(requested.description)")
+                if let requested = progress.requested, let radiusKm = progress.radiusKm {
+                    Text("\(AreaRadius.sideLabel(radiusKm)) around \(requested.description)")
                         .font(.footnote).foregroundStyle(Palette.muted)
                 }
                 Text(progress.phaseName).font(.headline)

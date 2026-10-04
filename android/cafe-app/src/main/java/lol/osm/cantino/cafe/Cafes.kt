@@ -155,9 +155,6 @@ object CafeLoader {
 }
 
 object Geo {
-    /** Edge length of the default area, in km. A default, not a cap: change it freely. */
-    const val AREA_SIZE_KM = 10.0
-
     private const val EARTH_RADIUS_M = 6_371_000.0
 
     fun center(bbox: Bbox) = LatLon((bbox.south + bbox.north) / 2, (bbox.west + bbox.east) / 2)

@@ -152,9 +152,6 @@ enum CafeLoader {
 }
 
 enum Geo {
-    /// Edge length of the default area, in km. A default, not a cap: change it freely.
-    static let areaSizeKm = 10.0
-
     private static let earthRadiusM = 6_371_000.0
 
     static func center(_ bbox: Bbox) -> LatLon {

@@ -10,6 +10,8 @@ import android.util.Log
 import android.view.View
 import android.widget.EditText
 import android.widget.ProgressBar
+import android.widget.RadioButton
+import android.widget.RadioGroup
 import android.widget.ScrollView
 import android.widget.TextView
 import lol.osm.cantino.AreaInfo
@@ -34,7 +36,8 @@ import kotlinx.coroutines.withContext
  * Entry point and first-run flow:
  *
  *   location permission → current location (LocationManager)
- *     → offer "download ~10×10 km around you (map data + basemap)?"
+ *     → offer "download a square around you (map data + basemap)?", with a
+ *       radius choice ([AreaRadius]: 1, 2.5, 5 (default) or 10 km)
  *     → AreaManager.download(…, BasemapSource.Extract(latest Protomaps build, z15)),
  *       importing points of interest only ([CafeProfile])
  *       with honest progress (phase, bytes, fraction when known)
@@ -49,12 +52,15 @@ import kotlinx.coroutines.withContext
  * works fully offline (airplane mode). The download state is observed for
  * the activity's lifetime, so a relaunch during a download shows its progress.
  *
- * Debug location override (debuggable builds): see [DebugLocation].
+ * Debug location override (debuggable builds): see [DebugLocation]; the
+ * offer's preselected radius: [DebugRadius].
  */
 class MainActivity : Activity() {
     private val scope = MainScope()
     private lateinit var areas: AreaManager
     private var debugLocation: LatLon? = null
+    /** The radius selected on the offer screen (kept while the app runs). */
+    private var radiusKm = AreaRadius.DEFAULT_KM
 
     private var mapScreen: MapScreen? = null
     private var started = false
@@ -73,6 +79,7 @@ class MainActivity : Activity() {
         // Downloads started here import points of interest only (CafeProfile).
         areas = AreaManager(this, CafeProfile.AREA_CONFIG)
         debugLocation = DebugLocation.read(this, intent)
+        DebugRadius.read(this, intent)?.let { radiusKm = it }
         DebugShowWhenLocked.read(this, intent)
         DebugShowWhenLocked.apply(this)
         setContentView(vertical(children = arrayOf(text("Opening…"))))
@@ -83,7 +90,7 @@ class MainActivity : Activity() {
             // Route on the first observed state, then keep following it.
             val first = stateFlow.first()
             when {
-                first.isRunning() -> showProgress(requested = Settings.requested(this@MainActivity))
+                first.isRunning() -> showProgress(Settings.requested(this@MainActivity), Settings.requestedRadius(this@MainActivity))
                 published != null -> showMap()
                 first is AreaState.Failed -> showFailure(first.message, first.retryable)
                 else -> startFirstRun()
@@ -95,6 +102,7 @@ class MainActivity : Activity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         debugLocation = DebugLocation.read(this, intent)
+        DebugRadius.read(this, intent)?.let { radiusKm = it }
         DebugShowWhenLocked.read(this, intent)
         DebugShowWhenLocked.apply(this)
     }
@@ -153,29 +161,62 @@ class MainActivity : Activity() {
         )
     }
 
-    /** The offer, with the one-line privacy note. */
+    /**
+     * The offer: the area centred on [center], the radius choice
+     * ([AreaRadius.CHOICES_KM]) and the one-line privacy note.
+     */
     private fun offerDownload(center: LatLon, source: LocationSource) {
-        val km = Geo.AREA_SIZE_KM.let { if (it % 1.0 == 0.0) it.toInt().toString() else it.toString() }
-        showMessage("Offline cafés", "Area centre ($center, ${source.label}).")
-        AlertDialog.Builder(this)
-            .setTitle("Download an offline area?")
-            .setMessage(
-                "About $km × $km km around $center: map data (to find cafés) and a basemap, " +
-                    "so the app works without a connection. Of the map data, only points of interest " +
-                    "(cafés, shops, other places) are kept; the basemap shows the rest.\n\n" +
-                    "Privacy: the area's bounds (≈ your location) are sent to SliceOSM and the Protomaps tile host.",
+        val body = text("")
+        fun describe() {
+            body.text = "About ${AreaRadius.sideLabel(radiusKm)} around $center (radius ${AreaRadius.label(radiusKm)}): " +
+                "map data (to find cafés) and a basemap, so the app works without a connection. Of the map data, " +
+                "only points of interest (cafés, shops, other places) are kept; the basemap shows the rest."
+        }
+        describe()
+        setScreen(
+            ScrollView(this).apply {
+                addView(
+                    vertical(
+                        children = arrayOf(
+                            text("Download an offline area?", 22f, bold = true),
+                            text("Area centre ($center, ${source.label}).", 13f, color = Colors.MUTED),
+                            text("Radius", bold = true),
+                            radiusChoice { describe() },
+                            body,
+                            text("Privacy: the area's bounds (≈ your location) are sent to SliceOSM and the Protomaps tile host."),
+                            button("Download") { startDownload(center, radiusKm) },
+                            button("Choose another place") { showLocationChooser("") },
+                        ),
+                    ),
+                )
+            },
+        )
+    }
+
+    /** One radio button per [AreaRadius.CHOICES_KM]; a choice updates [radiusKm]. */
+    private fun radiusChoice(onChange: () -> Unit) = RadioGroup(this).apply {
+        orientation = RadioGroup.HORIZONTAL
+        AreaRadius.CHOICES_KM.forEach { km ->
+            addView(
+                RadioButton(this@MainActivity).apply {
+                    id = View.generateViewId()
+                    text = AreaRadius.label(km)
+                    isChecked = km == radiusKm
+                    setOnClickListener { radiusKm = km; onChange() }
+                },
             )
-            .setPositiveButton("Download") { _, _ -> startDownload(center) }
-            .setNegativeButton("Choose another place") { _, _ -> showLocationChooser("") }
-            .setCancelable(false)
-            .show()
+        }
     }
 
     // ---- download -----------------------------------------------------------
 
-    private fun startDownload(center: LatLon) {
-        Settings.setRequested(this, center)
-        val screen = showProgress(center)
+    /**
+     * Downloads the square of [radiusKm] around [center], or exactly [bbox]
+     * (refresh: the published area's bbox, full replace).
+     */
+    private fun startDownload(center: LatLon, radiusKm: Double, bbox: Bbox? = null) {
+        Settings.setRequested(this, center, radiusKm)
+        val screen = showProgress(center, radiusKm)
         screen.phase("Finding the newest basemap build")
         scope.launch {
             // Network lookup (HEAD requests); demo only, see ProtomapsBuilds.
@@ -185,10 +226,11 @@ class MainActivity : Activity() {
                 Log.w(TAG, "basemap build lookup failed", error)
                 return@launch showFailure("Could not reach the basemap host: ${error.message}", retryable = true)
             }
-            Log.i(TAG, "basemap source $planet")
+            val area = bbox ?: AreaRadius.bbox(center, radiusKm)
+            Log.i(TAG, "basemap source $planet; area radius $radiusKm km, bbox $area")
             areas.download(
                 CafeStore.AREA_ID,
-                Bbox.around(center.lat, center.lon, Geo.AREA_SIZE_KM),
+                area,
                 name = "cafes %.4f,%.4f".format(center.lat, center.lon),
                 basemap = BasemapSource.Extract(planet, maxZoom = BASEMAP_MAX_ZOOM),
             )
@@ -201,7 +243,7 @@ class MainActivity : Activity() {
         if (screen == null) {
             // A download we did not start from this screen (e.g. still running
             // from before a relaunch): show it.
-            if (state.isRunning()) showProgress(Settings.requested(this)).update(state)
+            if (state.isRunning()) showProgress(Settings.requested(this), Settings.requestedRadius(this)).update(state)
             return
         }
         screen.update(state)
@@ -223,10 +265,10 @@ class MainActivity : Activity() {
         }
     }
 
-    private fun showProgress(requested: LatLon?): ProgressScreen {
+    private fun showProgress(requested: LatLon?, radiusKm: Double?): ProgressScreen {
         mapScreen?.destroy(started, resumed)
         mapScreen = null
-        val screen = ProgressScreen(requested)
+        val screen = ProgressScreen(requested, radiusKm)
         progress = screen
         setScreen(screen.view)
         return screen
@@ -237,8 +279,9 @@ class MainActivity : Activity() {
         scope.launch {
             val published = withContext(Dispatchers.IO) { areas.publishedArea(CafeStore.AREA_ID) }
             val requested = Settings.requested(this@MainActivity)
+            val requestedRadius = Settings.requestedRadius(this@MainActivity) ?: AreaRadius.DEFAULT_KM
             val buttons = listOfNotNull(
-                requested?.let { button("Retry") { startDownload(it) } },
+                requested?.let { button("Retry") { startDownload(it, requestedRadius) } },
                 button("Choose another place") { showLocationChooser("") },
                 published?.let { button("Back to the map (previous area is kept)") { showMap() } },
             )
@@ -274,14 +317,14 @@ class MainActivity : Activity() {
 
     /** Refresh = full re-download of the same area (same bbox), after the same privacy note. */
     private fun confirmRefresh(area: AreaInfo) {
-        val center = area.metadata?.bbox?.let(Geo::center) ?: Settings.requested(this) ?: return
+        val bbox = area.metadata?.bbox ?: return
         AlertDialog.Builder(this)
             .setTitle("Refresh the offline area?")
             .setMessage(
                 "Downloads fresh map data and basemap for the same area. The current area stays usable until the new one is complete.\n\n" +
                     "Privacy: the area's bounds are sent to SliceOSM and the Protomaps tile host.",
             )
-            .setPositiveButton("Refresh") { _, _ -> startDownload(center) }
+            .setPositiveButton("Refresh") { _, _ -> startDownload(Geo.center(bbox), AreaRadius.of(bbox), bbox) }
             .setNegativeButton("Cancel", null)
             .show()
     }
@@ -320,7 +363,7 @@ class MainActivity : Activity() {
      * with a total only when there is a total) and how long each finished
      * phase took. Phase timings also go to logcat (tag CafeDownload).
      */
-    private inner class ProgressScreen(requested: LatLon?) {
+    private inner class ProgressScreen(requested: LatLon?, radiusKm: Double?) {
         private val phaseText = text("", 17f, bold = true)
         private val detail = text("")
         private val bar = ProgressBar(this@MainActivity, null, android.R.attr.progressBarStyleHorizontal).apply {
@@ -333,7 +376,10 @@ class MainActivity : Activity() {
                 vertical(
                     children = arrayOf(
                         text("Downloading your offline area", 22f, bold = true),
-                        text(requested?.let { "${Geo.AREA_SIZE_KM.toInt()} × ${Geo.AREA_SIZE_KM.toInt()} km around $it" } ?: "", 13f, color = Colors.MUTED),
+                        text(
+                            if (requested != null && radiusKm != null) "${AreaRadius.sideLabel(radiusKm)} around $requested" else "",
+                            13f, color = Colors.MUTED,
+                        ),
                         phaseText,
                         bar,
                         detail,
@@ -449,13 +495,6 @@ class MainActivity : Activity() {
         else -> false
     }
 
-    private fun parseLatLon(input: String): LatLon? {
-        val parts = input.split(',').map { it.trim().toDoubleOrNull() }
-        if (parts.size != 2 || parts.any { it == null }) return null
-        val (lat, lon) = parts.map { it!! }
-        return if (lat in -85.0..85.0 && lon in -180.0..180.0) LatLon(lat, lon) else null
-    }
-
     companion object {
         private const val TAG = "CafeApp"
         private const val TIMING_TAG = "CafeDownload"
@@ -465,7 +504,7 @@ class MainActivity : Activity() {
     }
 }
 
-/** The centre of the last requested download, for Retry and for a relaunch mid-download. */
+/** The centre and radius of the last requested download, for Retry and for a relaunch mid-download. */
 object Settings {
     private const val PREFS = "cafe"
 
@@ -475,10 +514,17 @@ object Settings {
         return LatLon(prefs.getFloat("requested_lat", 0f).toDouble(), prefs.getFloat("requested_lon", 0f).toDouble())
     }
 
-    fun setRequested(context: android.content.Context, point: LatLon) {
+    fun requestedRadius(context: android.content.Context): Double? {
+        val prefs = context.getSharedPreferences(PREFS, android.content.Context.MODE_PRIVATE)
+        if (!prefs.contains("requested_radius_km")) return null
+        return prefs.getFloat("requested_radius_km", 0f).toDouble()
+    }
+
+    fun setRequested(context: android.content.Context, point: LatLon, radiusKm: Double) {
         context.getSharedPreferences(PREFS, android.content.Context.MODE_PRIVATE).edit()
             .putFloat("requested_lat", point.lat.toFloat())
             .putFloat("requested_lon", point.lon.toFloat())
+            .putFloat("requested_radius_km", radiusKm.toFloat())
             .apply()
     }
 }
