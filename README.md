@@ -285,7 +285,12 @@ store on its own thread, paging through large results, and the privacy note
 - **Samples**: [`android/cafe-app`](android/cafe-app) (the full offline flow:
   first-run download, map, filters, raw object inspector) and
   [`android/sample-app`](android/sample-app) (a bundled PMTiles basemap in
-  MapLibre, no network at all). The iOS café app is in progress.
+  MapLibre, no network at all); [`ios/cafe-app`](ios/cafe-app) is the café app on
+  iOS. For OSM developers and mappers: Inspector
+  ([`android/inspector-app`](android/inspector-app),
+  [`ios/inspector-app`](ios/inspector-app)), a tag query bar with checks,
+  tap-anywhere inspection and an object navigator over a full import
+  ([walkthrough](docs/guide/inspector-app.md)).
 - **[Swift adapter](swift/README.md)**: the iOS/macOS API and how it differs
   from Kotlin.
 - **[CHANGELOG](CHANGELOG.md)**, development history.

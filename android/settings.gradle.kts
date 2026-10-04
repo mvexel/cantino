@@ -16,3 +16,4 @@ rootProject.name = "cantino-android"
 include(":cantino")
 include(":sample-app")
 include(":cafe-app")
+include(":inspector-app")
