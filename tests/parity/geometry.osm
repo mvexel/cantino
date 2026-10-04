@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Parity corpus area "geometry" (see tests/parity/README.md). The geometry
+     part is the synthetic area of tests/geometry.rs (exact e7 coordinates, so
+     expected points are integers): a closed square (way 1), an uneven open
+     line (way 2), ways with nodes outside the area (3, 4, 5), nested, cyclic,
+     empty and dangling relations (1-7) and a relation chain deeper than
+     MAX_RELATION_DEPTH (10-19). Node 20 adds what the canonical form must
+     survive: escapes (quote, backslash, newline, tab), an empty tag value,
+     u32-max metadata, and tag keys whose code point order differs from UTF-16
+     order (U+FF5A sorts before U+1F600 by code point, after it by UTF-16
+     code unit). -->
+<osm version="0.6" generator="cantino-parity">
+ <node id="1" lat="0" lon="0"/>
+ <node id="2" lat="0" lon="0.002"/>
+ <node id="3" lat="0.002" lon="0.002"/>
+ <node id="4" lat="0.002" lon="0"/>
+ <node id="5" lat="1" lon="0"/>
+ <node id="6" lat="1" lon="0.001"/>
+ <node id="7" lat="1" lon="0.003"/>
+ <node id="8" lat="2" lon="0"/>
+ <node id="9" lat="2" lon="0.002"><tag k="amenity" v="bench"/></node>
+ <node id="20" lat="-33.8688197" lon="151.2092955" version="12" timestamp="2026-09-30T23:59:59Z" changeset="4294967295" uid="4294967295" user="Ünïcode &quot;user&quot;"><tag k="Name" v="upper case key"/><tag k="amenity" v="cafe"/><tag k="name" v="Quote &quot;q&quot; back\slash&#10;new line&#9;tab"/><tag k="name:de" v="Café"/><tag k="note" v=""/><tag k="é" v="e acute"/><tag k="ｚ" v="fullwidth z"/><tag k="😀" v="emoji"/></node>
+ <way id="1"><nd ref="1"/><nd ref="2"/><nd ref="3"/><nd ref="4"/><nd ref="1"/><tag k="building" v="yes"/><tag k="name" v="Square"/></way>
+ <way id="2"><nd ref="5"/><nd ref="6"/><nd ref="7"/><tag k="highway" v="path"/></way>
+ <way id="3"><nd ref="8"/><nd ref="99"/><nd ref="9"/><tag k="highway" v="path"/><tag k="name" v="Gap"/></way>
+ <way id="4"><nd ref="1"/><nd ref="2"/><nd ref="98"/><nd ref="1"/><tag k="building" v="yes"/></way>
+ <way id="5"><nd ref="97"/><nd ref="96"/><tag k="highway" v="path"/></way>
+ <relation id="1"><member type="way" ref="1" role="outer"/><member type="node" ref="5" role="label"/><member type="way" ref="1" role="again"/><member type="node" ref="95" role="gone"/></relation>
+ <relation id="2"><member type="relation" ref="1" role=""/><member type="node" ref="8" role=""/></relation>
+ <relation id="3"><member type="relation" ref="4" role=""/><member type="node" ref="1" role=""/></relation>
+ <relation id="4"><member type="relation" ref="3" role=""/><member type="node" ref="9" role=""/></relation>
+ <relation id="5"><member type="relation" ref="5" role="self"/></relation>
+ <relation id="6"><tag k="type" v="empty"/></relation>
+ <relation id="7"><member type="way" ref="999" role=""/><member type="node" ref="94" role=""/></relation>
+ <relation id="10"><member type="relation" ref="11" role=""/></relation>
+ <relation id="11"><member type="relation" ref="12" role=""/></relation>
+ <relation id="12"><member type="relation" ref="13" role=""/></relation>
+ <relation id="13"><member type="relation" ref="14" role=""/></relation>
+ <relation id="14"><member type="relation" ref="15" role=""/></relation>
+ <relation id="15"><member type="relation" ref="16" role=""/></relation>
+ <relation id="16"><member type="relation" ref="17" role=""/></relation>
+ <relation id="17"><member type="relation" ref="18" role=""/></relation>
+ <relation id="18"><member type="relation" ref="19" role=""/></relation>
+ <relation id="19"><member type="node" ref="1" role=""/></relation>
+</osm>
