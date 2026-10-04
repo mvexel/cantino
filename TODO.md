@@ -47,7 +47,8 @@ that no iOS device or simulator has run yet.
    documented as a known limitation instead of fixed: the default flow
    downloads the area around the user, so area zone = phone zone; a tz
    lookup needs a boundary dataset and is not worth it yet.
-3. **iOS** (§3). Done when (Martijn): iOS and Android behave identically,
+3. **iOS** (§3) — DEFERRED 2026-10-03 until Martijn is back on a Mac;
+   work order now 0 → 2 → 4 → 5. Done when (Martijn): iOS and Android behave identically,
    tests pass, café demo compiles. Steps, each verified on iOS before the
    next:
    a. macOS CI (GitHub Actions; Martijn pushes the workflow): xcframework
