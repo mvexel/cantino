@@ -16,6 +16,11 @@ formats may change without compatibility layers. See the [guide](docs/guide/READ
 - Café apps (Android, iOS) import points of interest only (`CafeProfile`:
   amenity, shop, tourism, leisure, craft, office, healthcare, historic) and
   still show the basemap; SLC area database 5.1 MB instead of 61 MB.
+- Fix: a published area's `AreaInfo.metadata.report.profile` read back as
+  null on Android and iOS (`publishedArea`, `loadPublishedArea`, the Ready
+  state): the core's sidecar parser dropped `report.profile`. It is now
+  parsed, validated and returned by `cantino_area_published`; a sidecar with
+  a malformed profile reads as unknown metadata.
 
 ## 0.4.0 — 2026-10-04
 
