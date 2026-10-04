@@ -100,13 +100,14 @@ public enum BasemapPhase: String, Hashable, Sendable {
     case tiles
 }
 
-/// A published area as found on disk: OSM data, optional basemap, metadata.
+/// A published area as found on disk: OSM data and/or a basemap, metadata.
 public struct AreaInfo: Hashable, Sendable {
     /// The app-chosen area ID.
     public let areaId: String
     /// The OSM data (`<root>/<areaId>.sqlite`); open it with
-    /// ``OsmStore/open(_:)-(URL)`` or ``AsyncOsmStore``.
-    public let dataURL: URL
+    /// ``OsmStore/open(_:)-(URL)`` or ``AsyncOsmStore``. Nil for a
+    /// basemap-only area (``AreaManager/downloadBasemap(areaId:bbox:basemap:)``).
+    public let dataURL: URL?
     /// What the download recorded (bbox, snapshot age, import report,
     /// basemap). Nil when the sidecar is missing or does not describe these
     /// files; the files themselves are still complete and valid.
@@ -114,7 +115,7 @@ public struct AreaInfo: Hashable, Sendable {
     /// The published PMTiles basemap, or nil without one.
     public let basemapURL: URL?
 
-    public init(areaId: String, dataURL: URL, metadata: AreaMetadata?, basemapURL: URL? = nil) {
+    public init(areaId: String, dataURL: URL?, metadata: AreaMetadata?, basemapURL: URL? = nil) {
         self.areaId = areaId
         self.dataURL = dataURL
         self.metadata = metadata
@@ -179,8 +180,9 @@ public struct AreaMetadata: Hashable, Sendable {
     public let snapshotTimestamp: Date?
     /// Device clock (Unix milliseconds) when the area was published.
     public let importedAtMillis: Int64
-    /// The import's object counts, database size and profile.
-    public let report: ImportReport
+    /// The import's object counts, database size and profile; nil for a
+    /// basemap-only area.
+    public let report: ImportReport?
     /// The published basemap, nil for ``BasemapSource/none``.
     public let basemap: BasemapMetadata?
     /// The download run that published the area (nil for areas published
@@ -188,7 +190,7 @@ public struct AreaMetadata: Hashable, Sendable {
     /// key for caches of the area's content.
     public let workId: UUID?
 
-    public init(bbox: Bbox, name: String, snapshotTimestamp: Date?, importedAtMillis: Int64, report: ImportReport,
+    public init(bbox: Bbox, name: String, snapshotTimestamp: Date?, importedAtMillis: Int64, report: ImportReport?,
                 basemap: BasemapMetadata? = nil, workId: UUID? = nil) {
         self.bbox = bbox
         self.name = name
@@ -241,14 +243,18 @@ public struct AreaMetadata: Hashable, Sendable {
                 "transferred_bytes": .int(basemap.transferredBytes),
             ])
         }
-        var reportJSON: [String: JSONValue] = [
-            "counts": .object([
-                "nodes": .int(report.counts.nodes), "ways": .int(report.counts.ways),
-                "relations": .int(report.counts.relations),
-            ]),
-            "database_bytes": .int(report.databaseBytes),
-        ]
-        if let profile = report.profile { reportJSON["profile"] = profile.json }
+        var reportJSON = JSONValue.null
+        if let report {
+            var object: [String: JSONValue] = [
+                "counts": .object([
+                    "nodes": .int(report.counts.nodes), "ways": .int(report.counts.ways),
+                    "relations": .int(report.counts.relations),
+                ]),
+                "database_bytes": .int(report.databaseBytes),
+            ]
+            if let profile = report.profile { object["profile"] = profile.json }
+            reportJSON = .object(object)
+        }
         return .object([
             "bbox": .object([
                 "west": .double(bbox.west), "south": .double(bbox.south),
@@ -257,7 +263,7 @@ public struct AreaMetadata: Hashable, Sendable {
             "name": .string(name),
             "snapshot_timestamp": snapshotTimestamp.map { .string(Self.formatSnapshotTimestamp($0)) } ?? .null,
             "imported_at_millis": .int(importedAtMillis),
-            "report": .object(reportJSON),
+            "report": reportJSON,
             "basemap": basemapJSON,
             "work_id": workId.map { .string($0.uuidString.lowercased()) } ?? .null,
         ])

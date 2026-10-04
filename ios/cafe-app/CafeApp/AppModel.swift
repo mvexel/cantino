@@ -374,7 +374,7 @@ final class ProgressModel {
         let size = { (url: URL?) in
             url.flatMap { try? FileManager.default.attributesOfItem(atPath: $0.path)[.size] as? NSNumber }?.int64Value ?? -1
         }
-        let counts = area.metadata.map { "\($0.report.counts)" } ?? "nil"
+        let counts = area.metadata?.report.map { "\($0.counts)" } ?? "nil"
         Log.download.info(
             "ready in \(total) ms; data db \(size(area.dataURL)) B; pmtiles \(size(area.basemapURL)) B; counts \(counts, privacy: .public)")
     }

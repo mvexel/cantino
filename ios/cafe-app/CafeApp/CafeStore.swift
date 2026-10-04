@@ -57,14 +57,16 @@ actor CafeStore {
     }
 
     private func selectAndRun<T: Sendable>(_ block: @escaping @Sendable (OsmStore, AreaInfo) throws -> T) async throws -> T {
-        guard let published = try await areas.loadPublishedArea(areaId: Self.areaId) else {
+        // The café app always downloads OSM data (never downloadBasemap).
+        guard let published = try await areas.loadPublishedArea(areaId: Self.areaId),
+              let dataURL = published.dataURL else {
             try await closeStore()
             throw NoAreaError()
         }
         let identity = Self.identity(published)
         if store == nil || identity != openedIdentity {
             try await closeStore()
-            store = try await AsyncOsmStore.open(published.dataURL)
+            store = try await AsyncOsmStore.open(dataURL)
             openedIdentity = identity
         }
         await beforeRead?()
@@ -81,7 +83,7 @@ actor CafeStore {
 
     private static func identity(_ area: AreaInfo) -> String {
         if let workId = area.metadata?.workId { return workId.uuidString }
-        let attributes = try? FileManager.default.attributesOfItem(atPath: area.dataURL.path)
+        let attributes = area.dataURL.flatMap { try? FileManager.default.attributesOfItem(atPath: $0.path) }
         let size = (attributes?[.size] as? NSNumber)?.int64Value ?? -1
         let modified = (attributes?[.modificationDate] as? Date)?.timeIntervalSince1970 ?? -1
         return "\(size):\(modified)"

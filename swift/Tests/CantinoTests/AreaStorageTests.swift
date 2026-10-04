@@ -74,7 +74,7 @@ import Testing
             afterCommitPoint: { events.append("after") })
         #expect(events == ["before", "after"])
         let info = try #require(try storage.published(areaId: "city"))
-        #expect(info.dataURL.path == data)
+        #expect(info.dataURL?.path == data)
         #expect(info.basemapURL == nil)
         #expect(info.metadata == expected)
         #expect(try String(contentsOfFile: data, encoding: .utf8) == "0123456789")

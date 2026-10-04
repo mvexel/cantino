@@ -89,7 +89,7 @@ import Testing
         }
 
         let metadata = try #require(area.metadata)
-        #expect(metadata.report.counts == ObjectCounts(nodes: 4, ways: 2, relations: 1))
+        #expect(metadata.report?.counts == ObjectCounts(nodes: 4, ways: 2, relations: 1))
         #expect(metadata.snapshotTimestamp == AreaMetadata.parseSnapshotTimestamp(FakeSlice.timestamp))
         #expect(metadata.workId == runId)
         // The sidecar keeps the server's spelling.
@@ -103,7 +103,7 @@ import Testing
         #expect(states.seen.contains { if case .importing = $0 { true } else { false } })
         #expect(states.seen.contains { if case .slicing(_, 0.5) = $0 { true } else { false } })
 
-        #expect(try cafeNames(area.dataURL) == ["Café Test"])
+        #expect(try cafeNames(#require(area.dataURL)) == ["Café Test"])
         let published = try #require(try manager.publishedArea(areaId: areaId))
         #expect(published == area)
         #expect(published.metadata?.bbox == bbox)
@@ -130,7 +130,7 @@ import Testing
         guard case .ready(_, let area) = ready else { Issue.record("\(ready)"); return }
         #expect(slice.submits == 1, "job must be resumed, not resubmitted")
         #expect(states.seen.contains { if case .queued(_, 1) = $0 { true } else { false } })
-        #expect(try cafeNames(area.dataURL) == ["Café Test"])
+        #expect(try cafeNames(#require(area.dataURL)) == ["Café Test"])
         states.close()
     }
 
@@ -213,7 +213,7 @@ import Testing
         let runId = try manager.download(areaId: areaId, bbox: bbox, basemap: try .url(url))
         let ready = try await terminal(manager, runId)
         guard case .ready(_, let area) = ready else { Issue.record("\(ready)"); return }
-        #expect(try cafeNames(area.dataURL) == ["Café Test"])
+        #expect(try cafeNames(#require(area.dataURL)) == ["Café Test"])
         let basemapURL = try #require(area.basemapURL)
         #expect(basemapURL.path == areas.appendingPathComponent("\(areaId).pmtiles").path)
         #expect(try Data(contentsOf: basemapURL) == Self.pmtiles)
@@ -243,6 +243,55 @@ import Testing
         try assertNoStagingLeft()
     }
 
+    @Test func basemapOnlyPublishesNoDataAndMakesNoSliceRequests() async throws {
+        let manager = manager()
+        let states = try Recorder(manager, areaId)
+        let runId = try manager.downloadBasemap(areaId: areaId, bbox: bbox, basemap: try .url(slice.url("/basemap.pmtiles")))
+        let end = try await states.await { $0.runId == runId && $0.isTerminal }
+        guard case .ready(_, let area) = end else { Issue.record("\(end)"); return }
+        #expect(area.dataURL == nil)
+        #expect(try Data(contentsOf: #require(area.basemapURL)) == Self.pmtiles)
+        let metadata = try #require(area.metadata)
+        #expect(metadata.report == nil)
+        #expect(metadata.snapshotTimestamp == nil)
+        #expect(metadata.workId == runId)
+        #expect(metadata.basemap?.kind == .url)
+        #expect(slice.submits == 0 && slice.downloads == 0)
+        #expect(!states.seen.contains {
+            switch $0 { case .slicing, .downloading, .importing: true; default: false }
+        })
+        #expect(states.seen.contains { if case .basemap(runId, _, _, _) = $0 { true } else { false } })
+        #expect(try manager.publishedArea(areaId: areaId) == area)
+        try assertNoStagingLeft()
+        states.close()
+    }
+
+    /// Refresh = full replace: basemap-only removes the old data; a later
+    /// download brings it back.
+    @Test func basemapOnlyReplacesDataAndADownloadBringsItBack() async throws {
+        _ = try publishOldArea()
+        let manager = manager()
+        let basemapOnly = try manager.downloadBasemap(areaId: areaId, bbox: bbox,
+                                                      basemap: try .url(slice.url("/basemap.pmtiles")))
+        let first = try await terminal(manager, basemapOnly)
+        guard case .ready = first else { Issue.record("\(first)"); return }
+        #expect(try manager.publishedArea(areaId: areaId)?.dataURL == nil)
+        #expect(!FileManager.default.fileExists(atPath: areas.appendingPathComponent("\(areaId).sqlite").path))
+
+        let full = try manager.download(areaId: areaId, bbox: bbox)
+        let second = try await terminal(manager, full)
+        guard case .ready(_, let area) = second else { Issue.record("\(second)"); return }
+        #expect(try cafeNames(#require(area.dataURL)) == ["Café Test"])
+        #expect(area.basemapURL == nil) // the full download asked for no basemap
+        try assertNoStagingLeft()
+    }
+
+    @Test func downloadBasemapNeedsASource() {
+        #expect(throws: CantinoError.self) {
+            try self.manager().downloadBasemap(areaId: self.areaId, bbox: self.bbox, basemap: .none)
+        }
+    }
+
     /// On-device extract against a range-capable fake planet: the published
     /// file must be byte-identical to the engine run in-process over the same
     /// bytes.
@@ -265,7 +314,7 @@ import Testing
         // Every request was a range request, and the sidecar counts them.
         #expect(basemap.requests == Int64(slice.basemapRequests))
         #expect(slice.rangeHeaders.allSatisfy { $0.hasPrefix("bytes=") })
-        #expect(try cafeNames(area.dataURL) == ["Café Test"])
+        #expect(try cafeNames(#require(area.dataURL)) == ["Café Test"])
         try assertNoStagingLeft()
     }
 
@@ -353,7 +402,7 @@ import Testing
         let end = try await states.await { $0.runId == runId && $0.isTerminal }
         guard case .ready(_, let area) = end else { Issue.record("\(end)"); return }
         #expect(area.metadata?.workId == runId)
-        #expect(try cafeNames(area.dataURL) == ["Café Test"])
+        #expect(try cafeNames(#require(area.dataURL)) == ["Café Test"])
         #expect(!states.seen.contains { if case .cancelled = $0 { true } else { false } })
         try await waitUntil { try self.stagingDirs().isEmpty }
         states.close()
@@ -423,7 +472,7 @@ import Testing
         let manager = manager()
         let end = try await terminal(manager, runId)
         guard case .ready(_, let area) = end else { Issue.record("\(end)"); return }
-        #expect(area.metadata?.report.counts == ObjectCounts(nodes: 10, ways: 3, relations: 4))
+        #expect(area.metadata?.report?.counts == ObjectCounts(nodes: 10, ways: 3, relations: 4))
         #expect(slice.submits == 0, "the checkpointed job is resumed")
         #expect(slice.downloads == 1)
         try assertNoStagingLeft()
@@ -468,7 +517,7 @@ import Testing
         let end = try await terminal(manager, runId)
         guard case .ready(_, let area) = end else { Issue.record("\(end)"); return }
         #expect(area.metadata?.workId == runId)
-        #expect(area.metadata?.report.counts == ObjectCounts(nodes: 10, ways: 3, relations: 4))
+        #expect(area.metadata?.report?.counts == ObjectCounts(nodes: 10, ways: 3, relations: 4))
         #expect(slice.submits == 0 && slice.downloads == 0)
         #expect(!FileManager.default.fileExists(atPath: fresh.appendingPathComponent("cantino-areas/\(areaId).commit").path))
     }
@@ -517,7 +566,7 @@ import Testing
     private func assertOldAreaIntact(_ manager: AreaManager, _ before: (AreaInfo, Data)) throws {
         let now = try #require(try manager.publishedArea(areaId: areaId))
         #expect(now == before.0)
-        #expect(try cafeNames(now.dataURL) == ["Old Café"])
+        #expect(try cafeNames(#require(now.dataURL)) == ["Old Café"])
         #expect(try Data(contentsOf: #require(now.basemapURL)) == before.1)
     }
 

@@ -107,6 +107,28 @@ public final class AreaManager: Sendable {
         return request.workId
     }
 
+    /// Starts downloading only a basemap for `bbox` as area `areaId`: no
+    /// SliceOSM job, no OSM data. Returns the run ID and behaves like
+    /// ``download(areaId:bbox:name:basemap:)`` in every other way (states,
+    /// cancel, replacement, resume). The published area has
+    /// ``AreaInfo/dataURL`` and ``AreaMetadata/report`` nil. Refresh = full
+    /// replace: a basemap-only run removes OSM data an earlier download
+    /// published, and a later download brings it back. The run goes
+    /// submitting → basemap → ready.
+    ///
+    /// Throws ``CantinoError/invalidArgument(_:)`` for an invalid `areaId` or
+    /// for ``BasemapSource/none``, and ``CantinoError/io(_:)`` if the request
+    /// cannot be stored.
+    @discardableResult
+    public func downloadBasemap(areaId: String, bbox: Bbox, basemap: BasemapSource) throws -> UUID {
+        try AreaStorage.validate(areaId: areaId)
+        guard basemap != .none else { throw CantinoError.invalidArgument("downloadBasemap needs a basemap source") }
+        let request = DownloadRequest(workId: UUID(), areaId: areaId, bbox: bbox, name: areaId,
+                                      basemap: basemap, config: config, includeData: false)
+        try registry.start(request)
+        return request.workId
+    }
+
     /// Cancels a running download of `areaId`. The published area stays.
     /// No-op if none. A run already publishing (a few milliseconds of
     /// renames) finishes and is reported as ``AreaState/ready(runId:area:)``.
@@ -193,6 +215,8 @@ struct DownloadRequest: Sendable {
     let name: String
     let basemap: BasemapSource
     let config: AreaConfig
+    /// False for ``AreaManager/downloadBasemap(areaId:bbox:basemap:)``.
+    var includeData = true
 
     var json: JSONValue {
         let basemapJSON: JSONValue = switch basemap.kind {
@@ -212,6 +236,7 @@ struct DownloadRequest: Sendable {
             "slice_base_url": .string(config.sliceBaseUrl),
             "timeout": .double(config.timeout),
             "import_options": config.importOptions.jsonValue,
+            "include_data": .bool(includeData),
         ])
     }
 
@@ -238,7 +263,8 @@ struct DownloadRequest: Sendable {
             config: AreaConfig(sliceBaseUrl: stored.sliceBaseUrl, timeout: stored.timeout,
                                importOptions: ImportOptions(preserveUntaggedMetadata: options.preserveUntaggedMetadata,
                                                             cacheMiB: options.cacheMb,
-                                                            profile: options.profile?.model)))
+                                                            profile: options.profile?.model)),
+            includeData: stored.includeData ?? true)
     }
 
     private struct StoredRequest: Decodable {
@@ -268,12 +294,14 @@ struct DownloadRequest: Sendable {
         let sliceBaseUrl: String
         let timeout: Double
         let importOptions: Options
+        let includeData: Bool?
         enum CodingKeys: String, CodingKey {
             case bbox, name, basemap, timeout
             case workId = "work_id"
             case areaId = "area_id"
             case sliceBaseUrl = "slice_base_url"
             case importOptions = "import_options"
+            case includeData = "include_data"
         }
     }
 }
@@ -697,6 +725,24 @@ final class DownloadRun: @unchecked Sendable {
         }
         files.deleteStale(areaId, keep: staging)
         _ = try await local { try await blocking { try storage.prepareStaging(areaId: areaId, workId: id) } }
+        if !request.includeData {
+            // Basemap only: no SliceOSM job, no import.
+            let layout = try local { try storage.layout(areaId: areaId, workId: id) }
+            guard let basemap = try await downloadBasemap(output: URL(fileURLWithPath: layout.stagedBasemap!)) else {
+                throw DownloadFailure.permanent("basemap-only run without a basemap source", .invalidRequest)
+            }
+            let metadata = AreaMetadata(bbox: request.bbox, name: request.name, snapshotTimestamp: nil,
+                                        importedAtMillis: Int64(Date().timeIntervalSince1970 * 1000), report: nil,
+                                        basemap: basemap, workId: id)
+            try await local {
+                try await blocking { try storage.writeStagedMetadata(areaId: areaId, workId: id, metadata: metadata) }
+            }
+            try await publish(hasData: false, hasBasemap: true)
+            guard let area = try await local({ try await blocking { try storage.published(areaId: areaId) } }) else {
+                throw DownloadFailure(kind: .storage, reason: .storage, message: "published area vanished")
+            }
+            return area
+        }
         let (job, slice) = try await sliceJob()
 
         report(.downloading(runId: id, bytes: 0, totalBytes: slice.sizeBytes))
@@ -734,7 +780,7 @@ final class DownloadRun: @unchecked Sendable {
             importedAtMillis: Int64(Date().timeIntervalSince1970 * 1000), report: importReport,
             basemap: basemap, workId: id)
         try await local { try await blocking { try storage.writeStagedMetadata(areaId: areaId, workId: id, metadata: metadata) } }
-        try await publish(hasBasemap: basemap != nil)
+        try await publish(hasData: true, hasBasemap: basemap != nil)
         guard let area = try await local({ try await blocking { try storage.published(areaId: areaId) } }) else {
             throw DownloadFailure(kind: .storage, reason: .storage, message: "published area vanished")
         }
@@ -743,11 +789,11 @@ final class DownloadRun: @unchecked Sendable {
 
     /// The commit. The last cancellation check runs under the area lock;
     /// past it the run publishes even if a cancel arrives meanwhile.
-    private func publish(hasBasemap: Bool) async throws {
+    private func publish(hasData: Bool, hasBasemap: Bool) async throws {
         let (storage, areaId, id, token) = (registry.storage, areaId, id, token)
         try await local {
             try await blocking {
-                try storage.commit(areaId: areaId, workId: id, hasBasemap: hasBasemap,
+                try storage.commit(areaId: areaId, workId: id, hasData: hasData, hasBasemap: hasBasemap,
                                    beforeCommit: { try token.enterCommit() },
                                    afterCommitPoint: { AreaTestHooks.afterCommitPoint?() })
             }

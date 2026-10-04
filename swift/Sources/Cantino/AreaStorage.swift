@@ -125,14 +125,16 @@ struct AreaStorage: Hashable, Sendable {
 
     // MARK: Commit
 
-    /// Publishes run `workId`'s staged version: data, sidecar and, when
-    /// `hasBasemap`, basemap together, through the roll-forward journal whose
+    /// Publishes run `workId`'s staged version: the sidecar plus data (when
+    /// `hasData`) and basemap (when `hasBasemap`; at least one) together,
+    /// through the roll-forward journal whose
     /// atomic write is the commit point. Before it nothing has changed (a
     /// failure, a throw from the hook or a kill leaves the old area); after
     /// it the new version is published whatever happens to the process (the
     /// next ``recover(areaId:)``, which every reader and every new run
-    /// performs, finishes it). Without a basemap in the new version, a
-    /// previously published basemap is removed.
+    /// performs, finishes it). A published part the new version lacks is
+    /// removed (a basemap-only version removes old data, and the other way
+    /// round).
     ///
     /// `beforeCommit` runs on the calling thread under the area lock
     /// immediately before the commit point; throwing from it aborts with
@@ -146,7 +148,7 @@ struct AreaStorage: Hashable, Sendable {
     /// is committed and the next recover finishes it);
     /// ``CantinoError/invalidArgument(_:)`` for invalid IDs or an incomplete
     /// staged version.
-    func commit(areaId: String, workId: UUID, hasBasemap: Bool,
+    func commit(areaId: String, workId: UUID, hasData: Bool = true, hasBasemap: Bool,
                 beforeCommit: () throws -> Void = {},
                 afterCommitPoint: (() -> Void)? = nil) throws {
         try withoutActuallyEscaping(beforeCommit) { before in
@@ -154,7 +156,9 @@ struct AreaStorage: Hashable, Sendable {
             var call = NativeCall()
             let context = Unmanaged.passUnretained(hook).toOpaque()
             let status = cantino_area_commit(
-                root, areaId, workId.uuidString, hasBasemap ? 1 : 0, commitHookTrampoline, context, &call.error)
+                root, areaId, workId.uuidString,
+                (hasData ? CANTINO_AREA_PART_DATA : 0) | (hasBasemap ? CANTINO_AREA_PART_BASEMAP : 0),
+                commitHookTrampoline, context, &call.error)
             // The core only calls the hook during the call above; keep the
             // box alive until here.
             withExtendedLifetime(hook) {}
@@ -193,7 +197,7 @@ struct AreaStorage: Hashable, Sendable {
         let status = try call.check(cantino_area_published(root, areaId, &call.result, &call.error))
         if status == 1 { return nil }
         let wire = try Wire.decode(WirePublishedArea.self, call.resultString())
-        return AreaInfo(areaId: areaId, dataURL: URL(fileURLWithPath: wire.data), metadata: wire.metadata,
+        return AreaInfo(areaId: areaId, dataURL: wire.data.map { URL(fileURLWithPath: $0) }, metadata: wire.metadata,
                         basemapURL: wire.basemap.map { URL(fileURLWithPath: $0) })
     }
 }
@@ -281,7 +285,8 @@ private struct WireAreaLayout: Decodable {
 }
 
 private struct WirePublishedArea: Decodable {
-    let data: String
+    /// nil for a basemap-only area.
+    let data: String?
     let basemap: String?
     /// nil for `null`, and for a sidecar this adapter cannot read: the core
     /// validated it already, so that only guards against a decoder stricter
@@ -292,7 +297,7 @@ private struct WirePublishedArea: Decodable {
 
     init(from decoder: any Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
-        data = try container.decode(String.self, forKey: .data)
+        data = try container.decodeIfPresent(String.self, forKey: .data)
         basemap = try container.decodeIfPresent(String.self, forKey: .basemap)
         metadata = (try? container.decodeIfPresent(WireAreaMetadata.self, forKey: .metadata))?.model
     }
@@ -337,7 +342,8 @@ private struct WireAreaMetadata: Decodable {
     let name: String
     let snapshotTimestamp: String?
     let importedAtMillis: Int64
-    let report: WireReport
+    /// nil (JSON null) for a basemap-only area.
+    let report: WireReport?
     let basemap: WireBasemapMetadata?
     let workId: String?
 
@@ -362,7 +368,7 @@ private struct WireAreaMetadata: Decodable {
         return AreaMetadata(
             bbox: Bbox(west: bbox.west, south: bbox.south, east: bbox.east, north: bbox.north), name: name,
             snapshotTimestamp: AreaMetadata.parseSnapshotTimestamp(snapshotTimestamp),
-            importedAtMillis: importedAtMillis, report: report.model,
+            importedAtMillis: importedAtMillis, report: report?.model,
             basemap: basemapModel, workId: work)
     }
 }
