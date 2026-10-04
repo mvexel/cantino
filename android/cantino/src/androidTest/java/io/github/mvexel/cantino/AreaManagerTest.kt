@@ -7,6 +7,7 @@ import androidx.test.platform.app.InstrumentationRegistry
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
@@ -92,8 +93,16 @@ class AreaManagerTest {
         val manager = manager()
         assertEquals(AreaState.Idle(null), runBlocking { manager.state(areaId).first() })
         val states = Recorder(manager, areaId)
-        manager.download(areaId, bbox, "café test")
+        val runId = manager.download(areaId, bbox, "café test")
         val ready = states.await { it is AreaState.Ready } as AreaState.Ready
+        // Every state of the run carries the ID download() returned (Idle, seen before it, has none).
+        assertEquals(runId, ready.runId)
+        assertTrue(ready.isTerminal)
+        assertEquals(null, AreaState.Idle(null).runId)
+        assertFalse(AreaState.Idle(null).isTerminal)
+        val progress = states.seen.filter { it is AreaState.Slicing || it is AreaState.Downloading || it is AreaState.Importing }
+        assertTrue(progress.isNotEmpty())
+        progress.forEach { assertEquals("$it", runId, it.runId); assertFalse("$it", it.isTerminal) }
 
         val metadata = ready.area.metadata!!
         assertEquals(ObjectCounts(4, 2, 1), metadata.report.counts)
@@ -105,7 +114,7 @@ class AreaManagerTest {
         val body = JSONObject(slice.submitBodies.single())
         assertEquals("café test", body.getString("Name"))
         assertEquals("[39.89,-111.01,40.11,-110.99]", body.getJSONArray("RegionData").toString())
-        assertTrue(AreaState.Importing in states.seen)
+        assertTrue(states.seen.any { it is AreaState.Importing })
         assertTrue(states.seen.any { it is AreaState.Slicing && it.fraction == 0.5 })
 
         assertEquals(listOf("Café Test"), cafeNames(manager.dataFile(areaId)!!))
@@ -222,13 +231,15 @@ class AreaManagerTest {
         slice.throttle = true // ~14 s for the fixture
         val manager = manager()
         val states = Recorder(manager, areaId)
-        manager.download(areaId, bbox)
+        val runId = manager.download(areaId, bbox)
         states.await { it is AreaState.Downloading && it.bytes > 0 }
         manager.cancel(areaId)
-        states.await { it == AreaState.Cancelled }
+        val cancelled = states.await { it is AreaState.Cancelled }
+        assertEquals(runId, cancelled.runId)
+        assertTrue(cancelled.isTerminal)
 
         assertOldAreaIntact(manager, before)
-        assertFalse(AreaState.Importing in states.seen)
+        assertFalse(states.seen.any { it is AreaState.Importing })
         assertNoStagingLeft()
         states.close()
     }
@@ -239,8 +250,10 @@ class AreaManagerTest {
         slice.file = ByteArray(1024) { 0x5a }
         val manager = manager()
         val states = Recorder(manager, areaId)
-        manager.download(areaId, bbox)
+        val runId = manager.download(areaId, bbox)
         val failed = states.await { it is AreaState.Failed } as AreaState.Failed
+        assertEquals(runId, failed.runId)
+        assertTrue(failed.isTerminal)
         assertFalse(failed.retryable)
         assertTrue(failed.message, failed.message.startsWith("import failed"))
         assertEquals(1, slice.downloads.get())
@@ -251,13 +264,44 @@ class AreaManagerTest {
         states.close()
     }
 
+    /**
+     * state() follows the area: after a second download() the flow can still
+     * show the first run's final state. runId tells them apart, and waiting
+     * for `runId == mine && isTerminal` skips the stale one.
+     */
+    @Test
+    fun secondDownloadIsDistinguishableFromThePreviousRunsFinalState() {
+        val manager = manager()
+        val first = manager.download(areaId, bbox)
+        val firstEnd = runBlocking {
+            withTimeout(30_000) { manager.state(areaId).first { it.runId == first && it.isTerminal } }
+        }
+        assertTrue("$firstEnd", firstEnd is AreaState.Ready)
+
+        val second = manager.download(areaId, bbox)
+        assertTrue(first != second)
+        val seen = Collections.synchronizedList(mutableListOf<AreaState>())
+        val secondEnd = runBlocking {
+            withTimeout(30_000) {
+                manager.state(areaId).onEach { seen += it }.first { it.runId == second && it.isTerminal }
+            }
+        }
+        assertTrue("$secondEnd", secondEnd is AreaState.Ready)
+        assertEquals(second, secondEnd.runId)
+        // The previous run's Ready (if the flow showed it) is a different value from this run's.
+        assertTrue(seen.none { it.runId == first && it == secondEnd })
+        assertTrue(seen.all { it.runId == null || it.runId == first || it.runId == second })
+        assertNoStagingLeft()
+    }
+
     @Test
     fun clientErrorOnSubmitFailsWithoutRetry() {
         slice.submitCode = 400
         val manager = manager()
         val states = Recorder(manager, areaId)
-        manager.download(areaId, bbox)
+        val runId = manager.download(areaId, bbox)
         val failed = states.await { it is AreaState.Failed } as AreaState.Failed
+        assertEquals(runId, failed.runId)
         assertFalse(failed.retryable)
         assertTrue(failed.message, failed.message.contains("HTTP 400"))
         assertEquals(1, slice.submits.get())
@@ -318,7 +362,7 @@ class AreaManagerTest {
         assertEquals(22L, basemap.addressedTiles)
         assertEquals(12 to 15, basemap.minZoom to basemap.maxZoom)
         assertEquals(area, manager.publishedArea(areaId))
-        assertTrue(AreaState.Importing in states.seen)
+        assertTrue(states.seen.any { it is AreaState.Importing })
         assertNoStagingLeft()
         states.close()
     }
@@ -402,7 +446,7 @@ class AreaManagerTest {
         assertTrue(failed.message, failed.message.contains("HTTP 404"))
         // The data part succeeded (downloaded and imported) ...
         assertEquals(1, slice.downloads.get())
-        assertTrue(AreaState.Importing in states.seen)
+        assertTrue(states.seen.any { it is AreaState.Importing })
         // ... and still nothing new is published: data, basemap and sidecar are the old ones.
         assertOldAreaIntact(manager, before)
         assertNoStagingLeft()
@@ -429,11 +473,11 @@ class AreaManagerTest {
         manager.download(areaId, bbox, basemap = BasemapSource.Url(server.url("/basemap.pmtiles").toString()))
         assertTrue(inImport.await(30, TimeUnit.SECONDS))
         manager.cancel(areaId)
-        states.await { it == AreaState.Cancelled }
+        states.await { it is AreaState.Cancelled }
         release.countDown()
         // Let the worker unwind, then check nothing was published and the state stayed Cancelled.
         waitUntil { stagingDirs().isEmpty() }
-        assertEquals(AreaState.Cancelled, runBlocking { manager.state(areaId).first() })
+        assertTrue(runBlocking { manager.state(areaId).first() } is AreaState.Cancelled)
         assertOldAreaIntact(manager, before)
         assertEquals("no basemap download after the cancel", 0, slice.basemapRequests.get())
         assertNoStagingLeft()
@@ -457,12 +501,12 @@ class AreaManagerTest {
         manager.cancel(areaId)
         // The state reader waits on the area lock until the commit is done.
         Thread { Thread.sleep(500); release.countDown() }.start()
-        val ready = states.await { it is AreaState.Ready || it == AreaState.Cancelled }
+        val ready = states.await { it is AreaState.Ready || it is AreaState.Cancelled }
         assertTrue("$ready", ready is AreaState.Ready)
         ready as AreaState.Ready
         assertEquals(workId, ready.area.metadata!!.workId)
         assertEquals(listOf("Café Test"), cafeNames(manager.dataFile(areaId)!!))
-        assertFalse(AreaState.Cancelled in states.seen)
+        assertFalse(states.seen.any { it is AreaState.Cancelled })
         waitUntil { stagingDirs().isEmpty() }
         states.close()
     }

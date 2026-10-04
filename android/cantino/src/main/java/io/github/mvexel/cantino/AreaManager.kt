@@ -14,6 +14,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.withContext
 import java.io.File
 import java.util.UUID
 import java.util.concurrent.TimeUnit
@@ -125,6 +126,18 @@ public class AreaManager @JvmOverloads constructor(context: Context, private val
      * every change (consecutive duplicates are dropped). It never completes;
      * cancel the collecting coroutine to stop. Collect it from any
      * coroutine; disk reads run on [Dispatchers.IO].
+     *
+     * The flow follows the *area*, not one run: right after [download] it can
+     * still emit the previous run's final state. Every state except
+     * [AreaState.Idle] carries [AreaState.runId]; match it against the UUID
+     * [download] returned to wait for your own download:
+     *
+     * ```
+     * val runId = areaManager.download("home", bbox)
+     * val last = areaManager.state("home")
+     *     .filter { it.runId == runId && it.isTerminal }
+     *     .first()
+     * ```
      */
     public fun state(areaId: String): Flow<AreaState> {
         AreaStorage.requireValidAreaId(areaId)
@@ -165,10 +178,29 @@ public class AreaManager @JvmOverloads constructor(context: Context, private val
         return storage.published(areaId)
     }
 
+    /**
+     * [dataFile] without blocking the caller: the disk read runs on
+     * [Dispatchers.IO], so this is safe to call from the main thread. Same
+     * result and exceptions as [dataFile].
+     */
+    public suspend fun loadDataFile(areaId: String): File? = withContext(Dispatchers.IO) { dataFile(areaId) }
+
+    /**
+     * [basemapFile] without blocking the caller: runs on [Dispatchers.IO],
+     * safe to call from the main thread. Same result and exceptions as [basemapFile].
+     */
+    public suspend fun loadBasemapFile(areaId: String): File? = withContext(Dispatchers.IO) { basemapFile(areaId) }
+
+    /**
+     * [publishedArea] without blocking the caller: runs on [Dispatchers.IO],
+     * safe to call from the main thread. Same result and exceptions as [publishedArea].
+     */
+    public suspend fun loadPublishedArea(areaId: String): AreaInfo? = withContext(Dispatchers.IO) { publishedArea(areaId) }
+
     private fun toState(areaId: String, info: WorkInfo?): AreaState {
         if (info == null) return AreaState.Idle(storage.published(areaId))
         return when (info.state) {
-            WorkInfo.State.ENQUEUED, WorkInfo.State.BLOCKED -> AreaState.Queued(info.runAttemptCount)
+            WorkInfo.State.ENQUEUED, WorkInfo.State.BLOCKED -> AreaState.Queued(info.id, info.runAttemptCount)
             WorkInfo.State.RUNNING -> running(info)
             // Whether a finished run published is decided by the published
             // sidecar's work ID, not by WorkManager's state: a cancel that
@@ -181,13 +213,14 @@ public class AreaManager @JvmOverloads constructor(context: Context, private val
                 val metadata = published?.metadata
                 when {
                     metadata != null && metadata.workId == info.id ->
-                        AreaState.Ready(published)
-                    info.state == WorkInfo.State.CANCELLED -> AreaState.Cancelled
+                        AreaState.Ready(info.id, published)
+                    info.state == WorkInfo.State.CANCELLED -> AreaState.Cancelled(info.id)
                     // Succeeded but replaced since (or pruned metadata): what is on disk.
                     else -> AreaState.Idle(published)
                 }
             }
             WorkInfo.State.FAILED -> AreaState.Failed(
+                info.id,
                 info.outputData.getString(AreaDownloadWorker.KEY_MESSAGE) ?: "download failed",
                 info.outputData.getBoolean(AreaDownloadWorker.KEY_RETRYABLE, false),
             )
@@ -198,20 +231,22 @@ public class AreaManager @JvmOverloads constructor(context: Context, private val
         val progress = info.progress
         return when (progress.getString(AreaDownloadWorker.KEY_PHASE)) {
             AreaDownloadWorker.PHASE_SLICING ->
-                AreaState.Slicing(progress.getDouble(AreaDownloadWorker.KEY_FRACTION, Double.NaN).takeUnless { it.isNaN() })
+                AreaState.Slicing(info.id, progress.getDouble(AreaDownloadWorker.KEY_FRACTION, Double.NaN).takeUnless { it.isNaN() })
             AreaDownloadWorker.PHASE_DOWNLOADING -> AreaState.Downloading(
+                info.id,
                 progress.getLong(AreaDownloadWorker.KEY_BYTES, 0),
                 progress.getLong(AreaDownloadWorker.KEY_TOTAL, -1).takeIf { it >= 0 },
             )
-            AreaDownloadWorker.PHASE_IMPORTING -> AreaState.Importing
+            AreaDownloadWorker.PHASE_IMPORTING -> AreaState.Importing(info.id)
             AreaDownloadWorker.PHASE_BASEMAP -> AreaState.Basemap(
+                info.id,
                 progress.getString(AreaDownloadWorker.KEY_BASEMAP_PHASE)
                     ?.let { BasemapPhase.valueOf(it) } ?: BasemapPhase.DIRECTORIES,
                 progress.getLong(AreaDownloadWorker.KEY_BYTES, 0),
                 progress.getLong(AreaDownloadWorker.KEY_TOTAL, -1).takeIf { it >= 0 },
             )
             // Started but no progress published yet.
-            else -> AreaState.Submitting
+            else -> AreaState.Submitting(info.id)
         }
     }
 

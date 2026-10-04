@@ -72,9 +72,11 @@ androidComponents {
 }
 
 dependencies {
-    // Area downloads (AreaManager). work-runtime-ktx brings kotlinx-coroutines,
-    // used for CoroutineWorker and the state Flow. HTTP is HttpURLConnection.
+    // Area downloads (AreaManager). HTTP is HttpURLConnection.
     implementation("androidx.work:work-runtime-ktx:2.12.0")
+    // Public API: AreaManager.state() returns a Flow; ProtomapsBuilds.latestUrl()
+    // and AreaManager.load*() are suspend. Same version work-runtime-ktx 2.12.0 resolves.
+    api("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.2")
 
     // Fake SliceOSM server for AreaManagerTest; test APK only, not in the AAR.
     // 5.5.0 pulls okhttp-android that requires compileSdk 37; stay on 5.4.0.

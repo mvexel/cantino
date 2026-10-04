@@ -49,9 +49,11 @@ stateDiagram-v2
     Downloading --> Cancelled: cancel()
 ```
 
+Every state except `Idle` also has `runId: UUID` (first constructor property, not listed below).
+
 | State | Payload | Meaning |
 | --- | --- | --- |
-| `Idle(published)` | published `AreaInfo?` | No download known (never started, or WorkManager pruned it after ~1 day) |
+| `Idle(published)` | published `AreaInfo?` | No download known (never started, or WorkManager pruned it after ~1 day). `runId` is null |
 | `Queued(previousRuns)` | runs so far | Waiting for network/storage, or backing off after a transient failure |
 | `Submitting` | | Sending the bbox to SliceOSM, or re-attaching to the job of an interrupted run |
 | `Slicing(fraction)` | 0..1 or null | SliceOSM cuts the extract (null until the server reports totals) |
@@ -72,22 +74,35 @@ failure.
 fun render(state: AreaState) = when (state) {
     is AreaState.Idle -> show(state.published)
     is AreaState.Queued -> status("Waiting for network…")
-    AreaState.Submitting -> status("Requesting extract…")
+    is AreaState.Submitting -> status("Requesting extract…")
     is AreaState.Slicing -> status("Cutting extract ${state.fraction?.let { "${(it * 100).toInt()} %" } ?: ""}")
     is AreaState.Downloading -> status("Downloading ${state.bytes / 1_000_000} MB")
-    AreaState.Importing -> status("Preparing offline data…")
+    is AreaState.Importing -> status("Preparing offline data…")
     is AreaState.Basemap -> status("Basemap: ${state.phase}")
     is AreaState.Ready -> show(state.area)
     is AreaState.Failed -> error(state.message, canRetry = state.retryable)
-    AreaState.Cancelled -> status("Cancelled")
+    is AreaState.Cancelled -> status("Cancelled")
 }
 ```
 
 **`state()` follows the area, not one run.** Right after `download()` the
 flow can still show the final state of an earlier run (WorkManager enqueues
-asynchronously). To wait for *your* run, skip final states until the new run
-shows up, or match `Ready.area.metadata?.workId` against the ID `download()`
-returned. The [quickstart](../../README.md#quickstart) shows the first.
+asynchronously). Every state except `Idle` therefore carries `runId`, the
+WorkManager ID of the run it belongs to: the `UUID` `download()` returned.
+`isTerminal` is true for `Ready`, `Failed` and `Cancelled`. Match `runId` to
+wait for *your* download (the [quickstart](../../README.md#quickstart) does the same):
+
+```kotlin
+val runId = areas.download("home", bbox)
+val end = areas.state("home").first { it.runId == runId && it.isTerminal }
+```
+
+Plain `state(areaId)` collection (a progress UI) needs no matching: it shows
+whatever run the area is on, and `runId` changes when a new run starts.
+
+The blocking disk reads `dataFile`, `basemapFile` and `publishedArea` have
+main-safe suspend counterparts: `loadDataFile`, `loadBasemapFile` and
+`loadPublishedArea` (they run on `Dispatchers.IO`).
 
 ## Cancellation
 
