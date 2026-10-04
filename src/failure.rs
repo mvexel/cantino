@@ -108,10 +108,10 @@ pub enum NativeContext {
     /// (0.2.0 `failure(message, error)`).
     Default,
     /// The basemap extract engine, and reading back the extracted file:
-    /// always permanent, with the reason from the error kind (0.2.0
-    /// `engine { }` and "extracted basemap is unreadable"). Note that this
-    /// makes an I/O error here a permanent `storage` failure, unlike
-    /// `Default`; kept as 0.2.0 shipped it.
+    /// rejections of the source are permanent, with the reason from the error
+    /// kind; a storage error is retried by the scheduler like everywhere else
+    /// (fixed before the 0.2.0 release, Martijn 2026-10-03). Classified like
+    /// `Default`; kept as its own context for the wire format.
     Engine,
     /// Building a SliceOSM request from the app's input: the request is
     /// invalid, whatever the error kind.
@@ -217,11 +217,10 @@ pub fn classify(failure: Failure) -> Option<Classification> {
         },
         Failure::Io(IoContext::Network) => class(Transient, Network),
         Failure::Io(IoContext::Storage) => class(Class::Storage, Reason::Storage),
-        Failure::Native(kind, NativeContext::Default) => match native_reason(kind) {
+        Failure::Native(kind, NativeContext::Default | NativeContext::Engine) => match native_reason(kind) {
             Reason::Storage => class(Class::Storage, Reason::Storage),
             reason => class(Permanent, reason),
         },
-        Failure::Native(kind, NativeContext::Engine) => class(Permanent, native_reason(kind)),
         Failure::Native(_, NativeContext::ProtocolRequest) => class(Permanent, InvalidRequest),
         Failure::Native(_, NativeContext::ProtocolResponse) => class(Transient, Server),
     }

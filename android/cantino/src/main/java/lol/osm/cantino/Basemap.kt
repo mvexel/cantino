@@ -372,11 +372,12 @@ internal class BasemapExtract(
     }
 
     /**
-     * Engine rejections are permanent: retrying the same source cannot help.
-     * The reason comes from the native category: a bad or unsupported
-     * archive is INVALID_DATA, zooms/bbox the archive cannot serve are
-     * INVALID_REQUEST, a staging write that fails is STORAGE (core table,
-     * `cantino_classify_failure` context "engine").
+     * Engine rejections of the source are permanent: retrying the same source
+     * cannot help. The reason comes from the native category: a bad or
+     * unsupported archive is INVALID_DATA, zooms/bbox the archive cannot serve
+     * are INVALID_REQUEST. A staging write that fails is STORAGE and retried
+     * by WorkManager once storage is no longer low, like every storage
+     * failure (core table, `cantino_classify_failure` context "engine").
      */
     private inline fun <T> engine(block: () -> T): T = try {
         block()

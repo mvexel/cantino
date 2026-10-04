@@ -245,7 +245,7 @@
 {"id":"classify_failure.native_default_5","result":{"ok":{"class":"permanent","inline_retry":false,"reason":"unknown","scheduler_retry":false}}},
 {"id":"classify_failure.native_engine_1","result":{"ok":{"class":"permanent","inline_retry":false,"reason":"invalid_request","scheduler_retry":false}}},
 {"id":"classify_failure.native_engine_2","result":{"ok":{"class":"permanent","inline_retry":false,"reason":"invalid_data","scheduler_retry":false}}},
-{"id":"classify_failure.native_engine_3","result":{"ok":{"class":"permanent","inline_retry":false,"reason":"storage","scheduler_retry":false}}},
+{"id":"classify_failure.native_engine_3","result":{"ok":{"class":"storage","inline_retry":false,"reason":"storage","scheduler_retry":true}}},
 {"id":"classify_failure.native_engine_4","result":{"ok":{"class":"permanent","inline_retry":false,"reason":"unknown","scheduler_retry":false}}},
 {"id":"classify_failure.native_engine_5","result":{"ok":{"class":"permanent","inline_retry":false,"reason":"unknown","scheduler_retry":false}}},
 {"id":"classify_failure.native_protocol_request_1","result":{"ok":{"class":"permanent","inline_retry":false,"reason":"invalid_request","scheduler_retry":false}}},
