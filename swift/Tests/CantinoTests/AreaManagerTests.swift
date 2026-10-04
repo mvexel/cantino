@@ -118,6 +118,28 @@ import Testing
         states.close()
     }
 
+    /// The import profile is recorded in the published area's report: in
+    /// the ready state and when the area is read back from disk (the core
+    /// parses the sidecar, so this is where a dropped profile would show).
+    @Test func importProfileIsRecordedInThePublishedArea() async throws {
+        let profile = ImportProfile(keep: [KeepRule(kinds: [.node], key: "amenity", values: ["cafe"])])
+        let manager = AreaManager(directory: directory,
+                                  config: AreaConfig(sliceBaseUrl: slice.base, importOptions: ImportOptions(profile: profile)),
+                                  sessionConfiguration: FakeSlice.sessionConfiguration)
+        let states = try Recorder(manager, areaId)
+        _ = try manager.download(areaId: areaId, bbox: bbox)
+        let ready = try await states.await { if case .ready = $0 { true } else { false } }
+        guard case .ready(_, let area) = ready else { Issue.record("\(ready)"); return }
+        let report = try #require(area.metadata?.report)
+        #expect(report.profile == profile)
+        #expect(report.counts == ObjectCounts(nodes: 1, ways: 0, relations: 0))
+        #expect(try manager.publishedArea(areaId: areaId)?.metadata?.report?.profile == profile)
+        #expect(try await manager.loadPublishedArea(areaId: areaId)?.metadata?.report?.profile == profile)
+        // A manager without a profile still reads the recorded one.
+        #expect(try self.manager().publishedArea(areaId: areaId)?.metadata?.report?.profile == profile)
+        states.close()
+    }
+
     @Test func serverErrorsWhilePollingAreRetriedAndResumeTheSameJob() async throws {
         // 5 consecutive 500s: the first attempt retries inline 3 times (4
         // failures) and gives up; the next attempt, after the backoff,

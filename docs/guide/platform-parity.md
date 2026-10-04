@@ -31,6 +31,7 @@ download and resume) passed on a physical iPhone 15 Pro Max (iOS 27).
 | `AreaManagerTest` (14 shared) | `AreaManagerTests` | same scenarios against a fake SliceOSM (MockWebServer / URLProtocol) |
 | `AreaManagerTest.snapshotTimestamp…` | `snapshotTimestampParsesRfc3339AndToleratesGarbage` | |
 | `AreaManagerTest`: `basemapOnlyPublishesNoDataAndMakesNoSliceRequests`, `basemapOnlyReplacesDataAndADownloadBringsItBack`, `downloadBasemapNeedsASource` | same names | basemap-only areas |
+| `AreaManagerTest.importProfileIsRecordedInThePublishedArea` | same name | the profile reads back from the published area |
 | `ProcessDeathTest` + `scripts/kill-test-android.sh` | `aRunKilledWhileDownloadingIsResumedWithItsJob`, `aRunKilledAfterItsCommitPointSucceedsWithoutDownloading`, `aCancelledRunIsNotResumed` | Android kills the process; Swift recreates a killed process's files (downloads run in the app's process, resumed by the next `AreaManager`) |
 | — | `downloadsReportProgressWhileTransferring`, `userAgentVersionMatchesTheCrate`, `invalidAreaIdsAndBasemapSourcesAreRejected` | Swift-only checks of Swift-only code |
 | `ModelOwnershipTest` (JVM) | — | Kotlin collections; Swift models are value types |

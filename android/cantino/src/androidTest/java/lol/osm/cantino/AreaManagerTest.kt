@@ -158,6 +158,28 @@ class AreaManagerTest {
     }
 
     /**
+     * The import profile is recorded in the published area's report: in the
+     * Ready state and when the area is read back from disk (the core parses
+     * the sidecar, so this is where a dropped profile would show).
+     */
+    @Test
+    fun importProfileIsRecordedInThePublishedArea() {
+        val profile = ImportProfile(listOf(KeepRule(setOf(OsmKind.NODE), "amenity", listOf("cafe"))))
+        val manager = AreaManager(target, config().copy(importOptions = ImportOptions(profile = profile)))
+        val states = Recorder(manager, areaId)
+        manager.download(areaId, bbox)
+        val ready = states.await { it is AreaState.Ready } as AreaState.Ready
+        val report = ready.area.metadata!!.report!!
+        assertEquals(profile, report.profile)
+        assertEquals(ObjectCounts(1, 0, 0), report.counts)
+        assertEquals(profile, manager.publishedArea(areaId)!!.metadata!!.report!!.profile)
+        assertEquals(profile, runBlocking { manager.loadPublishedArea(areaId) }!!.metadata!!.report!!.profile)
+        // A manager without a profile still reads the recorded one.
+        assertEquals(profile, manager().publishedArea(areaId)!!.metadata!!.report!!.profile)
+        states.close()
+    }
+
+    /**
      * Foreground mode: the run promotes itself to WorkManager's
      * SystemForegroundService. Checked twice: the worker's setForeground
      * calls succeeded (hook), and while the run is inside it (blocked right
