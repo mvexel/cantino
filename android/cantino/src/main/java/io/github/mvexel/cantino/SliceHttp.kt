@@ -33,10 +33,19 @@ internal sealed class DownloadFailure(
 
     /**
      * Retrying the same request cannot help: other HTTP 4xx, invalid input,
-     * data that fails to import, a full disk.
+     * data that fails to import.
      */
     class Permanent(message: String, reason: FailureReason, cause: Throwable? = null) :
         DownloadFailure(message, reason, cause)
+
+    /**
+     * The device's storage failed (typically a full disk). Retried by
+     * WorkManager, whose storage-not-low constraint holds the next run until
+     * space is freed (Martijn 2026-10-03), but never inline: retrying within
+     * the run would only fill the same disk again.
+     */
+    class Storage(message: String, cause: Throwable? = null) :
+        DownloadFailure(message, FailureReason.STORAGE, cause)
 
     /** The server no longer knows this job (HTTP 404 on status or file): submit a new one. */
     class JobGone(message: String) : DownloadFailure(message, FailureReason.SERVER)
@@ -59,18 +68,32 @@ internal fun CantinoException.failureReason(): FailureReason = when (this) {
 }
 
 /**
+ * A [DownloadFailure] for a native failure: storage becomes
+ * [DownloadFailure.Storage] (retried by WorkManager once storage is no longer
+ * low); everything else repeats on retry, so it is permanent.
+ */
+internal fun failure(message: String, error: CantinoException): DownloadFailure {
+    val reason = error.failureReason()
+    return if (reason == FailureReason.STORAGE) {
+        DownloadFailure.Storage(message, error)
+    } else {
+        DownloadFailure.Permanent(message, reason, error)
+    }
+}
+
+/**
  * Runs a write to a local download file. An IOException here is the
  * device's storage (typically a full disk), not the network: it must not be
- * caught by [SliceHttp]'s network handler and retried as a transient network
- * error, so it becomes a permanent [FailureReason.STORAGE] failure.
- * [DownloadFailure] is not an IOException, so it passes that handler.
+ * caught by [SliceHttp]'s network handler and reported as a network error,
+ * so it becomes a [DownloadFailure.Storage] failure (retried by WorkManager,
+ * not inline). [DownloadFailure] is not an IOException, so it passes that
+ * handler.
  */
 private inline fun <T> disk(target: File, block: () -> T): T = try {
     block()
 } catch (error: IOException) {
-    throw DownloadFailure.Permanent(
+    throw DownloadFailure.Storage(
         "cannot write ${target.name}: ${error.message ?: error.javaClass.simpleName}",
-        FailureReason.STORAGE,
         error,
     )
 }

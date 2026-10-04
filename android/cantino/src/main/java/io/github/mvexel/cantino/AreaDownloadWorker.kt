@@ -118,9 +118,10 @@ internal class AreaDownloadWorker(context: Context, parameters: WorkerParameters
                     // Into the staging directory: nothing is published here.
                     OsmStore.importArea(staging.path, storage.stagedArea(request.areaId, id).path, config.importOptions)
                 } catch (error: CantinoException) {
-                    // Bad or truncated PBF (InvalidFile → INVALID_DATA), or a
-                    // full disk (Io → STORAGE). The old area is intact.
-                    throw DownloadFailure.Permanent("import failed: ${error.message}", error.failureReason(), error)
+                    // Bad or truncated PBF (InvalidFile → INVALID_DATA,
+                    // permanent), or a full disk (Io → STORAGE, transient: a
+                    // retry waits for storage-not-low). The old area is intact.
+                    throw failure("import failed: ${error.message}", error)
                 }
             }
             AreaTestHooks.afterImport?.invoke()
@@ -145,8 +146,9 @@ internal class AreaDownloadWorker(context: Context, parameters: WorkerParameters
             storage.clearCheckpoint(request.areaId, id)
             return failed(failure.message, retryable = false, failure.reason)
         } catch (failure: DownloadFailure) {
-            // Transient: keep the checkpoint so the next run resumes the same
-            // job. A job whose file vanished (JobGone from the download) must
+            // Transient or Storage: keep the checkpoint so the next run
+            // resumes the same job (a Storage retry waits for
+            // storage-not-low, a constraint of every download request). A job whose file vanished (JobGone from the download) must
             // not be resumed: drop the checkpoint so the next run resubmits.
             if (failure is DownloadFailure.JobGone) storage.clearCheckpoint(request.areaId, id)
             return if (runAttemptCount + 1 < config.maxRunAttempts) {
@@ -217,11 +219,7 @@ internal class AreaDownloadWorker(context: Context, parameters: WorkerParameters
                 } catch (error: CantinoException) {
                     // InvalidFile (not PMTiles v3) → INVALID_DATA; Io (the
                     // staged file unreadable) → STORAGE.
-                    throw DownloadFailure.Permanent(
-                        "basemap ${source.url} is not a valid PMTiles v3 archive: ${error.message}",
-                        error.failureReason(),
-                        error,
-                    )
+                    throw failure("basemap ${source.url} is not a valid PMTiles v3 archive: ${error.message}", error)
                 }
                 BasemapMetadata(BasemapKind.URL, source.url, output.length(), info.addressedTiles, info.minZoom, info.maxZoom, 1, bytes)
             }

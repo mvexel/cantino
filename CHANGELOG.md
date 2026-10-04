@@ -89,9 +89,9 @@ before 1.0 a minor version may break the API.
   `CantinoException`.
 - `AreaState.Failed` carries `reason`; its `equals`/`hashCode`/`toString`
   include it.
-- A full disk while downloading the PBF or basemap ends the run at once as
-  `Failed(retryable = false, reason = STORAGE)`; it used to be retried as a
-  network error.
+- A full disk while downloading or importing is reported as
+  `reason = STORAGE` (it used to look like a network error) and stays
+  retryable: WorkManager retries once storage is no longer low.
 - Rust: `Error` gains `Format` (not a Cantino area, another
   `FORMAT_VERSION`, an unclustered PMTiles archive or unsupported internal
   compression, all formerly `Invalid`), `WrongThread` (formerly `Invalid`)

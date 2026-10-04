@@ -351,7 +351,7 @@ public class AreaMetadata internal constructor(
  * | [NETWORK] | No connection, timeouts, a dropped or truncated transfer | yes, after retries ran out |
  * | [SERVER] | SliceOSM or basemap host: 5xx, 408, 429, a 404 for a vanished job, an unparseable answer, a job that never finishes, no HTTP range support | mostly yes |
  * | [INVALID_REQUEST] | Invalid bbox or name, other HTTP 4xx (a 400 on submit, a basemap URL that 404s), zooms the archive lacks | no |
- * | [STORAGE] | Disk full or a staging file that cannot be written; publishing interrupted by an I/O error | no (yes for publishing) |
+ * | [STORAGE] | Disk full or a staging file that cannot be written; publishing interrupted by an I/O error | yes (retries wait until storage is no longer low) |
  * | [INVALID_DATA] | A PBF that fails to import (corrupt, truncated, not a snapshot), a basemap that is not a valid or supported PMTiles v3 archive | no |
  * | [UNKNOWN] | An unexpected error (a bug in Cantino), or a failure recorded by Cantino 0.1 | no |
  *
@@ -571,9 +571,8 @@ public sealed interface AreaState {
      * parsing). [retryable] is true for transient causes (network, server)
      * that exhausted their retries: calling [AreaManager.download] again
      * later may succeed as is. False means the same request fails again
-     * until something changes: the request ([FailureReason.INVALID_REQUEST]),
-     * the source data ([FailureReason.INVALID_DATA]) or free storage
-     * ([FailureReason.STORAGE]).
+     * until something changes: the request ([FailureReason.INVALID_REQUEST])
+     * or the source data ([FailureReason.INVALID_DATA]).
      *
      * @property message Developer-facing description of the failure (not localized).
      * @property retryable True for a transient cause that exhausted its retries.

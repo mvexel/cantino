@@ -121,7 +121,7 @@ arrives during the final milliseconds of renames is ignored: that run reports
 | A basemap server ignoring `Range` (or sending the wrong range) | `Failed(retryable = false)` at once | `SERVER` |
 | Other HTTP 4xx (a `400` from SliceOSM on submit, a basemap URL that is `404`), invalid bbox or name, zooms the basemap archive lacks | `Failed(retryable = false)` at once | `INVALID_REQUEST` |
 | A PBF that fails to import (corrupt, truncated, unsorted), a basemap that is not a valid PMTiles v3 archive | `Failed(retryable = false)` at once | `INVALID_DATA` |
-| Disk full while downloading or importing | `Failed(retryable = false)` at once: free space, then `download()` again | `STORAGE` |
+| Disk full while downloading or importing | Transient: WorkManager retries once storage is no longer low; `Failed(retryable = true)` if the retries run out | `STORAGE` |
 | An I/O error while publishing | Transient: the next run finishes the commit | `STORAGE` |
 | An unexpected error (a bug), or a failure recorded by Cantino 0.1 | `Failed(retryable = false)` | `UNKNOWN` |
 | Storage low before the run | Not a failure: the work stays `Queued` until storage recovers (WorkManager constraint) | |
