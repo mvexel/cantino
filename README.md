@@ -31,7 +31,7 @@ mode: offline basemap, cafés from a tag + bbox query, and the raw object.*
 | Atomic refresh: a failed or cancelled download never touches the published area | Incremental updates (a refresh re-downloads the whole area) |
 | Lookup by ID; ANDed tag filters; bbox spatial candidates; keyset pagination | Exact geometry operations, routing, geocoding |
 | Raw tags, ordered way nodes and relation members, per-object metadata | Overlapping areas or country-scale extracts |
-| Android (arm64-v8a, x86_64), minSdk 26 | iOS (planned; the C ABI is ready for it) |
+| Android (arm64-v8a, armeabi-v7a, x86_64), minSdk 26 | iOS (planned; the C ABI is ready for it) |
 
 ## Install
 
@@ -54,7 +54,7 @@ android {
     defaultConfig {
         minSdk = 26
         // Cantino ships native code for these two ABIs only (phones and x86_64 emulators).
-        ndk { abiFilters += listOf("arm64-v8a", "x86_64") }
+        ndk { abiFilters += listOf("arm64-v8a", "armeabi-v7a", "x86_64") }
     }
 }
 

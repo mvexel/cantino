@@ -6,3 +6,5 @@
 spike/*/target
 spike/*/out
 *.sqlite
+/.claude/worktrees/
+/.claude/.cc-writes
