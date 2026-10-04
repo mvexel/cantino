@@ -435,23 +435,83 @@ public struct Query: Hashable, Sendable {
 /// ``OsmObject/metadata`` and only ``OsmObject/Node/locationVersion``,
 /// which makes the database noticeably smaller. `cacheMiB` is SQLite's page
 /// cache during the import in MiB: resident memory, not a cap on the
-/// import's total memory.
+/// import's total memory. `profile` keeps only the objects the app needs
+/// (see ``ImportProfile``); nil imports everything.
 public struct ImportOptions: Hashable, Sendable {
     /// Keep full editing metadata for untagged nodes (larger file).
     public var preserveUntaggedMetadata: Bool
     /// SQLite page cache during the import, in MiB.
     public var cacheMiB: Int
+    /// Tag filter for the import; nil imports everything.
+    public var profile: ImportProfile?
 
-    public init(preserveUntaggedMetadata: Bool = false, cacheMiB: Int = 16) {
+    public init(preserveUntaggedMetadata: Bool = false, cacheMiB: Int = 16, profile: ImportProfile? = nil) {
         self.preserveUntaggedMetadata = preserveUntaggedMetadata
         self.cacheMiB = cacheMiB
+        self.profile = profile
     }
 
-    func json() -> String {
-        JSONValue.object([
+    var jsonValue: JSONValue {
+        var object: [String: JSONValue] = [
             "preserve_untagged_metadata": .bool(preserveUntaggedMetadata),
             "cache_mb": .int(Int64(cacheMiB)),
-        ]).canonicalString
+        ]
+        if let profile { object["profile"] = profile.json }
+        return .object(object)
+    }
+
+    func json() -> String { jsonValue.canonicalString }
+}
+
+/// A tag-filtered import: which objects an area keeps.
+///
+/// An object is kept when any rule in ``keep`` matches it. References are
+/// closed over, as `osmium tags-filter` does by default: a kept relation
+/// keeps all its members (recursively), a kept way keeps all its nodes.
+/// Objects kept as references are stored whole, with all tags. A points of
+/// interest profile makes a city area about 15× smaller (see the performance
+/// guide).
+///
+/// An object missing from a filtered area may be filtered out *or* outside
+/// the area; ``ImportReport/profile`` says which filter the area was built
+/// with. The core validates the profile at import time
+/// (``CantinoError/invalidArgument(_:)`` for no rules, a rule without kinds,
+/// an empty key or an empty value list).
+public struct ImportProfile: Hashable, Sendable {
+    /// Keep rules; must not be empty.
+    public var keep: [KeepRule]
+
+    public init(keep: [KeepRule]) {
+        self.keep = keep
+    }
+
+    var json: JSONValue { .object(["keep": .array(keep.map(\.json))]) }
+}
+
+/// One rule of an ``ImportProfile``: objects of ``kinds`` that have tag
+/// ``key`` (with a value in ``values``, if given).
+public struct KeepRule: Hashable, Sendable {
+    /// Object kinds the rule applies to; must not be empty.
+    public var kinds: Set<OsmKind>
+    /// Tag key the object must have.
+    public var key: String
+    /// Accepted values; nil accepts any value. Must not be empty if given.
+    public var values: [String]?
+
+    public init(kinds: Set<OsmKind>, key: String, values: [String]? = nil) {
+        self.kinds = kinds
+        self.key = key
+        self.values = values
+    }
+
+    /// The core's form: kinds as letters in "nwr" order.
+    var json: JSONValue {
+        var object: [String: JSONValue] = [
+            "kinds": .string(OsmKind.allCases.filter(kinds.contains).map { String($0.wire.prefix(1)) }.joined()),
+            "key": .string(key),
+        ]
+        if let values { object["values"] = .array(values.map(JSONValue.string)) }
+        return .object(object)
     }
 }
 
@@ -464,23 +524,26 @@ public struct ObjectCounts: Hashable, Sendable {
     /// Relations.
     public let relations: Int64
 
-    init(nodes: Int64, ways: Int64, relations: Int64) {
+    public init(nodes: Int64, ways: Int64, relations: Int64) {
         self.nodes = nodes
         self.ways = ways
         self.relations = relations
     }
 }
 
-/// Result of an import: objects stored per kind, and the size of the
-/// published database file in bytes.
+/// Result of an import: objects stored per kind, the size of the published
+/// database file in bytes, and the profile the area was filtered with.
 public struct ImportReport: Hashable, Sendable {
     /// Objects stored per kind.
     public let counts: ObjectCounts
     /// Size of the published database file in bytes.
     public let databaseBytes: Int64
+    /// The (normalized) profile the import used; nil for a full import.
+    public let profile: ImportProfile?
 
-    init(counts: ObjectCounts, databaseBytes: Int64) {
+    public init(counts: ObjectCounts, databaseBytes: Int64, profile: ImportProfile? = nil) {
         self.counts = counts
         self.databaseBytes = databaseBytes
+        self.profile = profile
     }
 }

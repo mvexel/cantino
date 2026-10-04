@@ -103,15 +103,34 @@ private struct WireCounts: Decodable {
 struct WireReport: Decodable {
     private let counts: WireCounts
     private let databaseBytes: Int64
+    private let profile: WireProfile?
 
     private enum CodingKeys: String, CodingKey {
-        case counts
+        case counts, profile
         case databaseBytes = "database_bytes"
     }
 
     var model: ImportReport {
         ImportReport(counts: ObjectCounts(nodes: counts.nodes, ways: counts.ways, relations: counts.relations),
-                     databaseBytes: databaseBytes)
+                     databaseBytes: databaseBytes, profile: profile?.model)
+    }
+}
+
+/// `{"keep":[{"kinds":"nwr","key":"amenity","values":["cafe"]}]}`.
+struct WireProfile: Decodable {
+    struct Rule: Decodable {
+        let kinds: String
+        let key: String
+        let values: [String]?
+    }
+
+    let keep: [Rule]
+
+    var model: ImportProfile {
+        ImportProfile(keep: keep.map { rule in
+            KeepRule(kinds: Set(OsmKind.allCases.filter { rule.kinds.contains($0.wire.prefix(1)) }),
+                     key: rule.key, values: rule.values)
+        })
     }
 }
 
