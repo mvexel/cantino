@@ -78,7 +78,7 @@ import Testing
         #expect(try store.query(Query(bbox: crossing)).map(\.id).contains(way(2)))
     }
 
-    @Test func wayCoordinatesAndRepresentativePoints() throws {
+    @Test func wayCoordinatesKeepOrderAndMissingNodes() throws {
         let store = try OsmStore.open(Fixtures.importFixture().area)
         defer { try? store.close() }
         // Way 1 is nodes 1, 2, 1: order and the closing repeat survive.

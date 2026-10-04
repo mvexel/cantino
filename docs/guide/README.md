@@ -1,7 +1,8 @@
 # Cantino guide
 
-Cantino 0.3.0, Android. Start with the [quickstart](../../README.md#quickstart),
-then read the page you need.
+Cantino for Android and iOS. Start with the [quickstart](../../README.md#quickstart)
+(Android) or the [Swift adapter](../../swift/README.md) (iOS), then read the
+page you need.
 
 | Page | Read it for |
 | --- | --- |
@@ -12,7 +13,8 @@ then read the page you need.
 | [Performance and sizes](performance.md) | Measured numbers on a Pixel 8 |
 | [Building from source](building.md) | Rust core, NDK, AAR, checks, Dokka, publishing |
 | [C ABI](c-abi.md) | `include/cantino.h` for iOS and other bindings |
-| [Café app walkthrough](cafe-app.md) | The reference app, step by step, mapped to code |
+| [Café app walkthrough](cafe-app.md) | The reference app, step by step, mapped to code (Android and iOS) |
+| [Android and iOS parity](platform-parity.md) | Which tests run on both platforms, known differences |
 | [SliceOSM in production](sliceosm.md) | What the service is, terms, limits, data lag, self-hosting via `sliceBaseUrl` |
 | [Opening hours](opening-hours.md) | Pairing raw `opening_hours` strings with an evaluator library; time zones |
 | [Editing apps](editing-apps.md) | What Cantino gives an editor today: versions, snapshot freshness, detecting stale data |

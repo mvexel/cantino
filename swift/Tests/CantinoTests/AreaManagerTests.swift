@@ -359,6 +359,38 @@ import Testing
         states.close()
     }
 
+    @Test func snapshotTimestampParsesRfc3339AndToleratesGarbage() {
+        let parse = AreaMetadata.parseSnapshotTimestamp
+        let expected = Date(timeIntervalSince1970: 1_791_059_401) // 2026-10-03T20:30:01Z
+        #expect(parse("2026-10-03T20:30:01Z") == expected)
+        #expect(parse("2026-10-03t20:30:01z") == expected)
+        #expect(parse("2026-10-03 20:30:01Z") == expected)
+        #expect(parse("2026-10-03T22:30:01+02:00") == expected)
+        #expect(parse("2026-10-03T20:30:01.25Z") == expected.addingTimeInterval(0.25))
+        #expect(parse(nil) == nil)
+        #expect(parse("") == nil)
+        #expect(parse("yesterday") == nil)
+        #expect(parse("2026-10-03T20:30:01") == nil) // no offset: not RFC 3339
+        // Written back as Kotlin's Instant.toString().
+        #expect(AreaMetadata.formatSnapshotTimestamp(expected) == "2026-10-03T20:30:01Z")
+    }
+
+    /// The stored request (the WorkManager input data on Android) keeps
+    /// everything a resumed run needs, the import profile included.
+    @Test func profileSurvivesTheStoredRequest() throws {
+        let profile = ImportProfile(keep: [KeepRule(kinds: [.node, .way, .relation], key: "amenity", values: ["cafe"])])
+        let request = DownloadRequest(
+            workId: UUID(), areaId: areaId, bbox: bbox, name: "café", basemap: try .extract(planetUrl: slice.url("/p.pmtiles"), maxZoom: 14),
+            config: AreaConfig(sliceBaseUrl: slice.base, timeout: 30, importOptions: ImportOptions(cacheMiB: 32, profile: profile)))
+        let parsed = try #require(DownloadRequest.parse(Data(request.json.canonicalString.utf8)))
+        #expect(parsed.workId == request.workId)
+        #expect(parsed.areaId == areaId && parsed.bbox == bbox && parsed.name == "café")
+        #expect(parsed.basemap == request.basemap)
+        #expect(parsed.config == request.config)
+        let plain = DownloadRequest(workId: UUID(), areaId: areaId, bbox: bbox, name: "x", basemap: .none, config: AreaConfig())
+        #expect(DownloadRequest.parse(Data(plain.json.canonicalString.utf8))?.config.importOptions.profile == nil)
+    }
+
     @Test func invalidAreaIdsAndBasemapSourcesAreRejected() throws {
         let manager = manager()
         #expect(throws: CantinoError.self) { try manager.download(areaId: "../x", bbox: self.bbox) }

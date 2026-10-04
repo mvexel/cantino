@@ -13,7 +13,7 @@ include/cantino.h    C ABI header, the contract for every platform adapter
 android/cantino      Kotlin library (AAR): OsmStore, AreaManager, models
 android/cafe-app     reference app
 android/sample-app   offline basemap demo
-swift/               Swift package (OsmStore, AsyncOsmStore, models), platform-neutral, tested on macOS and Linux
+swift/               Swift package (OsmStore, AsyncOsmStore, AreaManager, models), for iOS and macOS; store API also on Linux
 ios/cafe-app         iOS reference app (SwiftUI, Xcode project, uses ../../swift)
 scripts/             build, check, bench, basemap assets, publishing
 ```
@@ -22,8 +22,9 @@ scripts/             build, check, bench, basemap assets, publishing
 
 | Tool | Version | Notes |
 | --- | --- | --- |
-| Rust | 1.99.0 (pinned in `rust-toolchain.toml`) | `rustup target add aarch64-linux-android x86_64-linux-android --toolchain 1.99.0` |
-| Android NDK | r29 (`29.0.14206865`), SDK-managed | Cross-compiles the Rust library; Gradle also uses it to strip |
+| Rust | 1.99.0 (pinned in `rust-toolchain.toml`) | `rustup target add aarch64-linux-android x86_64-linux-android --toolchain 1.99.0`; for iOS also `aarch64-apple-ios aarch64-apple-ios-sim aarch64-apple-darwin` |
+| Android NDK | r29 (`29.0.14206865`), SDK-managed | Cross-compiles the Rust library; Gradle also uses it to strip. Linux or macOS host; without the SDK command-line tools, unpack `android-ndk-r29-<host>.zip` from `dl.google.com/android/repository/` into `<sdk>/ndk/29.0.14206865` |
+| Xcode | 27 (Swift 6.4), macOS only | xcframework, Swift tests on the simulator, iOS café app |
 | Android SDK | compileSdk 36 | `android/local.properties`: `sdk.dir=…` |
 | JDK | Temurin 25 via [mise](https://mise.jdx.dev/) (`mise.toml`) | Run Gradle as `mise exec -- ./gradlew …` |
 | Gradle / AGP | 9.8 wrapper / 9.4.1 (built-in Kotlin) | |
@@ -43,7 +44,11 @@ mise exec -- ./gradlew :cantino:testDebugUnitTest :cafe-app:testDebugUnitTest
 ANDROID_SERIAL=<device> mise exec -- ./gradlew :cantino:connectedDebugAndroidTest :cafe-app:connectedDebugAndroidTest
 ```
 
-Run the instrumented suites on an arm64 phone and an x86_64 emulator.
+Run the instrumented suites on an arm64 phone and an emulator (x86_64 on
+an x86_64 host, arm64 on Apple silicon). The scripts default to the SDK in
+`~/Android/Sdk` (Linux) or `~/Library/Android/sdk` (macOS); set
+`ANDROID_HOME` otherwise. What runs on both platforms:
+[Android and iOS parity](platform-parity.md).
 For download/persistence changes also run `ANDROID_SERIAL=<device>
 scripts/kill-test-android.sh` from the repository root on each device.
 
