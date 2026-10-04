@@ -94,7 +94,7 @@ before 1.0 a minor version may break the API.
   `CantinoException`.
 - `AreaState.Failed` carries `reason`; its `equals`/`hashCode`/`toString`
   include it.
-- A full disk while downloading or importing is reported as
+- A full disk while downloading, importing or extracting the basemap is reported as
   `reason = STORAGE` (it used to look like a network error) and stays
   retryable: WorkManager retries once storage is no longer low.
 - Rust: `Error` gains `Format` (not a Cantino area, another
