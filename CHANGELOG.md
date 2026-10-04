@@ -1,9 +1,9 @@
 # Changelog
 
-Cantino is under development with no external consumers. API, ABI and file
+Cantino is under heavy development. API, ABI and file
 formats may change without compatibility layers. See the [guide](docs/guide/README.md).
 
-## 0.4.0 — unreleased
+## 0.4.0 — 2026-10-04
 
 iOS and Android at parity: the same SDK on both platforms, tested against the
 same corpus and scenarios ([parity](docs/guide/platform-parity.md)).
