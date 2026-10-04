@@ -148,6 +148,16 @@ public enum class BasemapPhase {
  * @property tileEntries Directory entries.
  * @property tileContents Distinct tile blobs (deduplicated).
  * @property fileBytes Size of the file.
+ * @property specVersion PMTiles specification version (always 3: other versions are rejected).
+ * @property centerLon Longitude of the header's default map center, in degrees.
+ * @property centerLat Latitude of the header's default map center, in degrees.
+ * @property centerZoom Zoom level of the header's default map center.
+ * @property tileType Tile format as the PMTiles header code: 0 unknown, 1 MVT
+ *   (Mapbox Vector Tile), 2 PNG, 3 JPEG, 4 WebP, 5 AVIF.
+ * @property tileCompression Compression of the tile blobs as the PMTiles header
+ *   code: 0 unknown, 1 none, 2 gzip, 3 brotli, 4 zstd.
+ * @property clustered Whether tile data is stored in tile-ID order (the layout
+ *   the extract engine requires).
  */
 public class PmtilesInfo internal constructor(
     public val minZoom: Int,
@@ -157,17 +167,32 @@ public class PmtilesInfo internal constructor(
     public val tileEntries: Long,
     public val tileContents: Long,
     public val fileBytes: Long,
+    public val specVersion: Int,
+    public val centerLon: Double,
+    public val centerLat: Double,
+    public val centerZoom: Double,
+    public val tileType: Int,
+    public val tileCompression: Int,
+    public val clustered: Boolean,
 ) {
     override fun equals(other: Any?): Boolean = this === other || other is PmtilesInfo &&
         minZoom == other.minZoom && maxZoom == other.maxZoom && bounds == other.bounds &&
         addressedTiles == other.addressedTiles && tileEntries == other.tileEntries &&
-        tileContents == other.tileContents && fileBytes == other.fileBytes
+        tileContents == other.tileContents && fileBytes == other.fileBytes &&
+        specVersion == other.specVersion && centerLon == other.centerLon && centerLat == other.centerLat &&
+        centerZoom == other.centerZoom && tileType == other.tileType &&
+        tileCompression == other.tileCompression && clustered == other.clustered
 
-    override fun hashCode(): Int = hash(minZoom, maxZoom, bounds, addressedTiles, tileEntries, tileContents, fileBytes)
+    override fun hashCode(): Int = hash(
+        minZoom, maxZoom, bounds, addressedTiles, tileEntries, tileContents, fileBytes,
+        specVersion, centerLon, centerLat, centerZoom, tileType, tileCompression, clustered,
+    )
 
     override fun toString(): String =
         "PmtilesInfo(minZoom=$minZoom, maxZoom=$maxZoom, bounds=$bounds, addressedTiles=$addressedTiles, " +
-            "tileEntries=$tileEntries, tileContents=$tileContents, fileBytes=$fileBytes)"
+            "tileEntries=$tileEntries, tileContents=$tileContents, fileBytes=$fileBytes, " +
+            "specVersion=$specVersion, centerLon=$centerLon, centerLat=$centerLat, centerZoom=$centerZoom, " +
+            "tileType=$tileType, tileCompression=$tileCompression, clustered=$clustered)"
 
     /** Reading a local PMTiles file. */
     public companion object {
@@ -181,6 +206,7 @@ public class PmtilesInfo internal constructor(
         @JvmStatic
         public fun read(file: File): PmtilesInfo = JSONObject(NativeBridge.basemapInfo(file.path)).let { json ->
             val b = json.getJSONArray("bounds")
+            val c = json.getJSONArray("center") // [lon, lat, zoom]
             PmtilesInfo(
                 minZoom = json.getInt("min_zoom"),
                 maxZoom = json.getInt("max_zoom"),
@@ -189,6 +215,13 @@ public class PmtilesInfo internal constructor(
                 tileEntries = json.getLong("tile_entries"),
                 tileContents = json.getLong("tile_contents"),
                 fileBytes = json.getLong("file_bytes"),
+                specVersion = json.getInt("spec_version"),
+                centerLon = c.getDouble(0),
+                centerLat = c.getDouble(1),
+                centerZoom = c.getDouble(2),
+                tileType = json.getInt("tile_type"),
+                tileCompression = json.getInt("tile_compression"),
+                clustered = json.getBoolean("clustered"),
             )
         }
     }

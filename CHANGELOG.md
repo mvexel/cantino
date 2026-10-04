@@ -3,6 +3,21 @@
 All notable changes to Cantino (formerly osm-framework). Versions follow semantic versioning;
 before 1.0 a minor version may break the API.
 
+## Unreleased
+
+### Added
+
+- **`PmtilesInfo`** now exposes the rest of the header facts the C ABI's
+  `cantino_basemap_info` already returned: `specVersion`, `centerLon`,
+  `centerLat`, `centerZoom`, `tileType`, `tileCompression` (raw PMTiles header
+  codes) and `clustered`.
+
+### Tests
+
+- Kotlin parity runner: `ParityTest` (instrumented) runs the shared
+  `tests/parity` corpus through the Kotlin API and compares it byte for byte
+  with the C ABI's `expected.json`.
+
 ## 0.2.0 — 2026-10-03
 
 ### Added

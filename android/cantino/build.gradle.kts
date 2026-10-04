@@ -40,6 +40,10 @@ android {
         getByName("main").jniLibs.directories.add("../../target/android")
         // The instrumented test imports the same fixture as the Rust tests.
         getByName("androidTest").assets.directories.add("../../tests/fixtures")
+        // The parity corpus (calls.json, expected.json, *.osm): single source of
+        // truth shared with the Rust runner; ParityTest maps repository paths
+        // (tests/fixtures/x, tests/parity/x) to these flat asset names.
+        getByName("androidTest").assets.directories.add("../../tests/parity")
     }
     publishing {
         singleVariant("release") { withSourcesJar() }
