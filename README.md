@@ -169,7 +169,11 @@ store on its own thread, paging through large results, and the privacy note
 
 - **[Guide](docs/guide/README.md)**: concepts, downloading areas, basemaps,
   querying, performance, building from source, the C ABI, and a walkthrough
-  of the café app.
+  of the café app. Also on the site: <https://mvexel.github.io/cantino/guide/>.
+  Production topics: [SliceOSM in production](docs/guide/sliceosm.md),
+  [opening hours](docs/guide/opening-hours.md),
+  [editing apps](docs/guide/editing-apps.md) and the
+  [roadmap and maintenance](docs/guide/roadmap.md).
 - **[API reference](https://mvexel.github.io/cantino/api/)** (Dokka; generate
   locally with `cd android && ./gradlew :cantino:dokkaGeneratePublicationHtml`).
 - **Samples**: [`android/cafe-app`](android/cafe-app) (the full offline flow:

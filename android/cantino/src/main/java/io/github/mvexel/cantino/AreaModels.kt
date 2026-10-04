@@ -25,18 +25,24 @@ import java.util.UUID
  * process death uses the config it was started with.
  *
  * @property sliceBaseUrl SliceOSM service root (http or https, ending in `/`).
+ *   Default [DEFAULT_SLICE_BASE_URL], `https://slice.openstreetmap.us/`.
  * @property pollIntervalMillis Delay between job status polls while SliceOSM slices.
+ *   Default 2000 (2 s).
  * @property maxSliceWaitMillis Slicing longer than this within one run is
  *   treated as transient: the run retries later and resumes polling the same job.
- * @property connectTimeoutMillis HTTP connect timeout per request.
+ *   Default 480000 (8 min).
+ * @property connectTimeoutMillis HTTP connect timeout per request. Default 15000 (15 s).
  * @property readTimeoutMillis HTTP read timeout: the longest silence tolerated mid-response.
- * @property inlineRetries Retries of a transient HTTP failure within one run.
- * @property inlineRetryDelayMillis First inline retry delay; doubles per retry.
+ *   Default 60000 (60 s).
+ * @property inlineRetries Retries of a transient HTTP failure within one run. Default 3.
+ * @property inlineRetryDelayMillis First inline retry delay; doubles per retry. Default 1000 (1 s).
  * @property maxRunAttempts WorkManager runs in total before a transient cause becomes [AreaState.Failed].
+ *   Default 5.
  * @property backoffDelayMillis Initial WorkManager backoff between runs (exponential, at least 10 s).
+ *   Default 30000 (30 s).
  * @property importOptions Options for the on-device import of the downloaded extract.
  * @property basemapParallelism Parallel HTTP range requests of a
- *   [BasemapSource.Extract] (go-pmtiles uses 4).
+ *   [BasemapSource.Extract] (go-pmtiles uses 4). Default 4.
  * @property foreground Opt-in: run downloads as a foreground service with a
  *   progress notification (see [ForegroundConfig]). Null (the default) runs
  *   them as ordinary background work, subject to WorkManager's 10-minute

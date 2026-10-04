@@ -5,6 +5,8 @@
 #   <out>/maven/...     static Maven repository: io/github/mvexel/cantino/<version>/
 #                       (AAR, POM, Gradle module metadata, sources jar, checksums)
 #   <out>/api/...       Dokka HTML API reference (public API only)
+#   <out>/guide/...     docs/guide/*.md rendered to HTML with pandoc (scripts/guide-filter.lua,
+#                       scripts/guide-template.html), plus /screenshots/
 #   <out>/.nojekyll     serve files as is
 #
 # Apps then consume the AAR with
@@ -14,19 +16,22 @@
 # site into a local `gh-pages` git worktree (created as an orphan branch when
 # none exists) and prints the commands to commit and push it yourself.
 #
-# Usage: scripts/publish-pages.sh [--out DIR] [--worktree [DIR]] [--skip-native]
+# Usage: scripts/publish-pages.sh [--out DIR] [--worktree [DIR]] [--skip-native] [--guide-only]
 #   --out DIR        site directory (default: build/pages)
 #   --worktree [DIR] also sync into a gh-pages worktree (default: build/gh-pages)
 #   --skip-native    reuse target/android/*/libcantino.so instead of rebuilding
 #                    them with scripts/build-android.sh
+#   --guide-only     only render the guide into <out>/guide (needs just pandoc);
+#                    no native build, Gradle or landing page
 #
 # Needs: the Android toolchain of HANDOFF.md (Rust 1.99 + Android targets,
-# NDK r29, Android SDK, mise for the JDK).
+# NDK r29, Android SDK, mise for the JDK) and pandoc 3 (renders the guide).
 set -eu
 root=$(CDPATH= cd -- "$(dirname "$0")/.." && pwd)
 out="$root/build/pages"
 worktree=""
 native=1
+guide_only=0
 while [ "$#" -gt 0 ]; do
     case "$1" in
         --out) out=$2; shift 2 ;;
@@ -34,7 +39,8 @@ while [ "$#" -gt 0 ]; do
             if [ "$#" -gt 1 ] && [ "${2#--}" = "$2" ]; then worktree=$2; shift 2
             else worktree="$root/build/gh-pages"; shift; fi ;;
         --skip-native) native=0; shift ;;
-        -h|--help) sed -n '2,25p' "$0"; exit 0 ;;
+        --guide-only) guide_only=1; shift ;;
+        -h|--help) sed -n '2,30p' "$0"; exit 0 ;;
         *) echo "unknown argument: $1" >&2; exit 2 ;;
     esac
 done
@@ -44,6 +50,34 @@ case "$worktree" in ""|/*) ;; *) worktree="$PWD/$worktree" ;; esac
 version=$(sed -n 's/^version = "\(.*\)"/\1/p' "$root/Cargo.toml" | head -n 1)
 [ -n "$version" ] || { echo "no version in Cargo.toml" >&2; exit 2; }
 echo "Cantino $version -> $out"
+
+# Render docs/guide/*.md to $out/guide/*.html (README.md becomes index.html).
+# Needs pandoc 3; links between pages and to the repo are rewritten by
+# scripts/guide-filter.lua.
+render_guide() {
+    command -v pandoc >/dev/null 2>&1 || {
+        echo "pandoc is required to render the guide (https://pandoc.org/installing.html)" >&2
+        exit 2
+    }
+    mkdir -p "$out/guide" "$out/screenshots"
+    for md in "$root"/docs/guide/*.md; do
+        name=$(basename "$md" .md)
+        [ "$name" = README ] && name=index
+        title=$(sed -n 's/^# //p' "$md" | head -n 1)
+        pandoc --from gfm --to html5 --lua-filter "$root/scripts/guide-filter.lua" \
+            --template "$root/scripts/guide-template.html" \
+            --metadata pagetitle="$title" "$md" -o "$out/guide/$name.html"
+    done
+    cp -a "$root"/docs/screenshots/. "$out/screenshots/"
+}
+
+if [ "$guide_only" = 1 ]; then
+    rm -rf "$out/guide" "$out/screenshots"
+    render_guide
+    echo "Guide written to $out/guide"
+    exit 0
+fi
+command -v pandoc >/dev/null 2>&1 || { echo "pandoc is required to render the guide" >&2; exit 2; }
 
 # 1. Native libraries (the AAR packages target/android/<ABI>/libcantino.so).
 if [ "$native" = 1 ]; then
@@ -71,6 +105,7 @@ fi
     :cantino:dokkaGeneratePublicationHtml)
 cp -a "$root/android/cantino/build/dokka/html" "$out/api"
 touch "$out/.nojekyll"
+render_guide
 
 # 4. Landing page.
 cat > "$out/index.html" <<EOF
@@ -104,7 +139,8 @@ Cantino smuggled a copy of Portugal's secret master map out of Lisbon; this is a
 of the master map you carry away.</p>
 <ul>
   <li><a href="https://github.com/mvexel/cantino">Source, README and quickstart</a></li>
-  <li><a href="https://github.com/mvexel/cantino/tree/main/docs/guide">Guide</a></li>
+  <li><a href="guide/">Guide</a>
+      (<a href="guide/sliceosm.html">SliceOSM</a>, <a href="guide/roadmap.html">roadmap</a>)</li>
   <li><a href="api/">API reference</a></li>
   <li><a href="maven/io/github/mvexel/cantino/">Maven repository</a>
       (<a href="https://github.com/mvexel/cantino/blob/main/CHANGELOG.md">changelog</a>)</li>
@@ -146,7 +182,7 @@ done
 
 echo
 echo "Site written to $out:"
-(cd "$out" && find maven -name "*.aar" -o -name "*.pom" | sort && echo "api/index.html" && echo "index.html")
+(cd "$out" && find maven -name "*.aar" -o -name "*.pom" | sort && echo "api/index.html" && echo "guide/index.html" && echo "index.html")
 
 # 5. Optional local gh-pages worktree (never pushed from here).
 if [ -n "$worktree" ]; then

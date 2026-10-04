@@ -359,9 +359,9 @@ internal fun TagFilter.toJson(): JSONObject = when (this) {
  * @property bbox Spatial candidate filter, or null for none.
  * @property after Keyset cursor: return only objects ordered after this ID
  *   (the last [OsmObject.id] of the previous page). Null for the first page.
- * @property limit Maximum objects per call, 1..10 000.
+ * @property limit Maximum objects per call, 1..10 000. Default 100.
  * @property maxCandidates Maximum spatial candidates a bbox-driven query may
- *   collect before it fails with [CantinoException].
+ *   collect before it fails with [CantinoException]. Default 100000.
  */
 public data class Query(
     val tags: List<TagFilter> = emptyList(),
