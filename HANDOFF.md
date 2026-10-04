@@ -2,7 +2,9 @@
 
 Updated October 3, 2026. This document is for the next developer continuing Cantino (Android and iOS). The project was called osm-framework until the 2026-10-03 rename; dated research docs, bench records and `spike/` keep the old name. Scope and boundaries are in `CLAUDE.md`; the plan of record (status, prioritized "Next up", history) is `TODO.md`.
 
-**0.1.0 is released** (2026-10-03): public repo https://github.com/mvexel/cantino (Apache-2.0), tag `v0.1.0`, Maven repo and Dokka API reference on GitHub Pages at https://mvexel.github.io/cantino/ (`io.github.mvexel:cantino:0.1.0`). Developer-facing docs are `README.md` (quickstart, verified against the live Maven URL) and `docs/guide/`; release notes in `CHANGELOG.md`. Releases are built by `scripts/publish-pages.sh --worktree`; pushing `gh-pages` and the tag is Martijn's step (see `TODO.md` Status).
+**Feature freeze: no new features until the iOS side is built** (`CLAUDE.md`). Android is finished for now; the next work is iOS only (`TODO.md` "Next up"), and it needs a Mac.
+
+**Released:** 0.1.0 (`io.github.mvexel:cantino`) and 0.2.0 (`lol.osm:cantino`), both 2026-10-03, public repo https://github.com/mvexel/cantino (Apache-2.0), Maven repo and Dokka API reference on GitHub Pages at https://mvexel.github.io/cantino/. **0.3.0 is prepared** (import profiles, large-area guidance, process-death tests), publish pending. Developer-facing docs are `README.md` (quickstart, verified against the live Maven URL) and `docs/guide/`; release notes in `CHANGELOG.md`. Releases are built by `scripts/publish-pages.sh --worktree`; pushing `gh-pages` and the tag is Martijn's step (see `TODO.md` Status).
 
 The core imports an OSM snapshot (PBF or XML) into a single read-only SQLite file, reopens it offline, and answers lookups, tag queries and bbox queries through indexes. One Rust library serves both platforms. Android works end to end on a Pixel 8 and an emulator. iOS is still to be built. Android area downloads (OSM data from SliceOSM plus an opt-in PMTiles basemap, downloaded or extracted on the device) work end to end, and the café reference app (`android/cafe-app`) passes the airplane-mode acceptance scenario on the Pixel 8.
 
@@ -21,7 +23,7 @@ The reference application finds cafés in a city area. The acceptance scenario h
 
 Missing opening hours stay unknown. Café policy and opening-hours interpretation belong above the data core.
 
-Read-only data access is the current milestone. Edits, upload, conflicts, refresh, overlapping areas and country scale come later.
+Read-only data access is done on Android; the current milestone is the same on iOS. Edits, upload, conflicts, incremental refresh, overlapping areas and country scale come later, if at all.
 
 ## Storage decision (2026-10-03)
 
@@ -149,12 +151,13 @@ The Kotlin API is `OsmStore` (open, importArea — `File` or path — get, query
   - untagged-node metadata
 - Area downloads with basemaps (2026-10-03): `AreaManagerTest` (19 tests, the 2 live ones skipped by default; includes the foreground-mode tests) plus the store tests pass on the Pixel 8 and the emulator; the ABI layer of the basemap extract has Rust unit tests (`src/mobile_basemap.rs`, byte-identical to the engine) and a ctypes run in `scripts/mobile-api-smoke.py`.
 - The Salt Lake City numbers above are on the Pixel. All café counts (175 total, 15 downtown) match between backends.
+- Added after 0.2.0 (2026-10-03): import profiles (`tests/profile.rs`, `ImportProfileTest`; object counts identical to `osmium tags-filter` on SLC), the café relation path (`RelationCafeTest`), and real process-death scenarios (`scripts/kill-test-android.sh`), all green on the Pixel 8 and the emulator. Large-area numbers: `docs/guide/performance.md`.
 
 ## Risks and open work
 
-- **Import inside the app is about 45% slower than the plain binary** (8.2 s vs 5.7 s on the same phone). The cause is unconfirmed; app-storage encryption and the write amplification from `VACUUM INTO` are suspects.
-- **Peak memory during import is about 156 MB above the runtime.** The importer holds node coordinates, node→way pairs and tag rows in memory, which grows with area size. Chunked writes would reduce this. Dropping the unused `node_way` and `member_rel` tables would save about 25 MB of file.
+- **iOS is not built.** The Rust core, C ABI and a Linux-tested Swift package exist (branch `ios/main`, not yet merged into `main`); the xcframework, simulator tests, URLSession downloads and the café app need a Mac. This is the only planned work.
+- **Import inside the app is about 45% slower than the plain binary** (8.2 s vs 5.7 s on the same phone, still so on 0.2.0). Cause unknown; not worth chasing at these times.
+- **Import memory grows with node count** (+155 MB for a city, +204 MB for a dense 50×50 km area). Decided 2026-10-03: no fix at this scale; revisit for larger areas or low-RAM targets.
 - **Query cost through the AAR is dominated by JNI and JSON** (about 0.08 ms per object). A binary or batched wire format is the lever if this matters.
-- Fonts for the basemap are 14 MB for three stacks; subset them to the ranges needed.
-- Café app: opening hours are evaluated in the device's time zone, not the café's; the relation-café UI path has not run on a device (none in the SLC area); the real-GPS first run is deliberately not exercised by agents.
-- Open work is ranked in `TODO.md` "Next up": 0.2 API polish, download reliability (real process-kill tests, byte-range resume), import performance and memory, café app fixes, iOS (blocked on Mac access), then offline editing (needs a scope change) and offline routing research.
+- Café app: opening hours use the phone's time zone (documented); the real-GPS first run is deliberately not exercised by agents.
+- Frozen work (editing, routing, the dev-review backlog) is listed in `TODO.md` "Frozen".

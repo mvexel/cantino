@@ -3,7 +3,10 @@
 All notable changes to Cantino (formerly osm-framework). Versions follow semantic versioning;
 before 1.0 a minor version may break the API.
 
-## Unreleased
+## 0.3.0 — 2026-10-03
+
+The last Android feature release until the iOS adapter exists (see the
+roadmap). Nothing breaks.
 
 ### Added
 
@@ -13,6 +16,21 @@ before 1.0 a minor version may break the API.
   area 8.8 MB instead of 128.5 MB. The profile is recorded in the area
   (`ImportReport.profile`, Rust `Store::profile`, a new `profile` table that
   older readers ignore). C ABI: `"profile"` in the import options JSON.
+
+### Docs
+
+- Size guidance for large areas (two 50×50 km areas on a Pixel 8: 27.5 MB
+  sparse, 208.7 MB dense) in the performance guide; import profiles in the
+  downloading guide.
+- Café app: opening hours are evaluated in the phone's time zone (a known
+  limit, documented).
+
+### Tests
+
+- Real process death: `scripts/kill-test-android.sh` kills the app with
+  `kill -9` mid-download and right after the commit point and checks that
+  the old area survives or the new one rolls forward. The café app tests
+  its relation-café path.
 
 ## 0.2.0 — 2026-10-03
 

@@ -22,7 +22,7 @@ of Lisbon: a copy of the master map you carry away.*
 *The café reference app ([`android/cafe-app`](android/cafe-app)) in airplane
 mode: offline basemap, cafés from a tag + bbox query, and the raw object.*
 
-## What 0.2.0 does
+## What 0.3.0 does
 
 | Does | Does not (yet) |
 | --- | --- |
@@ -30,8 +30,9 @@ mode: offline basemap, cafés from a tag + bbox query, and the raw object.*
 | Optional offline basemap: a ready PMTiles file, or an on-device extract from a remote PMTiles archive | Render OSM data itself or generate vector tiles (use the basemap + MapLibre) |
 | Atomic refresh: a failed or cancelled download never touches the published area | Incremental updates (a refresh re-downloads the whole area) |
 | Lookup by ID; ANDed tag filters; bbox spatial candidates; keyset pagination | Exact geometry operations, routing, geocoding |
+| Optional import profiles: keep only the objects your app needs (a POI area is ~15× smaller) | Filter on the server: the download is always the full extract |
 | Raw tags, ordered way nodes and relation members, per-object metadata | Overlapping areas or country-scale extracts |
-| Android (arm64-v8a, armeabi-v7a, x86_64), minSdk 26 | iOS (planned; the C ABI is ready for it) |
+| Android (arm64-v8a, armeabi-v7a, x86_64), minSdk 26 | iOS (next; Android features are paused until it is built, see the [roadmap](docs/guide/roadmap.md)) |
 
 ## Install
 
@@ -59,7 +60,7 @@ android {
 }
 
 dependencies {
-    implementation("lol.osm:cantino:0.2.0")
+    implementation("lol.osm:cantino:0.3.0")
     // Only to show the offline basemap.
     implementation("org.maplibre.gl:android-sdk:13.6.1")
 }

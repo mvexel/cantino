@@ -1,6 +1,6 @@
 # Maintenance and roadmap
 
-Status as of 2026-10-03. "Planned" means intended, not promised; there are no
+Status as of 2026-10-03 (0.3.0). "Planned" means intended, not promised; there are no
 committed dates.
 
 ## Who maintains Cantino
@@ -18,33 +18,28 @@ break the API.** The [CHANGELOG](../../CHANGELOG.md) lists every break under
 "Breaking". Patch versions do not break. Expect breaking minors until 1.0 and
 pin the exact version in your build.
 
-## 0.2 (in progress)
+## Released
 
-From the CHANGELOG: `AsyncOsmStore` (coroutine wrapper that owns the store
-thread), `Bbox.around`, armeabi-v7a, way coordinates, representative point and
-batch `get`, `TagFilter.NotExists`, run identity in `AreaState` (`runId`,
-`isTerminal`) with suspend file loaders, coroutines as an `api` dependency,
-and these docs. Breaking: `AreaState.Submitting`, `Importing` and `Cancelled`
-now carry a `runId`. Planned for the same release: typed errors (breaking) and
-possibly a rename of the package and Maven group to `lol.osm.cantino`, which
-would break imports once.
+- **0.2.0** (2026-10-03): `AsyncOsmStore`, `Bbox.around`, armeabi-v7a, way
+  coordinates, representative points and batch `get`, `TagFilter.NotExists`,
+  run identity in `AreaState`, typed errors, and the `lol.osm.cantino`
+  package. Details in the [CHANGELOG](../../CHANGELOG.md).
+- **0.3.0**: import profiles (keep only the objects your app needs; a POI
+  area is about 15× smaller), size guidance for large areas, and tests that
+  kill the process mid-download and mid-commit.
 
-## Next (planned, in this order)
+## Next: iOS, and nothing else
 
-1. **Download reliability**: a test that kills the process mid-download and
-   mid-commit and checks that the old area stays intact; a decision on
-   byte-range resume.
-2. **Import performance and memory**: peak memory bounded as areas grow, and
-   an explanation for the in-app versus plain-binary import time gap.
-3. **Café app fixes**: opening hours in the area's time zone.
-4. **iOS**: the Rust core and C ABI are ready; the xcframework and Swift
-   adapter wait on Mac access.
-5. **Offline routing**: research first; no code is committed.
+**Android feature work is paused until the iOS adapter is built.** Until
+then releases carry only bug fixes and documentation. iOS means: an
+xcframework and Swift adapter over the same Rust core and C ABI, area
+downloads on iOS, and the café app on an iPhone, with both platforms passing
+the same tests. It needs a Mac, so there is no date.
 
-Considered, each needing scoping (and some a scope change) before work:
-offline editing overlay and upload, tag-filtered import, large and rural
-areas, several files per area, route relation assembly, polygon areas. The
-full list is in [`TODO.md`](../../TODO.md).
+Considered for after iOS, each needing scoping (and some a scope change):
+offline editing overlay and upload, offline routing, several files per
+area, route relation assembly, polygon areas, a pre-download size estimate.
+The full list is in [`TODO.md`](../../TODO.md).
 
 ## Path to 1.0
 
@@ -57,8 +52,8 @@ conditions, none promised with a date:
   signed artifacts, and a final group ID decision.
 - An iOS adapter released, so the C ABI and model are exercised on two
   platforms.
-- Evidence for download reliability and import memory (the first two items
-  above).
+- Download reliability and import memory: done (process-death tests; large
+  areas measured, see [Performance](performance.md)).
 
 ## Not planned
 

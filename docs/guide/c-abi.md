@@ -131,6 +131,6 @@ implementation: 4 parallel requests, tile ranges streamed to files.
 
 ## Stability
 
-The ABI is versioned with the crate (0.2.0). Before 1.0 it may change in a
+The ABI is versioned with the crate (0.3.0). Before 1.0 it may change in a
 minor version, like the Kotlin API; the area file format is versioned
 separately (`FORMAT_VERSION` in `src/schema.rs`).

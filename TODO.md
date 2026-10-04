@@ -4,86 +4,79 @@ Plan of record for Cantino. Scope: `CLAUDE.md`. Internal background and
 evidence: `HANDOFF.md`. Developer docs: `README.md`, `docs/guide/`.
 Verify each `[x]` against the repo before trusting it.
 
+## Feature freeze (2026-10-03)
+
+**No new features until the iOS side is built** (`CLAUDE.md` "Feature
+freeze"). Android is finished for now. "Next up" holds only iOS work;
+everything else waits under "Frozen". Bug fixes and docs are fine.
+
 ## Status (verified 2026-10-03)
 
-- **0.2.0 prepared, not yet published** (2026-10-03): all of Next up 1
-  merged on `main`, version bumped, green on Pixel 8 + emulator. Publish
-  steps (gh-pages push, tag `v0.2.0`) are Martijn's. New coordinates
-  `lol.osm:cantino`, package `lol.osm.cantino` (0.1.0 stays at the old ones).
-- **0.1.0 is released**: repo public at https://github.com/mvexel/cantino
-  (Apache-2.0), tag `v0.1.0`, Maven + API docs on https://mvexel.github.io/cantino/
-  (`io.github.mvexel:cantino:0.1.0`). README quickstart builds against the live
-  Maven URL; app runs on the emulator.
+- **0.3.0 prepared, not yet published**: import profiles (tag-filtered
+  import), large-area guidance, real process-death tests. Version bumped,
+  CHANGELOG dated, site built into `build/gh-pages`. Publish steps
+  (commit + push `gh-pages`, tag `v0.3.0`, push `main`) are Martijn's.
+- **0.2.0 is released** (2026-10-03): `lol.osm:cantino:0.2.0` on
+  https://mvexel.github.io/cantino/maven, tag `v0.2.0`. 0.1.0 stays under
+  `io.github.mvexel:cantino`.
 - Android only. Read-only OSM data + opt-in PMTiles basemap, area download
   lifecycle, café reference app (airplane-mode acceptance passed on a Pixel 8).
-- Checkout: `~/dev/cantino`. Devices used so far: Pixel 8 (`38261FDJH00B4F`),
-  AVD `osmfw-x86_64` (`emulator-5554`). JDK via `mise exec --` in `android/`.
+- iOS: Linux-side groundwork on branch `ios/main` (not merged into `main`;
+  it is behind `main` by the 0.3 work): parity corpus with Rust, Kotlin and
+  Swift runners (240 calls byte-identical), Swift package tested on Linux,
+  area store/journal/failure classification in the Rust core.
+- Checkout: `~/dev/cantino`. Devices: Pixel 8 (`38261FDJH00B4F`), AVD
+  `osmfw-x86_64` (`emulator-5554`). JDK via `mise exec --` in `android/`.
 - Green before any commit: `scripts/check.sh`; `scripts/build-android.sh`;
   `cd android && mise exec -- ./gradlew :cantino:connectedDebugAndroidTest
-  :cafe-app:testDebugUnitTest :cafe-app:assembleDebug :sample-app:assembleDebug`
-  on phone + emulator (4 tests skip by design: 2 live, CityBenchmark,
-  ProcessDeathTest). When touching download or commit code also
-  `ANDROID_SERIAL=… scripts/kill-test-android.sh` on both.
+  :cafe-app:connectedDebugAndroidTest :cafe-app:testDebugUnitTest
+  :cafe-app:assembleDebug :sample-app:assembleDebug` on phone + emulator
+  (4 tests skip by design: 2 live, CityBenchmark, ProcessDeathTest). When
+  touching download or commit code also `ANDROID_SERIAL=…
+  scripts/kill-test-android.sh` on both.
 - Release a new version: bump `version` in `Cargo.toml` (single source) +
   CHANGELOG, `scripts/publish-pages.sh --worktree`, then Martijn pushes
-  `gh-pages` and the tag (outward-facing steps stay with Martijn).
+  `gh-pages` and the tag.
 
-## Next up (in priority order; each item = one agent-sized slice)
+## Next up: iOS (§3), blocked until Martijn is on a Mac
 
-Reprioritized 2026-10-03 (Martijn): spend in proportion to the problem.
-Work that helps the shipped Android SDK now goes before Linux-only iOS work
-that no iOS device or simulator has run yet.
+Done when (Martijn): iOS and Android behave identically, tests pass, café
+demo compiles. Each step is verified on iOS before the next.
 
-0. **Publish 0.2.0** (Martijn): push `gh-pages`, tag `v0.2.0`. Everything
-   below lands after it, as 0.2.x / 0.3.
-1. **Download reliability** (§5) — DONE 2026-10-03 (`scripts/kill-test-android.sh`). Done when: an instrumented test kills the
-   process (`am kill` / `Process.killProcess`) mid-download and mid-commit,
-   and the next run resumes or rolls forward with the old area intact,
-   green on Pixel 8 + emulator. Byte-range resume and fetching the basemap
-   while SliceOSM slices: measure what a retry costs at 10×10 km (≈ 8 MB
-   PBF + 7 MB basemap) and document "not now" unless it is cheap. These
-   kill scenarios become the behaviour the iOS port must match (3).
-2. **Café app: relation path** (§6) — DONE 2026-10-03. Done when: a fixture with a café
-   mapped as a relation and a "not in this area" member exercises the
-   relation detail UI in a test. The opening-hours time zone bug is
-   documented as a known limitation instead of fixed: the default flow
-   downloads the area around the user, so area zone = phone zone; a tz
-   lookup needs a boundary dataset and is not worth it yet.
-3. **iOS** (§3) — DEFERRED 2026-10-03 until Martijn is back on a Mac;
-   work order now 0 → 2 → 4 → 5. Done when (Martijn): iOS and Android behave identically,
-   tests pass, café demo compiles. Steps, each verified on iOS before the
-   next:
-   a. macOS CI (GitHub Actions; Martijn pushes the workflow): xcframework
-      (device arm64 + simulator arm64) and the existing Swift tests,
-      parity runner included, green on the simulator.
-   b. Swift download orchestration as a straight port of
-      `AreaDownloadWorker` over URLSession, using the Rust area store,
-      journal and failure classification already in the core. Same
-      behaviour shown by shared scenarios (`AreaManagerTest` cases + the
-      kill tests from 1) against the same fake SliceOSM, not shared code.
-      No Rust download reducer (dropped 2026-10-03: the parts whose
-      divergence corrupts data are already in Rust; the rest is ~150 lines
-      of pipeline).
-   c. Café demo builds for iOS.
-   Linux part done: parity corpus + Rust, Kotlin and Swift runners
-   (240 calls byte-identical), Swift package tested on Linux.
-4. **Import profiles** (§11) — DONE 2026-10-03 (branch `v0.3/import-profiles`). Both dev reviewers; ~75 MB per 10×10 km of
-   city is most apps' biggest cost. Done when: profile model decided,
-   recorded in area metadata, size savings measured on SLC.
-5. **Large-area evidence** — DONE 2026-10-03 (§14). (§14 bench, absorbs the old "import performance
-   & memory", §2b follow-ups). Done when: a 50×50 km rural area is benched
-   on the Pixel (disk, peak memory, time) and a size guidance table is
-   published. Fix import memory (chunked writes) only if the bench shows
-   it fails; the in-app 8.2 s vs 5.7 s gap stays unexplained until then
-   (3.2 s for 10×10 km bothers nobody).
-6. **Offline editing + upload** — needs a scope change in `CLAUDE.md` first
-   (currently out of scope). Design notes: edits overlay db ATTACHed to the
-   read-only base (`docs/research/2026-10-03-prebaked-dataset-format.md`),
-   versions are stored for every object.
-7. **Offline routing research** (§8) — not started; research before any code.
-8. **Dev-review backlog** (§10, §12, §13, §15–§17): each still needs
-   scoping and a done-criterion before it becomes a slice; several need a
-   `CLAUDE.md` scope change first (marked).
+1. **Merge `ios/main` into `main`** (can run on Linux): bring the 0.3 work
+   in, add import profiles to the Swift adapter and the parity corpus,
+   `scripts/check.sh` green with the Swift tests.
+2. **macOS CI** (GitHub Actions; Martijn pushes the workflow): xcframework
+   (device arm64 + simulator arm64) and the existing Swift tests, parity
+   runner included, green on the simulator.
+3. **Swift download orchestration** as a straight port of
+   `AreaDownloadWorker` over URLSession, using the Rust area store, journal
+   and failure classification already in the core. Same behaviour shown by
+   shared scenarios (`AreaManagerTest` cases and the process-death
+   scenarios of `scripts/kill-test-android.sh`) against the same fake
+   SliceOSM, not by shared code. No Rust download reducer (dropped
+   2026-10-03: the parts whose divergence corrupts data are already in
+   Rust; the rest is ~150 lines of pipeline).
+4. **Café demo builds for iOS**; airplane-mode run on the iPhone.
+
+## Frozen (until iOS is done; each needs scoping before it becomes work)
+
+- Offline editing + upload: needs a scope change in `CLAUDE.md` (design
+  notes: edits overlay db ATTACHed to the read-only base,
+  `docs/research/2026-10-03-prebaked-dataset-format.md`).
+- Offline routing research (§8).
+- Dev-review backlog (§10, §12, §13, §15–§17), pre-download size estimate
+  (§14), download from SliceOSM with a tag filter (§11).
+- Import profiles in cosmo's filter language: considered 2026-10-03
+  (extract cosmo's DSL into a `cosmo-filter` crate, replace `KeepRule` with
+  a filter string); stopped as feature creep. A local, uncommitted attempt
+  may still sit in `~/dev/cosmo` (branch `filter-crate`).
+
+## Done 2026-10-03 (after 0.2.0)
+
+Café relation path tested (§6), import profiles (§11), 50×50 km evidence
+and the decision not to bound import memory (§14), real process-death tests
+and the decision against byte-range resume (§5). Details in the history.
 
 ## Parked
 - Server-side pre-baked area files (proposal in `docs/research/`); only if
@@ -127,13 +120,13 @@ that no iOS device or simulator has run yet.
 
 - [x] (decided 2026-10-03, see §14: no fix now; node_way/member_rel kept) Follow-ups from migration: in-app import 8.2 s vs 5.7 s plain binary (cause unknown); import peak memory grows with area (chunk writes); JNI+JSON ≈ 0.08 ms/object; decide whether to drop unused node_way/member_rel (−25 MB)
 
-## 3. iOS vertical slice — restarted 2026-10-03 (see Next up 5)
+## 3. iOS vertical slice — restarted 2026-10-03 (see Next up)
 - xtool evaluated 2026-10-03 (research): builds/signs SwiftPM apps on Linux and installs on a USB device, but needs Xcode.xip for the SDK (Xcode licence: Apple hardware), no simulator, no iOS test runner (xtool issue #177), binary targets (MapLibre xcframework) and Rust staticlib linking undocumented. Martijn: no Xcode SDK on Linux, so iOS builds go to macOS CI / a Mac
 - [ ] Inspect Mac (Xcode, toolchain)
 - [ ] xcframework: device arm64 + simulator arm64
 - [ ] Swift wrapper + XCTest on simulator (import, get, query)
 - [x] Linux part (2026-10-03, branch `ios/main`): parity corpus `tests/parity` + Rust runner; Swift package (OsmStore, AsyncOsmStore, models, AreaStorage, Failures) tested on Linux; Kotlin and Swift parity runners, 240 calls byte-identical; area store, commit journal, recovery and failure classification moved into the Rust core
-- Dropped 2026-10-03: download state machine as a Rust reducer (overengineering; see Next up 3b)
+- Dropped 2026-10-03: download state machine as a Rust reducer (overengineering; see Next up 3)
 
 ## 4. Basemap
 - [x] Decision record: separate PMTiles basemap for the area bbox (CLAUDE.md scope)
@@ -195,7 +188,7 @@ Target onboarding flow (Martijn, 2026-10-03): get location → offer to download
 
 ---
 
-# Dev-review backlog (added 2026-10-03, not started)
+# Dev-review backlog (added 2026-10-03; frozen until iOS is done)
 
 Source: two persona reviews of the public 0.1.0 (site, Dokka, GitHub guide;
 no checkout): an offline hiking app (H) and an `opening_hours` field editor
@@ -204,17 +197,17 @@ no checkout): an offline hiking app (H) and an `opening_hours` field editor
 Ranked by how many apps we expect to hit the gap, not by how loud one
 reviewer was. Already-planned items both reviewers also raised (reinforced,
 not repeated here): run identity in `AreaState`, owner-thread/suspend store
-wrapper, batch get (Next up 1, both); byte-range resume (2, H); iOS (5, both;
+wrapper, batch get (0.2, both); byte-range resume (H); iOS (both;
 both asked about Kotlin Multiplatform over the C ABI); edit overlay that
-exports osmChange (6, E); routing (7, H).
+exports osmChange (E); routing (H). All frozen now except iOS.
 
 **Quick wins** (⚡, roughly ≤ ½ day each, no scope change): §9 way
 coordinates over JNI + representative point; §10 `NotExists` filter; §12
 armeabi-v7a build; §13 Dokka defaults, guide on Pages, the three doc pages,
 repo description/topics/Discussions (Martijn). Rule: do them as one slice
-within 0.2 (Next up 1), not one by one in backlog order.
+within 0.2, not one by one in backlog order.
 
-## 9. Geometry helpers (both) — highest reach; part of 0.2 (Next up 1)
+## 9. Geometry helpers (both) — highest reach; shipped in 0.2
 Every app with features mapped as ways (shops as buildings, trails) writes
 this itself today. Replaces 0.2's "way geometry / batch get" candidate (§7).
 - [x] (0.2.0) ⚡ Expose `way_coordinates` (already in the Rust core, `src/store.rs`)
@@ -283,7 +276,7 @@ Corporate dependency policies flag the current setup. Outward-facing steps
 - [x] (0.2.0, page only; repo description/topics/Discussions still Martijn's) ⚡ Roadmap/maintenance page (who maintains, path to 1.0, expected
   breaking minors); repo description, topics, Discussions (Martijn)
 - [x] Typed errors (codes or a sealed exception hierarchy) instead of one
-  type with a string; breaking, so part of 0.2 (Next up 1). Done on branch
+  type with a string; breaking, so part of 0.2. Done on branch
   `v0.2/errors` (2026-10-03): sealed `CantinoException` (InvalidArgument /
   InvalidFile / Io / WrongThread) thrown directly from JNI, Rust
   `ErrorKind` + C ABI `cantino_last_error_code` (compatible), and
@@ -294,7 +287,7 @@ Corporate dependency policies flag the current setup. Outward-facing steps
 - [ ] Compose sample
 
 ## 14. Large and rural areas (H)
-Overlaps Next up 3 (import memory). Scope says no country scale; a 50×50 km
+Overlapped the old import-memory item. Scope says no country scale; a 50×50 km
 park is in between and needs evidence, not a guess.
 - [x] (2026-10-03) Benched two 50×50 km areas on the Pixel 8
   (`docs/bench/2026-10-03-{zion,oberland}-50km-pixel8.json`, table in
