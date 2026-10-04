@@ -14,7 +14,9 @@ is checked two ways:
    test has the Kotlin test's name unless noted.
 
 Verified 2026-10-04: Android on the Pixel 8 emulator (Android 17, arm64),
-iOS on the iPhone 18 Pro simulator (iOS 27) and natively on macOS.
+iOS on the iPhone 18 Pro simulator (iOS 27) and natively on macOS. The café
+acceptance flow (download, airplane-mode relaunch, force-quit during a
+download and resume) passed on a physical iPhone 15 Pro Max (iOS 27).
 
 ## SDK
 

@@ -55,9 +55,13 @@ scenarios. 70 Swift SDK tests on macOS and the iPhone 18 Pro simulator
 (iOS 27), including the Swift parity runner; 24 iOS café app tests. The iOS
 café app downloaded downtown SLC live on the simulator and showed the same
 136 cafés as Android; a cold launch afterwards made no network connections
-(the simulator cannot be put in airplane mode). Not yet run on this branch:
-the instrumented suites on a physical Pixel 8, the iOS app on a physical
-iPhone, and the live opt-in tests.
+(the simulator cannot be put in airplane mode). On a physical iPhone 15 Pro
+Max (iOS 27), Martijn's acceptance run passed: a live 10×10 km SLC download
+at his location (63.5 MB data, 871,902 nodes; 7.4 MB extracted basemap, z0-15,
+32 range requests), a cold relaunch in airplane mode with map, cafés, filters
+and details, and a force-quit during a download that resumed on relaunch.
+Not yet run on this branch: the instrumented suites on a physical Pixel 8 and
+the live opt-in tests.
 
 0.3.0 (Android only) was verified on 2026-10-04 before the iOS merge: 39
 instrumented tests per device on Pixel 8 and x86_64 emulator, both
