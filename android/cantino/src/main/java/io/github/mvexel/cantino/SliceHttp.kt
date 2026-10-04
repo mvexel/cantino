@@ -13,22 +13,66 @@ import java.net.HttpURLConnection
 import java.net.URL
 
 /**
- * Why a download step failed, classified by what the caller should do next.
- * The worker maps these onto WorkManager results; nothing else interprets
- * HTTP status codes.
+ * Why a download step failed, classified two ways: by what the worker does
+ * next (the subclass: retry or give up) and by what the app can do about it
+ * ([reason], which ends up in [AreaState.Failed.reason]). Every throw site
+ * names its reason explicitly; there is no default. The worker maps these
+ * onto WorkManager results; nothing else interprets HTTP status codes.
  */
-internal sealed class DownloadFailure(message: String, cause: Throwable? = null) : Exception(message, cause) {
+internal sealed class DownloadFailure(
+    message: String,
+    val reason: FailureReason,
+    cause: Throwable? = null,
+) : Exception(message, cause) {
     /**
      * May succeed later without changing the request: network errors and
      * timeouts, HTTP 5xx, 408 and 429, a truncated body, a slow slicing job.
      */
-    class Transient(message: String, cause: Throwable? = null) : DownloadFailure(message, cause)
+    class Transient(message: String, reason: FailureReason, cause: Throwable? = null) :
+        DownloadFailure(message, reason, cause)
 
-    /** Retrying the same request cannot help: other HTTP 4xx, invalid input, data that fails to import. */
-    class Permanent(message: String, cause: Throwable? = null) : DownloadFailure(message, cause)
+    /**
+     * Retrying the same request cannot help: other HTTP 4xx, invalid input,
+     * data that fails to import, a full disk.
+     */
+    class Permanent(message: String, reason: FailureReason, cause: Throwable? = null) :
+        DownloadFailure(message, reason, cause)
 
     /** The server no longer knows this job (HTTP 404 on status or file): submit a new one. */
-    class JobGone(message: String) : DownloadFailure(message)
+    class JobGone(message: String) : DownloadFailure(message, FailureReason.SERVER)
+}
+
+/**
+ * The [FailureReason] for a native failure during a download, when the call
+ * site adds no better context. Exhaustive over the sealed hierarchy:
+ * - InvalidFile: the downloaded data (PBF, PMTiles) is bad.
+ * - Io: the device's storage (disk full, unwritable staging file).
+ * - InvalidArgument: what the worker passed came from the request (bbox,
+ *   zooms, URLs), so the request is invalid.
+ * - WrongThread: the worker's own threading is broken, a Cantino bug.
+ */
+internal fun CantinoException.failureReason(): FailureReason = when (this) {
+    is CantinoException.InvalidFile -> FailureReason.INVALID_DATA
+    is CantinoException.Io -> FailureReason.STORAGE
+    is CantinoException.InvalidArgument -> FailureReason.INVALID_REQUEST
+    is CantinoException.WrongThread -> FailureReason.UNKNOWN
+}
+
+/**
+ * Runs a write to a local download file. An IOException here is the
+ * device's storage (typically a full disk), not the network: it must not be
+ * caught by [SliceHttp]'s network handler and retried as a transient network
+ * error, so it becomes a permanent [FailureReason.STORAGE] failure.
+ * [DownloadFailure] is not an IOException, so it passes that handler.
+ */
+private inline fun <T> disk(target: File, block: () -> T): T = try {
+    block()
+} catch (error: IOException) {
+    throw DownloadFailure.Permanent(
+        "cannot write ${target.name}: ${error.message ?: error.javaClass.simpleName}",
+        FailureReason.STORAGE,
+        error,
+    )
 }
 
 /**
@@ -77,21 +121,23 @@ internal class SliceHttp(private val connectTimeoutMillis: Int, private val read
             val total = connection.contentLengthLong.takeIf { it >= 0 }
             var bytes = 0L
             connection.inputStream.use { input ->
-                target.outputStream().use { output ->
+                // Reads are network (IOException → NETWORK in connect());
+                // writes are storage (disk → STORAGE).
+                disk(target) { target.outputStream() }.use { output ->
                     val buffer = ByteArray(64 * 1024)
                     while (true) {
                         val read = input.read(buffer)
                         if (read < 0) break
-                        output.write(buffer, 0, read)
+                        disk(target) { output.write(buffer, 0, read) }
                         bytes += read
                         onProgress(bytes, total)
                     }
                     // Durable before import reads it; the import itself fsyncs its output.
-                    output.fd.sync()
+                    disk(target) { output.fd.sync() }
                 }
             }
             if (total != null && bytes != total) {
-                throw DownloadFailure.Transient("download truncated: $bytes of $total bytes")
+                throw DownloadFailure.Transient("download truncated: $bytes of $total bytes", FailureReason.NETWORK)
             }
             bytes
         }
@@ -121,7 +167,12 @@ internal class SliceHttp(private val connectTimeoutMillis: Int, private val read
                 var at = 0
                 while (at < body.size) {
                     val read = input.read(body, at, body.size - at)
-                    if (read < 0) throw DownloadFailure.Transient("range $offset+$length truncated at $at of ${body.size} bytes")
+                    if (read < 0) {
+                        throw DownloadFailure.Transient(
+                            "range $offset+$length truncated at $at of ${body.size} bytes",
+                            FailureReason.NETWORK,
+                        )
+                    }
                     at += read
                 }
             }
@@ -137,20 +188,22 @@ internal class SliceHttp(private val connectTimeoutMillis: Int, private val read
         connection.openRange(url, offset, length, allowShort = false)
         var bytes = 0L
         connection.inputStream.use { input ->
-            target.outputStream().use { output ->
+            disk(target) { target.outputStream() }.use { output ->
                 val buffer = ByteArray(64 * 1024)
                 while (true) {
                     currentCoroutineContext().ensureActive()
                     val read = input.read(buffer)
                     if (read < 0) break
-                    output.write(buffer, 0, read)
+                    disk(target) { output.write(buffer, 0, read) }
                     bytes += read
                 }
             }
         }
         // More than asked for cannot happen once Content-Range matched; fewer
         // is a dropped connection: transient, re-fetch the range.
-        if (bytes != length) throw DownloadFailure.Transient("range $offset+$length truncated: $bytes bytes")
+        if (bytes != length) {
+            throw DownloadFailure.Transient("range $offset+$length truncated: $bytes bytes", FailureReason.NETWORK)
+        }
     }
 
     /**
@@ -177,25 +230,38 @@ internal class SliceHttp(private val connectTimeoutMillis: Int, private val read
             throw DownloadFailure.Permanent(
                 "server ignored the Range header (HTTP 200 instead of 206) for $url; " +
                     "basemap extracts need a server or CDN with HTTP range support",
+                FailureReason.SERVER,
             )
         }
-        if (code == 416) throw DownloadFailure.Permanent("HTTP 416 range $offset+$length not satisfiable at $url")
+        // The archive is shorter than its own directories say (or changed
+        // under us): the server's file, not the request.
+        if (code == 416) {
+            throw DownloadFailure.Permanent("HTTP 416 range $offset+$length not satisfiable at $url", FailureReason.SERVER)
+        }
         checkStatus(url, goneOn404 = false)
-        if (code != 206) throw DownloadFailure.Permanent("HTTP $code for a range request to $url (need 206)")
+        if (code != 206) {
+            throw DownloadFailure.Permanent("HTTP $code for a range request to $url (need 206)", FailureReason.SERVER)
+        }
         // "bytes first-last/total"
         val range = getHeaderField("Content-Range")
             ?.let { CONTENT_RANGE.matchEntire(it.trim()) }
-            ?: throw DownloadFailure.Permanent("206 without a valid Content-Range from $url")
+            ?: throw DownloadFailure.Permanent("206 without a valid Content-Range from $url", FailureReason.SERVER)
         val first = range.groupValues[1].toLong()
         val last = range.groupValues[2].toLong()
         val got = last - first + 1
         val lengthOk = if (allowShort) got in 1..length else got == length
         if (first != offset || !lengthOk) {
-            throw DownloadFailure.Permanent("server sent bytes $first-$last for requested $offset+$length from $url")
+            throw DownloadFailure.Permanent(
+                "server sent bytes $first-$last for requested $offset+$length from $url",
+                FailureReason.SERVER,
+            )
         }
         val contentLength = contentLengthLong
         if (contentLength >= 0 && contentLength != got) {
-            throw DownloadFailure.Permanent("Content-Length $contentLength disagrees with Content-Range $first-$last from $url")
+            throw DownloadFailure.Permanent(
+                "Content-Length $contentLength disagrees with Content-Range $first-$last from $url",
+                FailureReason.SERVER,
+            )
         }
         return got
     }
@@ -218,7 +284,11 @@ internal class SliceHttp(private val connectTimeoutMillis: Int, private val read
                 block(connection)
             } catch (error: IOException) {
                 ensureActive() // cancelled: report the cancellation, not the socket error it caused
-                throw DownloadFailure.Transient("network error: ${error.message ?: error.javaClass.simpleName}", error)
+                throw DownloadFailure.Transient(
+                    "network error: ${error.message ?: error.javaClass.simpleName}",
+                    FailureReason.NETWORK,
+                    error,
+                )
             } finally {
                 watchdog.cancel()
                 connection.disconnect()
@@ -236,8 +306,10 @@ internal class SliceHttp(private val connectTimeoutMillis: Int, private val read
         val message = "HTTP $code from $url ${detail.trim()}".trim()
         throw when {
             code == 404 && goneOn404 -> DownloadFailure.JobGone(message)
-            code == 408 || code == 429 || code >= 500 -> DownloadFailure.Transient(message)
-            else -> DownloadFailure.Permanent(message)
+            code == 408 || code == 429 || code >= 500 -> DownloadFailure.Transient(message, FailureReason.SERVER)
+            // Any other 4xx: the server understood and refused what we asked
+            // for (a bbox SliceOSM rejects, a basemap URL that does not exist).
+            else -> DownloadFailure.Permanent(message, FailureReason.INVALID_REQUEST)
         }
     }
 

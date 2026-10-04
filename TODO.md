@@ -237,8 +237,13 @@ Corporate dependency policies flag the current setup. Outward-facing steps
   "editing apps: what Cantino gives you" (versions in snapshots, freshness)
 - [ ] ⚡ Roadmap/maintenance page (who maintains, path to 1.0, expected
   breaking minors); repo description, topics, Discussions (Martijn)
-- [ ] Typed errors (codes or a sealed exception hierarchy) instead of one
-  type with a string; breaking, so part of 0.2 (Next up 1)
+- [x] Typed errors (codes or a sealed exception hierarchy) instead of one
+  type with a string; breaking, so part of 0.2 (Next up 1). Done on branch
+  `v0.2/errors` (2026-10-03): sealed `CantinoException` (InvalidArgument /
+  InvalidFile / Io / WrongThread) thrown directly from JNI, Rust
+  `ErrorKind` + C ABI `cantino_last_error_code` (compatible), and
+  `AreaState.Failed.reason: FailureReason`. Instrumented tests compile, not
+  yet run on devices
 - [ ] Testability: an interface or fake for `OsmStore`, and a host-side
   native lib for JVM/Robolectric tests (or document instrumented-only)
 - [ ] Compose sample

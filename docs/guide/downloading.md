@@ -61,7 +61,7 @@ Every state except `Idle` also has `runId: UUID` (first constructor property, no
 | `Importing` | | Building the SQLite file in staging (not interruptible; a cancel is honored when it returns) |
 | `Basemap(phase, bytes, totalBytes)` | `DOWNLOAD` / `DIRECTORIES` / `TILES` | Only with a `BasemapSource` |
 | `Ready(area)` | the published `AreaInfo` | Data and basemap published together |
-| `Failed(message, retryable)` | | Nothing published. `retryable` = transient cause that exhausted retries |
+| `Failed(message, retryable, reason)` | `FailureReason` | Nothing published. `reason` = why (see [Failures](#failures-and-retries)); `retryable` = transient cause that exhausted retries |
 | `Cancelled` | | Nothing published |
 
 Every state carries the same guarantee: **the previously published area is
@@ -80,7 +80,7 @@ fun render(state: AreaState) = when (state) {
     is AreaState.Importing -> status("Preparing offline data…")
     is AreaState.Basemap -> status("Basemap: ${state.phase}")
     is AreaState.Ready -> show(state.area)
-    is AreaState.Failed -> error(state.message, canRetry = state.retryable)
+    is AreaState.Failed -> error(state.reason, state.message, canRetry = state.retryable)
     is AreaState.Cancelled -> status("Cancelled")
 }
 ```
@@ -114,12 +114,30 @@ arrives during the final milliseconds of renames is ignored: that run reports
 
 ## Failures and retries
 
-| Cause | What happens |
-| --- | --- |
-| Network error, timeout, HTTP 5xx / 408 / 429, truncated download | Retried inline (3×, 1 s doubling), then the run ends and WorkManager reruns it with exponential backoff (from 30 s), up to 5 runs. A rerun resumes polling the same SliceOSM job instead of resubmitting |
-| Other HTTP 4xx, invalid bbox, a PBF that fails to import, an invalid PMTiles file, a basemap server ignoring `Range` | `Failed(retryable = false)` at once |
-| Retries exhausted | `Failed(retryable = true)`: calling `download()` later may work |
-| Process killed | WorkManager reruns the work; a run killed after its commit point is completed on the next access |
+| Cause | What happens | `Failed.reason` |
+| --- | --- | --- |
+| Network error, timeout, truncated download | Retried inline (3×, 1 s doubling), then the run ends and WorkManager reruns it with exponential backoff (from 30 s), up to 5 runs. A rerun resumes polling the same SliceOSM job instead of resubmitting. Retries exhausted: `Failed(retryable = true)` | `NETWORK` |
+| HTTP 5xx / 408 / 429, a vanished SliceOSM job, an unparseable server answer, a job still slicing after `maxSliceWaitMillis` | As above (transient) | `SERVER` |
+| A basemap server ignoring `Range` (or sending the wrong range) | `Failed(retryable = false)` at once | `SERVER` |
+| Other HTTP 4xx (a `400` from SliceOSM on submit, a basemap URL that is `404`), invalid bbox or name, zooms the basemap archive lacks | `Failed(retryable = false)` at once | `INVALID_REQUEST` |
+| A PBF that fails to import (corrupt, truncated, unsorted), a basemap that is not a valid PMTiles v3 archive | `Failed(retryable = false)` at once | `INVALID_DATA` |
+| Disk full while downloading or importing | `Failed(retryable = false)` at once: free space, then `download()` again | `STORAGE` |
+| An I/O error while publishing | Transient: the next run finishes the commit | `STORAGE` |
+| An unexpected error (a bug), or a failure recorded by Cantino 0.1 | `Failed(retryable = false)` | `UNKNOWN` |
+| Storage low before the run | Not a failure: the work stays `Queued` until storage recovers (WorkManager constraint) | |
+| Process killed | WorkManager reruns the work; a run killed after its commit point is completed on the next access | |
+
+Branch on `reason` for what to tell the user; `message` is a developer-facing
+description (not localized, not for parsing):
+
+```kotlin
+is AreaState.Failed -> when (state.reason) {
+    FailureReason.NETWORK -> "No connection. Try again later."
+    FailureReason.STORAGE -> "Not enough space for the offline area."
+    FailureReason.INVALID_REQUEST -> "This area cannot be downloaded."   // e.g. too large for SliceOSM
+    FailureReason.SERVER, FailureReason.INVALID_DATA, FailureReason.UNKNOWN -> "Download failed. Try again later."
+}
+```
 
 All of these knobs are in `AreaConfig` (`inlineRetries`, `maxRunAttempts`,
 `backoffDelayMillis`, timeouts, `sliceBaseUrl`). Most apps pass

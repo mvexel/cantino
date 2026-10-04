@@ -80,7 +80,7 @@ public class AreaManager @JvmOverloads constructor(context: Context, private val
      *
      * [bbox] must be valid and not cross the antimeridian (see [Bbox]); an
      * invalid box is not rejected here but fails the run with a
-     * non-retryable [AreaState.Failed]. Throws [IllegalArgumentException] for
+     * non-retryable [AreaState.Failed] ([FailureReason.INVALID_REQUEST]). Throws [IllegalArgumentException] for
      * an invalid [areaId] or a [ForegroundConfig.smallIcon] that is not a
      * resource.
      */
@@ -219,10 +219,16 @@ public class AreaManager @JvmOverloads constructor(context: Context, private val
                     else -> AreaState.Idle(published)
                 }
             }
+            // A worker that threw instead of returning failure (a bug) leaves
+            // no output data; so does a run recorded by Cantino 0.1 (no
+            // KEY_REASON). Both read as UNKNOWN, never as a guessed reason.
             WorkInfo.State.FAILED -> AreaState.Failed(
                 info.id,
                 info.outputData.getString(AreaDownloadWorker.KEY_MESSAGE) ?: "download failed",
                 info.outputData.getBoolean(AreaDownloadWorker.KEY_RETRYABLE, false),
+                info.outputData.getString(AreaDownloadWorker.KEY_REASON)
+                    ?.let { name -> FailureReason.entries.firstOrNull { it.name == name } }
+                    ?: FailureReason.UNKNOWN,
             )
         }
     }

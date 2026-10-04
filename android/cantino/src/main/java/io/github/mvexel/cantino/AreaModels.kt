@@ -341,6 +341,68 @@ public class AreaMetadata internal constructor(
 }
 
 /**
+ * Why a download ended in [AreaState.Failed], grouped by what the app (or
+ * its user) can do about it. Read it from [AreaState.Failed.reason];
+ * [AreaState.Failed.retryable] says whether the same request may simply be
+ * retried later.
+ *
+ * | Reason | Typical causes | Retryable |
+ * | --- | --- | --- |
+ * | [NETWORK] | No connection, timeouts, a dropped or truncated transfer | yes, after retries ran out |
+ * | [SERVER] | SliceOSM or basemap host: 5xx, 408, 429, a 404 for a vanished job, an unparseable answer, a job that never finishes, no HTTP range support | mostly yes |
+ * | [INVALID_REQUEST] | Invalid bbox or name, other HTTP 4xx (a 400 on submit, a basemap URL that 404s), zooms the archive lacks | no |
+ * | [STORAGE] | Disk full or a staging file that cannot be written; publishing interrupted by an I/O error | no (yes for publishing) |
+ * | [INVALID_DATA] | A PBF that fails to import (corrupt, truncated, not a snapshot), a basemap that is not a valid or supported PMTiles v3 archive | no |
+ * | [UNKNOWN] | An unexpected error (a bug in Cantino), or a failure recorded by Cantino 0.1 | no |
+ *
+ * Low storage before a run starts does not fail it: WorkManager waits
+ * ([AreaState.Queued]) until storage is no longer low.
+ */
+public enum class FailureReason {
+    /** No connection, DNS or connect/read timeout, a connection dropped mid-transfer. */
+    NETWORK,
+
+    /**
+     * The server failed or misbehaved: HTTP 5xx, 408 or 429, a SliceOSM job
+     * that vanished (404) or never finished, an answer that does not parse,
+     * a download size that disagrees with the job, a basemap host that
+     * ignores `Range` or answers with the wrong range.
+     */
+    SERVER,
+
+    /**
+     * The request is invalid and fails again unchanged: an invalid bbox (see
+     * [Bbox]) or name, any other HTTP 4xx (a 400 from SliceOSM on submit, a
+     * basemap URL that is 404 or forbidden), requested zooms the basemap
+     * archive does not have.
+     */
+    INVALID_REQUEST,
+
+    /**
+     * Device storage: the disk is full or a download/staging file cannot be
+     * written, or the import cannot write its database. Free space, then
+     * download again.
+     */
+    STORAGE,
+
+    /**
+     * The downloaded data is unusable: an OSM extract that fails to import
+     * (corrupt, truncated, unsorted or duplicate IDs) or a basemap that is
+     * not a valid PMTiles v3 archive (or uses a feature the extract engine
+     * does not support).
+     */
+    INVALID_DATA,
+
+    /**
+     * Not classified. Two real paths lead here and fit no other value: an
+     * unexpected exception in the download worker (a bug in Cantino, worth
+     * reporting with [AreaState.Failed.message]), and a failed run recorded
+     * by Cantino 0.1, which stored no reason, read after upgrading.
+     */
+    UNKNOWN,
+}
+
+/**
  * Lifecycle of one area's download, as observed through [AreaManager.state].
  * Sealed: a `when` over it is exhaustive.
  *
@@ -503,23 +565,33 @@ public sealed interface AreaState {
     }
 
     /**
-     * Gave up. [message] is a developer-facing description (not localized).
-     * [retryable] is true for transient causes (network, server) that
-     * exhausted their retries: calling [AreaManager.download] again later may
-     * succeed. False means the request or the data is bad.
+     * Gave up. [reason] says why, by what the app can do about it (branch on
+     * it, e.g. to tell the user to free space or check the connection);
+     * [message] is a developer-facing description (not localized, not for
+     * parsing). [retryable] is true for transient causes (network, server)
+     * that exhausted their retries: calling [AreaManager.download] again
+     * later may succeed as is. False means the same request fails again
+     * until something changes: the request ([FailureReason.INVALID_REQUEST]),
+     * the source data ([FailureReason.INVALID_DATA]) or free storage
+     * ([FailureReason.STORAGE]).
      *
      * @property message Developer-facing description of the failure (not localized).
      * @property retryable True for a transient cause that exhausted its retries.
+     * @property reason Category of the failure; [FailureReason.UNKNOWN] only
+     *   for unexpected errors and failures recorded before Cantino 0.2.
      */
     public class Failed internal constructor(
         override val runId: UUID,
         public val message: String,
         public val retryable: Boolean,
+        public val reason: FailureReason,
     ) : AreaState {
         override fun equals(other: Any?): Boolean = this === other || other is Failed &&
-            runId == other.runId && message == other.message && retryable == other.retryable
-        override fun hashCode(): Int = hash(runId, message, retryable)
-        override fun toString(): String = "Failed(runId=$runId, message=$message, retryable=$retryable)"
+            runId == other.runId && message == other.message && retryable == other.retryable &&
+            reason == other.reason
+        override fun hashCode(): Int = hash(runId, message, retryable, reason)
+        override fun toString(): String =
+            "Failed(runId=$runId, message=$message, retryable=$retryable, reason=$reason)"
     }
 
     /**

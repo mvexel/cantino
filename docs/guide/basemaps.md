@@ -86,7 +86,7 @@ style). Without the style, MapLibre has nothing to draw.
 ## Checking a PMTiles file
 
 ```kotlin
-val info = PmtilesInfo.read(file) // throws CantinoException if not PMTiles v3
+val info = PmtilesInfo.read(file) // CantinoException.InvalidFile if not PMTiles v3, .Io if unreadable
 Log.i(TAG, "z${info.minZoom}-${info.maxZoom}, ${info.addressedTiles} tiles, bounds ${info.bounds}")
 ```
 

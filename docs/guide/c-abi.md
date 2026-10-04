@@ -22,7 +22,8 @@ Kotlin (OsmStore, AreaManager)      Swift (planned)      Python ctypes (tests)
 | Strings | UTF-8, NUL-terminated. Structured input and output is JSON |
 | Ownership | Every non-NULL `char*` the library returns (result **or** `*error`) is owned by the caller and freed with `cantino_free`, including error strings returned alongside a failure. `cantino_free(NULL)` is a no-op |
 | Handles | `CantinoStore*`, `CantinoBasemapPlan*`, `CantinoBasemapAssembler*` belong to the thread that created them. Calls from another thread return `-1` with an error and leave the handle untouched |
-| Panics | Never unwind across the ABI; they become `-1` + error |
+| Error category | After a `-1`, `cantino_last_error_code()` on the same thread returns the failure's `CANTINO_ERROR_*` code (see [Errors](#errors)); `0` after a success |
+| Panics | Never unwind across the ABI; they become `-1` + error, category `CANTINO_ERROR_INTERNAL` |
 | Returned data | Owns copies; valid after the handle is closed |
 
 ## Function groups
@@ -41,8 +42,10 @@ Kotlin (OsmStore, AreaManager)      Swift (planned)      Python ctypes (tests)
 CantinoStore *store = NULL;
 char *json = NULL, *error = NULL;
 if (cantino_open("/path/city.sqlite", &store, &error) != 0) {
-    fprintf(stderr, "%s\n", error);
+    int32_t code = cantino_last_error_code();   /* read before the next call */
+    fprintf(stderr, "%s (category %d)\n", error, code);
     cantino_free(error);
+    if (code == CANTINO_ERROR_INVALID_FILE) { /* not an area, or old format: re-import */ }
     return;
 }
 const char *q = "{\"tags\":[{\"Equals\":[\"amenity\",\"cafe\"]}],"
@@ -79,6 +82,32 @@ in-area vertices; open way = point at half the polyline length over its
 in-area nodes; relation = mean of its distinct in-area members' points
 (nested relations followed up to 8 levels, cycles skipped). See
 [Querying](querying.md#geometry-helpers).
+
+## Errors
+
+Every failing call returns `-1` and writes a developer-facing message to
+`*error` (free it). Its **category** is not in the message: call
+`cantino_last_error_code()` on the same thread right after the failure. The
+code is kept per thread (like `errno`), overwritten by every ABI call and
+`0` after a success. Branch on the code, never on the message text.
+
+| Code | Name | When |
+| --- | --- | --- |
+| 0 | `CANTINO_ERROR_NONE` | The last call succeeded |
+| 1 | `CANTINO_ERROR_INVALID_ARGUMENT` | Bad query (limit, only `NotExists` filters without bbox), invalid bbox, too many spatial candidates, batch over 10 000 IDs, non-positive ID, unknown kind, NULL pointer, malformed JSON (also a SliceOSM response the adapter passed on), a basemap response of the wrong id or length |
+| 2 | `CANTINO_ERROR_INVALID_FILE` | Not an area database, an area of another format version (re-import), a corrupt/truncated/unreadable PBF or XML input or one breaking the snapshot rules (unsorted or duplicate IDs), a malformed or unsupported PMTiles archive |
+| 3 | `CANTINO_ERROR_IO` | Missing file, permission denied, disk full, I/O error, out of memory, a database locked by another process |
+| 4 | `CANTINO_ERROR_WRONG_THREAD` | A store, plan or assembler handle used from a non-owner thread (the handle is untouched) |
+| 5 | `CANTINO_ERROR_INTERNAL` | A bug in the core or a caught panic: report it |
+
+The values are stable ABI (new categories are only appended). In the Rust
+core they are `ErrorKind` (`Error::kind()`); every `Error` variant, and every
+SQLite result code, maps to exactly one of them. The Android adapter turns
+them into `CantinoException.InvalidArgument` / `InvalidFile` / `Io` /
+`WrongThread` (and `IllegalStateException` for internal errors).
+
+Compatibility: added in 0.2.0 without changing any signature or return
+value; a 0.1 caller that only checks for `-1` keeps working.
 
 ## Basemap extract flow
 

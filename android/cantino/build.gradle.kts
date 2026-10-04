@@ -32,6 +32,9 @@ android {
     defaultConfig {
         minSdk = 26
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        // Keeps the exception classes the JNI layer throws by name (and the
+        // native bridge) in apps that minify; see the file.
+        consumerProguardFiles("consumer-rules.pro")
     }
     sourceSets {
         getByName("main").jniLibs.directories.add("../../target/android")

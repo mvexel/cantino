@@ -2,20 +2,29 @@
 //!
 //! These functions deliberately go through the same C ABI as the iOS adapter
 //! (`mobile_api`) instead of calling `Store` directly. That keeps one
-//! implementation of thread confinement, panic containment and buffer
-//! ownership for both platforms; this module only translates between Java
-//! strings and the C ABI's owned UTF-8 buffers.
+//! implementation of thread confinement, panic containment, buffer
+//! ownership and error classification for both platforms; this module only
+//! translates between Java strings and the C ABI's owned UTF-8 buffers.
 //!
-//! Errors surface in Java as `RuntimeException("Rust error: ...")`, which the
-//! Kotlin wrapper rethrows as `CantinoException`. Store handles cross into
-//! Java as a `long` holding the `CantinoStore` pointer; the Kotlin class owns
-//! it and zeroes it after close so a handle is never closed twice.
+//! Errors surface in Java as the typed Kotlin exception for their category
+//! (`ErrorKind`, read from `cantino_last_error_code` right after the failing
+//! call): `CantinoException.InvalidArgument`, `.InvalidFile`, `.Io`,
+//! `.WrongThread`, thrown directly from here with the core's message, so the
+//! Kotlin side never parses strings. Internal errors (core bugs, panics) are
+//! `IllegalStateException`. The exception classes are looked up by name, so
+//! the AAR's consumer R8 rules keep them (`consumer-rules.pro`).
+//!
+//! Store handles cross into Java as a `long` holding the `CantinoStore`
+//! pointer; the Kotlin class owns it and zeroes it after close so a handle is
+//! never closed twice.
+use crate::ErrorKind;
 use crate::mobile_api::*;
 use crate::mobile_basemap::*;
 use jni::{
-    EnvUnowned,
-    errors::ThrowRuntimeExAndDefault,
+    Env, EnvUnowned,
+    errors::ErrorPolicy,
     objects::{JByteArray, JClass, JString},
+    strings::JNIString,
     sys::{jdouble, jint, jlong},
 };
 use std::{
@@ -24,15 +33,96 @@ use std::{
 };
 
 /// Failure of one native call. JNI failures (string conversion) and framework
-/// errors share one type so every entry point resolves through one policy.
+/// errors share one type so every entry point resolves through one policy
+/// ([`ThrowTyped`]).
 #[derive(Debug, thiserror::Error)]
 enum BridgeError {
+    /// The JNI layer itself failed (a bug here, or a Java exception already
+    /// pending, which then wins).
     #[error("{0}")]
     Jni(#[from] jni::errors::Error),
-    #[error("{0}")]
-    Framework(String),
+    /// A C ABI call failed; `kind` is its category from
+    /// `cantino_last_error_code`.
+    #[error("{message}")]
+    Framework { kind: ErrorKind, message: String },
+    /// A Java string with an embedded NUL cannot become a C string: the
+    /// caller's argument is invalid.
     #[error("string argument contains NUL")]
     Nul,
+}
+
+impl BridgeError {
+    /// The category of this failure.
+    fn kind(&self) -> ErrorKind {
+        match self {
+            Self::Jni(_) => ErrorKind::Internal,
+            Self::Framework { kind, .. } => *kind,
+            Self::Nul => ErrorKind::InvalidArgument,
+        }
+    }
+
+    /// The Java class to throw (JNI binary name). Exhaustive over
+    /// `ErrorKind`: a new category does not compile until it has a class.
+    fn class(&self) -> &'static str {
+        match self.kind() {
+            ErrorKind::InvalidArgument => {
+                "io/github/mvexel/cantino/CantinoException$InvalidArgument"
+            }
+            ErrorKind::InvalidFile => "io/github/mvexel/cantino/CantinoException$InvalidFile",
+            ErrorKind::Io => "io/github/mvexel/cantino/CantinoException$Io",
+            ErrorKind::WrongThread => "io/github/mvexel/cantino/CantinoException$WrongThread",
+            // A bug, not a condition an app handles: like Kotlin's own
+            // check() failures. Documented on CantinoException.
+            ErrorKind::Internal => "java/lang/IllegalStateException",
+        }
+    }
+}
+
+/// Error policy for every entry point: throws the typed exception for a
+/// [`BridgeError`] (see [`BridgeError::class`]) and returns the default
+/// value (`null`/0), which Java never sees because the exception is pending.
+/// A panic outside the C ABI's own `catch_unwind` (only this module's glue)
+/// becomes an `IllegalStateException`.
+struct ThrowTyped;
+
+impl<T: Default> ErrorPolicy<T, BridgeError> for ThrowTyped {
+    type Captures<'unowned_env_local: 'native_method, 'native_method> = ();
+
+    fn on_error<'unowned_env_local: 'native_method, 'native_method>(
+        env: &mut Env<'unowned_env_local>,
+        _cap: &mut Self::Captures<'unowned_env_local, 'native_method>,
+        err: BridgeError,
+    ) -> jni::errors::Result<T> {
+        // A pending Java exception (e.g. from a failed string conversion)
+        // already explains the failure; throwing over it is not allowed.
+        if !env.exception_check() {
+            let message = match (&err, err.kind()) {
+                (BridgeError::Jni(error), _) => format!("Cantino JNI error: {error}"),
+                (other, ErrorKind::Internal) => {
+                    format!("Cantino internal error (please report): {other}")
+                }
+                (other, _) => other.to_string(),
+            };
+            // throw_new returns Err(JavaException) after a successful
+            // throw; the exception is what we want to propagate, so ignore it.
+            let _ = env.throw_new(JNIString::from(err.class()), JNIString::from(message));
+        }
+        Ok(T::default())
+    }
+
+    fn on_panic<'unowned_env_local: 'native_method, 'native_method>(
+        env: &mut Env<'unowned_env_local>,
+        _cap: &mut Self::Captures<'unowned_env_local, 'native_method>,
+        _payload: Box<dyn std::any::Any + Send + 'static>,
+    ) -> jni::errors::Result<T> {
+        if !env.exception_check() {
+            let _ = env.throw_new(
+                JNIString::from("java/lang/IllegalStateException"),
+                JNIString::from("Cantino internal error (please report): JNI glue panicked"),
+            );
+        }
+        Ok(T::default())
+    }
 }
 
 /// Takes ownership of a framework buffer, copies it and frees it.
@@ -50,20 +140,26 @@ fn take(buffer: *mut c_char) -> Option<String> {
 }
 
 /// Runs one C ABI call with fresh output slots. Returns the status code and the
-/// result buffer; a negative status becomes the ABI's error message. The error
-/// buffer is always taken so it is freed even when status is 0.
+/// result buffer; a negative status becomes the ABI's error message plus its
+/// category, read from `cantino_last_error_code` on this same thread before
+/// anything else can overwrite it. The error buffer is always taken so it is
+/// freed even when status is 0.
 fn call(
     function: impl FnOnce(*mut *mut c_char, *mut *mut c_char) -> i32,
 ) -> Result<(i32, Option<String>), BridgeError> {
     let mut out = ptr::null_mut();
     let mut error = ptr::null_mut();
     let status = function(&mut out, &mut error);
+    let code = cantino_last_error_code();
     let out = take(out);
     let error = take(error);
     if status < 0 {
-        return Err(BridgeError::Framework(
-            error.unwrap_or_else(|| "unknown framework error".into()),
-        ));
+        return Err(BridgeError::Framework {
+            // Every failing ABI call records a known code (protect); an
+            // unknown one would be a version skew bug, hence Internal.
+            kind: ErrorKind::from_code(code).unwrap_or(ErrorKind::Internal),
+            message: error.unwrap_or_else(|| "unknown framework error".into()),
+        });
     }
     Ok((status, out))
 }
@@ -85,7 +181,7 @@ pub extern "system" fn Java_io_github_mvexel_cantino_NativeBridge_open<'local>(
         call(|_, error| unsafe { cantino_open(path.as_ptr(), &mut store, error) })?;
         Ok(store as jlong)
     })
-    .resolve::<ThrowRuntimeExAndDefault>()
+    .resolve::<ThrowTyped>()
 }
 
 #[unsafe(no_mangle)]
@@ -99,7 +195,7 @@ pub extern "system" fn Java_io_github_mvexel_cantino_NativeBridge_close<'local>(
         call(|_, error| unsafe { cantino_close(handle as *mut CantinoStore, error) })?;
         Ok(())
     })
-    .resolve::<ThrowRuntimeExAndDefault>()
+    .resolve::<ThrowTyped>()
 }
 
 /// Returns the object JSON, or Java `null` when the object is absent (status 1).
@@ -121,7 +217,7 @@ pub extern "system" fn Java_io_github_mvexel_cantino_NativeBridge_get<'local>(
             _ => Ok(JString::default()),
         }
     })
-    .resolve::<ThrowRuntimeExAndDefault>()
+    .resolve::<ThrowTyped>()
 }
 
 /// Batch lookup: JSON array of IDs in, JSON array of objects-or-null out.
@@ -139,7 +235,7 @@ pub extern "system" fn Java_io_github_mvexel_cantino_NativeBridge_getMany<'local
             cantino_get_many(handle as *mut CantinoStore, request.as_ptr(), out, error)
         })
     })
-    .resolve::<ThrowRuntimeExAndDefault>()
+    .resolve::<ThrowTyped>()
 }
 
 /// Flat `[lat_e7, lon_e7, ...]` JSON array, or Java `null` when the way is
@@ -161,7 +257,7 @@ pub extern "system" fn Java_io_github_mvexel_cantino_NativeBridge_wayCoordinates
             _ => Ok(JString::default()),
         }
     })
-    .resolve::<ThrowRuntimeExAndDefault>()
+    .resolve::<ThrowTyped>()
 }
 
 /// `{"lat_e7","lon_e7"}`, or Java `null` when there is no point (status 1).
@@ -183,7 +279,7 @@ pub extern "system" fn Java_io_github_mvexel_cantino_NativeBridge_representative
             _ => Ok(JString::default()),
         }
     })
-    .resolve::<ThrowRuntimeExAndDefault>()
+    .resolve::<ThrowTyped>()
 }
 
 #[unsafe(no_mangle)]
@@ -201,7 +297,7 @@ pub extern "system" fn Java_io_github_mvexel_cantino_NativeBridge_query<'local>(
         })?;
         Ok(JString::from_str(env, json.unwrap_or_default())?)
     })
-    .resolve::<ThrowRuntimeExAndDefault>()
+    .resolve::<ThrowTyped>()
 }
 
 /// `options` may be Java `null` for default import options.
@@ -228,7 +324,7 @@ pub extern "system" fn Java_io_github_mvexel_cantino_NativeBridge_importArea<'lo
         })?;
         Ok(JString::from_str(env, report.unwrap_or_default())?)
     })
-    .resolve::<ThrowRuntimeExAndDefault>()
+    .resolve::<ThrowTyped>()
 }
 
 /// Optional Java string → owned C string (`null` → `None`).
@@ -260,7 +356,7 @@ pub extern "system" fn Java_io_github_mvexel_cantino_NativeBridge_sliceJobReques
         })?;
         Ok(JString::from_str(env, json.unwrap_or_default())?)
     })
-    .resolve::<ThrowRuntimeExAndDefault>()
+    .resolve::<ThrowTyped>()
 }
 
 /// SliceOSM job from a submit response or a persisted ID: `{"job_id","status_url","download_url"}`.
@@ -280,7 +376,7 @@ pub extern "system" fn Java_io_github_mvexel_cantino_NativeBridge_sliceJob<'loca
             call(|out, error| unsafe { cantino_slice_job(base, response.as_ptr(), out, error) })?;
         Ok(JString::from_str(env, json.unwrap_or_default())?)
     })
-    .resolve::<ThrowRuntimeExAndDefault>()
+    .resolve::<ThrowTyped>()
 }
 
 /// SliceOSM status document → `{"complete","fraction","size_bytes","timestamp"}`.
@@ -297,7 +393,7 @@ pub extern "system" fn Java_io_github_mvexel_cantino_NativeBridge_sliceProgress<
             call(|out, error| unsafe { cantino_slice_progress(status.as_ptr(), out, error) })?;
         Ok(JString::from_str(env, json.unwrap_or_default())?)
     })
-    .resolve::<ThrowRuntimeExAndDefault>()
+    .resolve::<ThrowTyped>()
 }
 
 // --- Basemap extract ---------------------------------------------------------
@@ -343,7 +439,7 @@ pub extern "system" fn Java_io_github_mvexel_cantino_NativeBridge_basemapPlanNew
         })?;
         Ok(plan as jlong)
     })
-    .resolve::<ThrowRuntimeExAndDefault>()
+    .resolve::<ThrowTyped>()
 }
 
 #[unsafe(no_mangle)]
@@ -360,7 +456,7 @@ pub extern "system" fn Java_io_github_mvexel_cantino_NativeBridge_basemapPlanFir
             cantino_basemap_plan_first_request(plan as *mut CantinoBasemapPlan, out, error)
         })
     })
-    .resolve::<ThrowRuntimeExAndDefault>()
+    .resolve::<ThrowTyped>()
 }
 
 /// Feeds a directory-phase response (`bytes` copied once out of the JVM heap).
@@ -386,7 +482,7 @@ pub extern "system" fn Java_io_github_mvexel_cantino_NativeBridge_basemapPlanFee
             )
         })
     })
-    .resolve::<ThrowRuntimeExAndDefault>()
+    .resolve::<ThrowTyped>()
 }
 
 #[unsafe(no_mangle)]
@@ -401,7 +497,7 @@ pub extern "system" fn Java_io_github_mvexel_cantino_NativeBridge_basemapPlanOut
             cantino_basemap_plan_outstanding(plan as *mut CantinoBasemapPlan, out, error)
         })
     })
-    .resolve::<ThrowRuntimeExAndDefault>()
+    .resolve::<ThrowTyped>()
 }
 
 /// Consumes the plan (see the header: every call past the handle check) and
@@ -430,7 +526,7 @@ pub extern "system" fn Java_io_github_mvexel_cantino_NativeBridge_basemapPlanInt
         })?;
         Ok(assembler as jlong)
     })
-    .resolve::<ThrowRuntimeExAndDefault>()
+    .resolve::<ThrowTyped>()
 }
 
 #[unsafe(no_mangle)]
@@ -446,7 +542,7 @@ pub extern "system" fn Java_io_github_mvexel_cantino_NativeBridge_basemapPlanFre
         })?;
         Ok(())
     })
-    .resolve::<ThrowRuntimeExAndDefault>()
+    .resolve::<ThrowTyped>()
 }
 
 #[unsafe(no_mangle)]
@@ -471,7 +567,7 @@ pub extern "system" fn Java_io_github_mvexel_cantino_NativeBridge_basemapAsmWrit
         })?;
         Ok(())
     })
-    .resolve::<ThrowRuntimeExAndDefault>()
+    .resolve::<ThrowTyped>()
 }
 
 #[unsafe(no_mangle)]
@@ -497,7 +593,7 @@ pub extern "system" fn Java_io_github_mvexel_cantino_NativeBridge_basemapAsmWrit
         })?;
         Ok(())
     })
-    .resolve::<ThrowRuntimeExAndDefault>()
+    .resolve::<ThrowTyped>()
 }
 
 #[unsafe(no_mangle)]
@@ -512,7 +608,7 @@ pub extern "system" fn Java_io_github_mvexel_cantino_NativeBridge_basemapAsmRema
             cantino_basemap_asm_remaining(assembler as *mut CantinoBasemapAssembler, out, error)
         })
     })
-    .resolve::<ThrowRuntimeExAndDefault>()
+    .resolve::<ThrowTyped>()
 }
 
 #[unsafe(no_mangle)]
@@ -527,7 +623,7 @@ pub extern "system" fn Java_io_github_mvexel_cantino_NativeBridge_basemapAsmProg
             cantino_basemap_asm_progress(assembler as *mut CantinoBasemapAssembler, out, error)
         })
     })
-    .resolve::<ThrowRuntimeExAndDefault>()
+    .resolve::<ThrowTyped>()
 }
 
 #[unsafe(no_mangle)]
@@ -549,7 +645,7 @@ pub extern "system" fn Java_io_github_mvexel_cantino_NativeBridge_basemapAsmFini
         })?;
         Ok(())
     })
-    .resolve::<ThrowRuntimeExAndDefault>()
+    .resolve::<ThrowTyped>()
 }
 
 #[unsafe(no_mangle)]
@@ -565,7 +661,7 @@ pub extern "system" fn Java_io_github_mvexel_cantino_NativeBridge_basemapAsmFree
         })?;
         Ok(())
     })
-    .resolve::<ThrowRuntimeExAndDefault>()
+    .resolve::<ThrowTyped>()
 }
 
 /// Validates a local PMTiles file and describes its header (any thread).
@@ -582,5 +678,5 @@ pub extern "system" fn Java_io_github_mvexel_cantino_NativeBridge_basemapInfo<'l
             cantino_basemap_info(path.as_ptr(), out, error)
         })
     })
-    .resolve::<ThrowRuntimeExAndDefault>()
+    .resolve::<ThrowTyped>()
 }

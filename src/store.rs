@@ -195,7 +195,9 @@ impl Store {
             |row| Ok((row.get(0)?, row.get(1)?)),
         )?;
         if application_id != schema::APPLICATION_ID || version != schema::FORMAT_VERSION {
-            return Err(Error::Invalid(format!(
+            // A readable SQLite file that is not ours, or ours from another
+            // format version: InvalidFile for the adapters, never a caller error.
+            return Err(Error::Format(format!(
                 "not a Cantino area of format {} (application_id {application_id:#x}, \
                  version {version}); re-import it",
                 schema::FORMAT_VERSION

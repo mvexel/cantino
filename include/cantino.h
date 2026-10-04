@@ -13,6 +13,36 @@ extern "C" {
 typedef struct CantinoStore CantinoStore;
 // Return codes: 0 success; 1 object missing (get, way_coordinates,
 // representative_point only); -1 error.
+//
+// Error categories (since 0.2.0). After a call returns -1, its category is
+// cantino_last_error_code(), read on the same thread before the next ABI
+// call (errno-style: kept per thread, overwritten by every call, 0 after a
+// success). The message in *error is for developers; branch on the code.
+// Values are stable ABI: never renumbered, new ones only appended.
+#define CANTINO_ERROR_NONE 0
+// The caller passed something invalid: bad query (limit, filters, only
+// NotExists without bbox), invalid bbox, too many spatial candidates, batch
+// over 10000 IDs, non-positive ID, unknown kind, NULL pointer, malformed
+// JSON (including a SliceOSM response the adapter passed on), a basemap
+// response of the wrong length or id.
+#define CANTINO_ERROR_INVALID_ARGUMENT 1
+// A file is not what it should be: not an area database, an area of
+// another format version (re-import), a corrupt/truncated/unreadable OSM
+// PBF or XML input or one breaking the snapshot rules (unsorted or duplicate
+// IDs), a malformed or unsupported PMTiles archive.
+#define CANTINO_ERROR_INVALID_FILE 2
+// The environment failed: missing file, permission denied, disk full, I/O
+// error, out of memory, a database locked by another process.
+#define CANTINO_ERROR_IO 3
+// A store, basemap plan or basemap assembler handle was used from a thread
+// other than its owner. The handle is untouched.
+#define CANTINO_ERROR_WRONG_THREAD 4
+// A bug in the core, including a caught panic. Report it.
+#define CANTINO_ERROR_INTERNAL 5
+// The CANTINO_ERROR_* category of the last ABI call on the calling thread
+// (CANTINO_ERROR_NONE if it succeeded). Any thread; never fails.
+int32_t cantino_last_error_code(void);
+//
 // Strings and paths are UTF-8. Every non-NULL result/error buffer must be freed
 // with cantino_free, including buffers returned alongside an error.
 // Store handles belong to their creating thread. Open/lookup/query/close must

@@ -30,7 +30,22 @@ pub(crate) fn read(path: &Path, importer: &mut Importer) -> Result<()> {
     }
 }
 
+/// Classifies an osmpbf failure. osmpbf reports every read failure as
+/// `ErrorKind::Io`, including a file that simply ends early or does not
+/// inflate; those are a bad file (InvalidFile), while a missing file or a
+/// failing disk is the environment (Io).
 fn pbf_error(error: osmpbf::Error) -> Error {
+    use std::io::ErrorKind as Io;
+    let environment = matches!(
+        error.kind(),
+        osmpbf::ErrorKind::Io(io) if !matches!(io.kind(), Io::UnexpectedEof | Io::InvalidData)
+    );
+    if environment {
+        let osmpbf::ErrorKind::Io(io) = error.into_kind() else {
+            unreachable!("matched as Io above")
+        };
+        return Error::Io(io);
+    }
     Error::Input(format!("PBF: {error}"))
 }
 

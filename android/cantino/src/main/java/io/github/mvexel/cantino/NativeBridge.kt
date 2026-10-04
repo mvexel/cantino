@@ -2,8 +2,13 @@ package io.github.mvexel.cantino
 
 /**
  * Raw JNI surface implemented in Rust (`src/android.rs`). Strings in, JSON out.
- * Native errors arrive as RuntimeException; [OsmStore] rethrows them as
- * [CantinoException]. Nothing outside this module calls these directly.
+ * Native errors arrive already typed: the Rust side throws the
+ * [CantinoException] subtype for the error's category
+ * ([CantinoException.InvalidArgument], [CantinoException.InvalidFile],
+ * [CantinoException.Io], [CantinoException.WrongThread]) or
+ * [IllegalStateException] for an internal error, so callers need no
+ * wrapping and nothing parses messages. Nothing outside this module calls
+ * these directly.
  */
 internal object NativeBridge {
     init {

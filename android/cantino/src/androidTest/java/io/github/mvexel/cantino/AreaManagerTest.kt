@@ -255,6 +255,7 @@ class AreaManagerTest {
         assertEquals(runId, failed.runId)
         assertTrue(failed.isTerminal)
         assertFalse(failed.retryable)
+        assertEquals(FailureReason.INVALID_DATA, failed.reason)
         assertTrue(failed.message, failed.message.startsWith("import failed"))
         assertEquals(1, slice.downloads.get())
         assertEquals(listOf("Old Café"), cafeNames(manager.dataFile(areaId)!!))
@@ -303,6 +304,7 @@ class AreaManagerTest {
         val failed = states.await { it is AreaState.Failed } as AreaState.Failed
         assertEquals(runId, failed.runId)
         assertFalse(failed.retryable)
+        assertEquals(FailureReason.INVALID_REQUEST, failed.reason)
         assertTrue(failed.message, failed.message.contains("HTTP 400"))
         assertEquals(1, slice.submits.get())
         assertEquals(0, slice.polls.get())
@@ -376,6 +378,7 @@ class AreaManagerTest {
         manager.download(areaId, bbox, basemap = BasemapSource.Url(server.url("/basemap.pmtiles").toString()))
         val failed = states.await { it is AreaState.Failed } as AreaState.Failed
         assertFalse(failed.retryable)
+        assertEquals(FailureReason.INVALID_DATA, failed.reason)
         assertTrue(failed.message, failed.message.contains("not a valid PMTiles"))
         assertOldAreaIntact(manager, before)
         assertNoStagingLeft()
@@ -426,6 +429,7 @@ class AreaManagerTest {
         manager.download(areaId, bbox, basemap = BasemapSource.Extract(server.url("/planet.pmtiles").toString()))
         val failed = states.await { it is AreaState.Failed } as AreaState.Failed
         assertFalse(failed.retryable)
+        assertEquals(FailureReason.SERVER, failed.reason)
         assertTrue(failed.message, failed.message.contains("ignored the Range header"))
         // One request, not retried: a 200 is not transient.
         assertEquals(1, slice.basemapRequests.get())
@@ -443,6 +447,8 @@ class AreaManagerTest {
         manager.download(areaId, bbox, basemap = BasemapSource.Url(server.url("/basemap.pmtiles").toString()))
         val failed = states.await { it is AreaState.Failed } as AreaState.Failed
         assertFalse(failed.retryable)
+        // The app asked for a basemap URL that does not exist.
+        assertEquals(FailureReason.INVALID_REQUEST, failed.reason)
         assertTrue(failed.message, failed.message.contains("HTTP 404"))
         // The data part succeeded (downloaded and imported) ...
         assertEquals(1, slice.downloads.get())

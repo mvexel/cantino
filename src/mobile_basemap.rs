@@ -66,7 +66,7 @@ unsafe fn confined<'a, T>(input: *mut Confined<T>, what: &str) -> Result<&'a mut
     let handle =
         unsafe { input.as_mut() }.ok_or_else(|| Error::Invalid(format!("null {what} handle")))?;
     if handle.thread != std::thread::current().id() {
-        return Err(Error::Invalid(format!(
+        return Err(Error::WrongThread(format!(
             "{what} belongs to a different thread"
         )));
     }
