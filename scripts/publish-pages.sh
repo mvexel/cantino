@@ -49,7 +49,7 @@ echo "Cantino $version -> $out"
 if [ "$native" = 1 ]; then
     "$root/scripts/build-android.sh"
 fi
-for abi in arm64-v8a x86_64; do
+for abi in arm64-v8a armeabi-v7a x86_64; do
     [ -s "$root/target/android/$abi/libcantino.so" ] || {
         echo "missing target/android/$abi/libcantino.so; run scripts/build-android.sh" >&2
         exit 2

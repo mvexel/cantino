@@ -107,8 +107,8 @@ The toolchain is pinned to Rust **1.99.0**. Neither Docker nor a C++ toolchain i
 ### Android
 
 ```sh
-rustup target add aarch64-linux-android x86_64-linux-android --toolchain 1.99.0
-scripts/build-android.sh    # → target/android/{arm64-v8a,x86_64}/libcantino.so
+rustup target add aarch64-linux-android armv7-linux-androideabi x86_64-linux-android --toolchain 1.99.0
+scripts/build-android.sh    # → target/android/{arm64-v8a,armeabi-v7a,x86_64}/libcantino.so
 cd android && mise exec -- ./gradlew :cantino:connectedDebugAndroidTest
 mise exec -- ./gradlew :cantino:publishReleasePublicationToLocalRepository  # AAR → android/build/repo
 ANDROID_SERIAL=<device> scripts/bench-android.sh CITY.osm.pbf                   # city benchmark JSON

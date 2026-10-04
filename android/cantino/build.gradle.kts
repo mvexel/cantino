@@ -78,6 +78,9 @@ dependencies {
     // and AreaManager.load*() are suspend. Same version work-runtime-ktx 2.12.0 resolves.
     api("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.2")
 
+    // JVM unit tests (src/test) for pure-Kotlin logic such as Bbox.around.
+    testImplementation("junit:junit:4.13.2")
+
     // Fake SliceOSM server for AreaManagerTest; test APK only, not in the AAR.
     // 5.5.0 pulls okhttp-android that requires compileSdk 37; stay on 5.4.0.
     androidTestImplementation("com.squareup.okhttp3:mockwebserver3:5.4.0")

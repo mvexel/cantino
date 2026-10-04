@@ -245,9 +245,49 @@ internal fun osmObjectFromJson(json: JSONObject): OsmObject {
 public data class Bbox(val west: Double, val south: Double, val east: Double, val north: Double) {
     internal fun toJson() = JSONObject().put("west", west).put("south", south).put("east", east).put("north", north)
 
-    internal companion object {
-        fun fromJson(json: JSONObject) =
+    /** Construction helpers. */
+    public companion object {
+        internal fun fromJson(json: JSONObject) =
             Bbox(json.getDouble("west"), json.getDouble("south"), json.getDouble("east"), json.getDouble("north"))
+
+        /**
+         * A [widthKm] (east-west) by [heightKm] (north-south) box centred on
+         * ([lat], [lon]); [heightKm] defaults to a square.
+         *
+         * Uses a flat-earth (equirectangular) approximation: 111.32 km per
+         * degree of latitude, and that times cos(latitude) per degree of
+         * longitude. Fine at city scale, increasingly rough for boxes of
+         * hundreds of km or near the poles.
+         *
+         * Edges are clamped, never wrapped (a [Bbox] cannot wrap): latitudes to
+         * -85..85 (the Web Mercator range, so the box stays usable for map
+         * tiles) and longitudes to -180..180. A box that would cross the
+         * antimeridian is therefore cut at it and comes out narrower than
+         * asked; to cover both sides, build two boxes. Throws
+         * [IllegalArgumentException] for a non-finite or out-of-range centre
+         * ([lat] outside -90..90, [lon] outside -180..180) or a non-positive
+         * or non-finite size.
+         */
+        public fun around(lat: Double, lon: Double, widthKm: Double, heightKm: Double = widthKm): Bbox {
+            require(lat.isFinite() && lat in -90.0..90.0) { "lat must be within -90..90: $lat" }
+            require(lon.isFinite() && lon in -180.0..180.0) { "lon must be within -180..180: $lon" }
+            require(widthKm.isFinite() && widthKm > 0) { "widthKm must be positive: $widthKm" }
+            require(heightKm.isFinite() && heightKm > 0) { "heightKm must be positive: $heightKm" }
+            val halfLat = heightKm / 2 / KM_PER_DEGREE
+            // cos(lat) -> 0 at the poles; use the clamped latitude so the
+            // longitude span stays finite (the result is clamped anyway).
+            val cosLat = kotlin.math.cos(Math.toRadians(lat.coerceIn(-MAX_LAT, MAX_LAT)))
+            val halfLon = widthKm / 2 / (KM_PER_DEGREE * cosLat)
+            return Bbox(
+                west = (lon - halfLon).coerceAtLeast(-180.0),
+                south = (lat - halfLat).coerceAtLeast(-MAX_LAT),
+                east = (lon + halfLon).coerceAtMost(180.0),
+                north = (lat + halfLat).coerceAtMost(MAX_LAT),
+            )
+        }
+
+        private const val KM_PER_DEGREE = 111.32
+        private const val MAX_LAT = 85.0
     }
 }
 

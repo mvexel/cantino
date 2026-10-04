@@ -20,7 +20,7 @@ scripts/             build, check, bench, basemap assets, publishing
 
 | Tool | Version | Notes |
 | --- | --- | --- |
-| Rust | 1.99.0 (pinned in `rust-toolchain.toml`) | `rustup target add aarch64-linux-android x86_64-linux-android --toolchain 1.99.0` |
+| Rust | 1.99.0 (pinned in `rust-toolchain.toml`) | `rustup target add aarch64-linux-android armv7-linux-androideabi x86_64-linux-android --toolchain 1.99.0` |
 | Android NDK | r29 (`29.0.14206865`), SDK-managed | Cross-compiles the Rust library; Gradle also uses it to strip |
 | Android SDK | compileSdk 36 | `android/local.properties`: `sdk.dir=…` |
 | JDK | Temurin 25 via [mise](https://mise.jdx.dev/) (`mise.toml`) | Run Gradle as `mise exec -- ./gradlew …` |
@@ -32,7 +32,7 @@ No C++ toolchain or Docker: SQLite is compiled by `rusqlite`'s bundled feature.
 
 ```sh
 scripts/check.sh               # rustfmt, clippy -D warnings, cargo test, C ABI smoke test (Python ctypes)
-scripts/build-android.sh       # → target/android/{arm64-v8a,x86_64}/libcantino.so
+scripts/build-android.sh       # → target/android/{arm64-v8a,armeabi-v7a,x86_64}/libcantino.so
 cd android
 mise exec -- ./gradlew :cantino:assembleRelease                         # the AAR
 mise exec -- ./gradlew :cantino:publishReleasePublicationToLocalRepository  # Maven layout in android/build/repo

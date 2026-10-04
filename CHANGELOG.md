@@ -7,6 +7,16 @@ before 1.0 a minor version may break the API.
 
 ### Added
 
+- **`AsyncOsmStore`**: a coroutine wrapper that owns one dedicated thread,
+  opens the `OsmStore` on it and runs every call there (`suspend` `get`,
+  `query`, `close`, plus `withStore { }` to reach any `OsmStore` method).
+  Removes the thread-confinement trap of using an `OsmStore` from
+  `Dispatchers.IO`. The café app uses it instead of its own worker.
+- **`Bbox.around(lat, lon, widthKm, heightKm = widthKm)`**: a box around a
+  point (flat-earth approximation). Latitude clamps to ±85, longitude to ±180;
+  a box that would cross the antimeridian is cut at it, not wrapped.
+- **armeabi-v7a**: the AAR now also packages `armeabi-v7a/libcantino.so`
+  (32-bit ARM devices); `scripts/build-android.sh` builds it by default.
 - **Way coordinates**: `OsmStore.wayCoordinates(wayId): List<Coordinate?>?`
   returns a way's node coordinates in order (repeats kept) in one native
   call; a null entry is a node outside the area, null means the way is not in
