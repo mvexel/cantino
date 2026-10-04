@@ -20,15 +20,13 @@ on a measured need. A module is added only when it removes substantial
 repeated work across apps and has a consumer. Rationale and phases:
 `docs/research/2026-10-04-modular-sdk-assessment.md`.
 
-## Feature freeze (since 2026-10-03, Martijn)
+## Status
 
-**No new features until the iOS side is built.** Simplification is complete
-in 0.3.0 (2026-10-04); bug fixes, docs and iOS work remain allowed. There are no external consumers: API, ABI and file
-formats may change without backward compatibility machinery. Preserve examples,
-developer experience and runtime reliability. The freeze ends when iOS and
-Android pass the same tests, the café demo works on iOS, and the parity
-release (0.4.0; 0.3.0 stays the Android-only release) is out. First work after the freeze: basemap-only acquisition (an area
-with a basemap and no OSM data) in both adapters.
+0.4.0 (2026-10-04): iOS and Android at parity ([parity](docs/guide/platform-parity.md));
+the feature freeze of 2026-10-03 is lifted. There are no external consumers:
+API, ABI and file formats may change without backward compatibility
+machinery. Preserve examples, developer experience, runtime reliability and
+parity: a feature lands on both platforms, with tests on both.
 
 ## In scope
 
@@ -60,11 +58,10 @@ with a basemap and no OSM data) in both adapters.
 
 ## Plan
 
-Next: reconcile `ios/main` with the simplified API, build and test the
-xcframework and Swift adapter on macOS, port downloads over URLSession, and
-verify Android/iOS parity and the café demo. No shared download reducer.
-Outward-facing steps (pushing, tagging, publishing, GitHub settings)
-are done by Martijn; agents prepare them and print the commands.
+Next (P2 of the modular-SDK assessment): basemap-only acquisition, an area
+with a basemap and no OSM data, in both adapters. Outward-facing steps
+(pushing, tagging, publishing, GitHub settings) are done by Martijn; agents
+prepare them and print the commands.
 
 ## Working rules
 
