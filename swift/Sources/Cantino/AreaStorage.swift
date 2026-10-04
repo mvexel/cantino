@@ -173,32 +173,28 @@ struct AreaStorage: Hashable, Sendable {
 
     /// Finishes a commit left half-done by a dead process (or a failed
     /// rename). Cheap when there is nothing to do; blocks while a commit of
-    /// this area is running. Unlike Kotlin's `recover` this throws the I/O
-    /// failure: ``published(areaId:)`` is the one that carries on regardless.
+    /// this area is running. Throws ``CantinoError/io(_:)`` if recovery
+    /// cannot finish (including a damaged journal); the journal remains.
     func recover(areaId: String) throws {
         var call = NativeCall()
         _ = try call.check(cantino_area_recover(root, areaId, &call.error))
     }
 
-    /// The published area, or nil when none exists. Completes a pending
-    /// commit first (an I/O failure to do so leaves the journal for the next
-    /// recover, and the core reads anyway, as Kotlin's `published` does). The
-    /// core trusts the metadata only if it describes the files present
-    /// (recorded database size = data file size; recorded basemap = basemap
-    /// file); anything else reads as "metadata unknown" (nil) rather than as
-    /// wrong metadata.
+    /// The published area, or nil when none exists. The core completes a
+    /// pending commit first and reads the files and sidecar under the area
+    /// lock, so the answer describes one version; it throws
+    /// ``CantinoError/io(_:)`` if recovery cannot finish (the journal stays
+    /// for a later retry; no mixed area is returned). The metadata is
+    /// trusted only if it describes the files present (recorded database size
+    /// = data file size; recorded basemap = basemap file); anything else
+    /// reads as "metadata unknown" (nil) rather than as wrong metadata.
     func published(areaId: String) throws -> AreaInfo? {
-        do {
-            try recover(areaId: areaId)
-        } catch CantinoError.io {
-            // Leave the journal; the next recover retries. Readers meanwhile
-            // see a mix of old and new parts, flagged by the sidecar checks.
-        }
         var call = NativeCall()
         let status = try call.check(cantino_area_published(root, areaId, &call.result, &call.error))
         if status == 1 { return nil }
         let wire = try Wire.decode(WirePublishedArea.self, call.resultString())
-        return AreaInfo(areaId: areaId, dataPath: wire.data, basemapPath: wire.basemap, metadata: wire.metadata)
+        return AreaInfo(areaId: areaId, dataURL: URL(fileURLWithPath: wire.data), metadata: wire.metadata,
+                        basemapURL: wire.basemap.map { URL(fileURLWithPath: $0) })
     }
 }
 
@@ -253,85 +249,6 @@ struct AreaLayout: Hashable, Sendable {
     let stagedData: String?
     let stagedBasemap: String?
     let stagedMetadata: String?
-}
-
-/// A published area (Kotlin `AreaInfo`, with paths instead of `File`s).
-struct AreaInfo: Hashable, Sendable {
-    let areaId: String
-    let dataPath: String
-    /// The basemap, or nil when the area has none.
-    let basemapPath: String?
-    /// The sidecar, or nil when unknown (area published by hand, or the
-    /// sidecar does not describe the files present).
-    let metadata: AreaMetadata?
-}
-
-/// How a published basemap was obtained.
-enum BasemapKind: String, Hashable, Sendable {
-    /// Downloaded as a ready-made file.
-    case url
-    /// Cut on the device from a remote archive.
-    case extract
-}
-
-/// The published basemap of an area, as recorded when it was downloaded.
-struct BasemapMetadata: Hashable, Sendable {
-    let kind: BasemapKind
-    let sourceUrl: String
-    let fileBytes: Int64
-    let addressedTiles: Int64
-    let minZoom: Int
-    let maxZoom: Int
-    let requests: Int64
-    let transferredBytes: Int64
-}
-
-/// What the sidecar records about an area (Kotlin `AreaMetadata`).
-struct AreaMetadata: Hashable, Sendable {
-    let bbox: Bbox
-    let name: String
-    /// The server's timestamp string as received, stored unchanged.
-    let snapshotTimestamp: String?
-    let importedAtMillis: Int64
-    let report: ImportReport
-    let basemap: BasemapMetadata?
-    let workId: UUID?
-
-    /// The sidecar JSON (keys are a stored format, shared with Kotlin and the
-    /// core: renaming a Swift property must not change them).
-    var json: JSONValue {
-        var basemapJSON = JSONValue.null
-        if let basemap {
-            basemapJSON = .object([
-                "kind": .string(basemap.kind.rawValue),
-                "source_url": .string(basemap.sourceUrl),
-                "bytes": .int(basemap.fileBytes),
-                "addressed_tiles": .int(basemap.addressedTiles),
-                "min_zoom": .int(Int64(basemap.minZoom)),
-                "max_zoom": .int(Int64(basemap.maxZoom)),
-                "requests": .int(basemap.requests),
-                "transferred_bytes": .int(basemap.transferredBytes),
-            ])
-        }
-        return .object([
-            "bbox": .object([
-                "west": .double(bbox.west), "south": .double(bbox.south),
-                "east": .double(bbox.east), "north": .double(bbox.north),
-            ]),
-            "name": .string(name),
-            "snapshot_timestamp": snapshotTimestamp.map(JSONValue.string) ?? .null,
-            "imported_at_millis": .int(importedAtMillis),
-            "report": .object([
-                "counts": .object([
-                    "nodes": .int(report.counts.nodes), "ways": .int(report.counts.ways),
-                    "relations": .int(report.counts.relations),
-                ]),
-                "database_bytes": .int(report.databaseBytes),
-            ]),
-            "basemap": basemapJSON,
-            "work_id": workId.map { .string($0.uuidString.lowercased()) } ?? .null,
-        ])
-    }
 }
 
 // MARK: - Wire shapes (include/cantino.h, "Area store")
@@ -444,7 +361,8 @@ private struct WireAreaMetadata: Decodable {
         }
         return AreaMetadata(
             bbox: Bbox(west: bbox.west, south: bbox.south, east: bbox.east, north: bbox.north), name: name,
-            snapshotTimestamp: snapshotTimestamp, importedAtMillis: importedAtMillis, report: report.model,
+            snapshotTimestamp: AreaMetadata.parseSnapshotTimestamp(snapshotTimestamp),
+            importedAtMillis: importedAtMillis, report: report.model,
             basemap: basemapModel, workId: work)
     }
 }

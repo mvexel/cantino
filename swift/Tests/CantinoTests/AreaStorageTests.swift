@@ -18,7 +18,7 @@ import Testing
     private func metadata(databaseBytes: Int64, workId: UUID?) -> AreaMetadata {
         AreaMetadata(
             bbox: Bbox(west: -111.895, south: 40.0, east: -111.885, north: 40.771), name: "Café / test",
-            snapshotTimestamp: "2026-10-03T20:30:01Z", importedAtMillis: 1_759_523_401_000,
+            snapshotTimestamp: AreaMetadata.parseSnapshotTimestamp("2026-10-03T20:30:01Z"), importedAtMillis: 1_759_523_401_000,
             report: ImportReport(counts: ObjectCounts(nodes: 3, ways: 2, relations: 1), databaseBytes: databaseBytes),
             basemap: nil, workId: workId)
     }
@@ -74,8 +74,8 @@ import Testing
             afterCommitPoint: { events.append("after") })
         #expect(events == ["before", "after"])
         let info = try #require(try storage.published(areaId: "city"))
-        #expect(info.dataPath == data)
-        #expect(info.basemapPath == nil)
+        #expect(info.dataURL.path == data)
+        #expect(info.basemapURL == nil)
         #expect(info.metadata == expected)
         #expect(try String(contentsOfFile: data, encoding: .utf8) == "0123456789")
     }

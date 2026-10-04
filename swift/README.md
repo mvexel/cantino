@@ -1,14 +1,15 @@
 # Cantino Swift adapter
 
-SwiftPM package `Cantino`: the Swift store API over the Rust core's C ABI
-([`include/cantino.h`](../include/cantino.h)). It mirrors the Kotlin store
-API in [`android/cantino`](../android/cantino) (`OsmStore`, `AsyncOsmStore`,
-the models), which is the reference: same names, same semantics, same
-defaults, except for the deviations listed below.
+SwiftPM package `Cantino`: the Swift API over the Rust core's C ABI
+([`include/cantino.h`](../include/cantino.h)). It mirrors the Kotlin API in
+[`android/cantino`](../android/cantino) (`OsmStore`, `AsyncOsmStore`, the
+models, `AreaManager`), which is the reference: same names, same semantics,
+same defaults, except for the deviations listed below.
 
-**Status: store API built and tested on iOS (simulator), macOS and Linux.**
-Background `URLSession` downloads and the area manager come next. Nothing in `Sources/`
-uses an Apple-only API.
+**Status: store API and area downloads built and tested on iOS (simulator)
+and macOS; the store API also on Linux.** Downloads run in the app's process
+(URLSession); an interrupted download resumes when the app next creates an
+`AreaManager` (see "Area downloads").
 
 ```swift
 import Cantino
@@ -25,6 +26,15 @@ try store.close()
 let shared = try await AsyncOsmStore.open("area.sqlite")
 let cafe = try await shared.get(OsmId(.node, 2))
 try await shared.close()
+
+// Download (and later refresh) an offline area with its basemap:
+let areas = AreaManager()
+let run = try areas.download(areaId: "home", bbox: bbox,
+                             basemap: try .extract(planetUrl: "https://build.protomaps.com/20261001.pmtiles"))
+for await state in try areas.state(areaId: "home") where state.runId == run && state.isTerminal {
+    if case .ready(_, let area) = state { /* open area.dataURL, show area.pmtilesURL */ }
+    break
+}
 ```
 
 ## Layout
@@ -42,13 +52,19 @@ Sources/Cantino/
   Wire.swift                  Codable decoding of the core's JSON
   SliceProtocol.swift         internal SliceProtocol: jobRequest, job, progress (cantino_slice_*), as Kotlin's
   Basemap.swift               public PmtilesInfo.read; internal BasemapPlan / BasemapAssembler (sans-IO extract engine)
+  AreaManager.swift           public AreaManager; the per-directory Registry (runs, states), DownloadRun (one run,
+                              its attempts and backoff), DownloadFiles (request, checkpoint, partial files)
+  AreaModels.swift            public AreaConfig, BasemapSource, BasemapPhase, AreaInfo, AreaMetadata, BasemapMetadata,
+                              BasemapKind, FailureReason, AreaState
+  AreaHTTP.swift              URLSession HTTP (SliceOSM, downloads, range requests), DownloadFailure, inline retry, tuning
+  BasemapExtract.swift        internal extract driver: HTTP ranges in parallel, engine on its own thread
   AreaStorage.swift           internal AreaStorage (cantino_area_*: layout, staging, commit with hook, recover, published)
-                              and its models AreaInfo, AreaMetadata, BasemapMetadata, AreaLayout
   Failures.swift              internal Failures: download failure classification (cantino_classify_failure)
   JSONValue.swift             deterministic JSON writer for requests and the parity canonical form
   Canonical.swift             parity corpus canonical form and outcome envelope (tests/parity/README.md)
-Tests/CantinoTests/           ports of OsmStoreTest, AsyncOsmStoreTest, BboxAroundTest; canonical, basemap,
-                              area store and failure tests; ParityTests, the Swift runner of tests/parity
+Tests/CantinoTests/           ports of OsmStoreTest, AsyncOsmStoreTest, BboxAroundTest, ImportProfileTest,
+                              AreaManagerTest (FakeSlice: an in-process SliceOSM as a URLProtocol);
+                              canonical, basemap, area store and failure tests; ParityTests (tests/parity)
 ```
 
 ## Build and test
@@ -119,11 +135,19 @@ the container, so the container's glibc must be at least the host's.
 | `PmtilesInfo` (class; zooms, bounds, counts, file size) | `struct PmtilesInfo` with every field `cantino_basemap_info` reports: also `specVersion`, `center` (`lon`, `lat`, `zoom`), `tileType`, `tileCompression` (PMTiles codes), `clustered` | The parity corpus compares the full C ABI object (tests/parity/README.md asks the platform types to grow them); value type |
 | `PmtilesInfo.read(File)` | `PmtilesInfo.read(_ path: String)` / `read(_ url: URL)` (non-file URL: `.invalidArgument`) | As `open` |
 | `internal object SliceProtocol` (data classes `JobRequest`, `Job`, `Progress`) | `internal enum SliceProtocol` with structs of the same names and fields; `jobRequest(base:bbox:name:)`, `job(base:response:)`, `progress(status:)` | Argument labels. Internal, as in Kotlin |
-| `BasemapExtract` drives `NativeBridge.basemapPlan*` / `basemapAsm*` (raw JSON strings, `Long` handles) | internal `BasemapPlan` / `BasemapAssembler` classes (thread-confined, `deinit` frees best-effort) with typed `ByteRange`, `BasemapStep` (`.fetch`/`.wait`/`.tilesReady`), `TilePlan`, `BasemapProgress`; `BasemapPlan(bboxJSON:...)` keeps the raw-string entry of `basemapPlanNew` | No networking yet: the public `BasemapExtract` (HTTP, background transfer) comes with the area lifecycle and will sit on these |
+| `BasemapExtract` drives `NativeBridge.basemapPlan*` / `basemapAsm*` (raw JSON strings, `Long` handles) | internal `BasemapPlan` / `BasemapAssembler` classes (thread-confined, `deinit` frees best-effort) with typed `ByteRange`, `BasemapStep` (`.fetch`/`.wait`/`.tilesReady`), `TilePlan`, `BasemapProgress`; `BasemapExtract` drives them on an `OwnerThread` | Typed wrappers over the same engine |
 | `CantinoException.Internal` / `IllegalStateException` for an internal core error | `CantinoStateError.internalError` (see above) | The parity canonical form maps it to code 5, `internal`, like every other runner |
 | `internal class AreaStorage(areas: File, downloads: File)`; `requireValidAreaId` throws `IllegalArgumentException` | `internal struct AreaStorage(root:)` (the caller picks the root; the core owns layout, staging, commit, recovery, the area lock and `published`); `AreaStorage.validate(areaId:)` throws `CantinoError.invalidArgument`. Methods: `layout(areaId:workId:)` (`String?` raw, or `UUID`), `dataFile`, `basemapFile`, `prepareStaging`, `discardStaging`, `writeStagedMetadata`, `commit`, `recover`, `published` | The same role as Kotlin's class minus what is Android-specific: no download scratch directory, no WorkManager checkpoint (the iOS area manager owns its own). Paths are `String`s (as `OsmStore.open`), work IDs `UUID`s |
 | `commit(areaId, workId, hasBasemap, beforeCommit: () -> Unit)` with `AreaTestHooks.afterCommitPoint` | `commit(areaId:workId:hasBasemap:beforeCommit:afterCommitPoint:)`, both closures (`beforeCommit` may throw) | The closures reach the core through the C callback and a context pointer; a throw from `beforeCommit` aborts with nothing changed and is rethrown (Swift errors cannot cross the C frame, so the box keeps it). `afterCommitPoint` is a parameter, not a global, for tests that stand in for a kill. Neither may call `AreaStorage` for the same area |
-| `AreaStorage.recover` swallows `Io` (logs it) | `recover(areaId:)` throws; `published(areaId:)` swallows `.io` from its recover step and reads anyway, as Kotlin's `published` does | The parity corpus needs the throwing form (Kotlin's runner calls `NativeBridge.areaRecover` for the same reason) |
+| `AreaStorage.recover` / `published` throw `IOException` | throw `CantinoError.io` | Same fail-closed rule (a pending commit that cannot finish is never read as a mixed area) |
+| WorkManager: downloads survive process death, wait for network and storage, retry with backoff | `AreaManager` runs downloads as tasks in the app's process; the request is stored before `download` returns, and the first `AreaManager` created for the directory in a new process resumes it (same run ID and SliceOSM job; a run that died after its commit point succeeds at once). Retries: inline, then up to 5 attempts with exponential backoff (`queued` in between); no network/storage constraints | Decided 2026-10-04: no background URLSession. Tile ranges do not suit it, and in-process runs keep one code path |
+| `AreaState` sealed interface; finished work kept ~1 day by WorkManager | `enum AreaState` with the same cases (`idle`, `queued`, `submitting`, `slicing`, `downloading`, `importing`, `basemap`, `ready`, `failed`, `cancelled`), `runId`, `isTerminal`; final states live in memory only (after a restart: `idle` with the published area) | No scheduler database |
+| `state(areaId): Flow<AreaState>` | `state(areaId:) throws -> AsyncStream<AreaState>` | Swift concurrency |
+| `AreaConfig(sliceBaseUrl, connectTimeoutMillis, readTimeoutMillis, importOptions, foreground)` | `AreaConfig(sliceBaseUrl:timeout:importOptions:)`; no foreground mode | URLSession has one idle timeout; iOS has no foreground services |
+| `BasemapSource` sealed interface (`None`, `Url(url)`, `Extract(planetUrl, maxZoom, overfetch)`), constructors throw | `struct BasemapSource`: `.none`, `try .url(_:)`, `try .extract(planetUrl:maxZoom:overfetch:)` | Enum cases cannot validate; same checks, `CantinoError.invalidArgument` |
+| `AreaInfo(areaId, dataFile: File, metadata, basemapFile)`, `pmtilesUrl` | `AreaInfo(areaId:dataURL:metadata:basemapURL:)`, `pmtilesURL` | File URLs |
+| `AreaMetadata.snapshotTimestamp: Instant?` | `Date?` (written back as Kotlin's `Instant.toString()`) | Foundation |
+| `download`/`cancel` throw `IllegalArgumentException` for a bad area ID | throw `CantinoError.invalidArgument` (and `download` `.io` if the request cannot be stored) | One error type for the domain |
 | `AreaMetadata.toJson` writes org.json key order | `AreaMetadata.json` / `writeStagedMetadata` write keys sorted (`JSONValue.canonicalString`) | The core validates the sidecar and writes it verbatim; every reader parses it, so key order is not part of the format |
 | `Failures.http/io/native` return `Classified(kind, reason)` | `Failures.http(_:context:)`, `io(_:)`, `native(_:context:)`, `native(code:context:)`, all over `Failures.classify(_ input: Input)`; typed contexts (`HTTPContext`, `IOContext`, `NativeContext`); `Classified` also carries `inlineRetry` / `schedulerRetry` | The parity corpus compares the whole classification the core returns |
 
@@ -149,17 +173,25 @@ failure ops (`area_validate_id`, `area_layout`, `area_published`,
 `area_recover`, `classify_failure`) through the internal `AreaStorage` and
 `Failures` (as the Kotlin runner uses its internals for them). The area ops
 run on a copy of `tests/fixtures/area-storage-0.2.0/` in the scratch
-directory (recovery mutates it). Current result: 240 calls run, 28
+directory (recovery mutates it). Current result: 219 calls run, 24
 `abi_only` skipped, the same as the Kotlin runner. A mismatch is an adapter bug: fix the
 adapter, never `expected.json`.
 
+## Area downloads
+
+`AreaManager(directory:config:)` keeps published areas in
+`<directory>/cantino-areas` (the core's layout, identical to Android's) and
+requests, checkpoints and partial downloads in
+`<directory>/cantino-area-downloads` (excluded from backup). The default
+directory is Application Support. Runs, states and subscribers are shared
+by every manager for the same directory in the process. Everything that
+must agree with Android is the core's: the SliceOSM protocol, the extract
+engine, staging, the commit journal, recovery, the area lock and the
+failure table.
+
 ## Not in this slice
 
-- Area download lifecycle (`AreaManager`, `AreaConfig`, `AreaState`,
-  SliceOSM HTTP), the networked basemap extract (public `BasemapExtract`,
-  `BasemapSource`, `ProtomapsBuilds`), and `Cantino.VERSION`: they need iOS
-  background transfer and scheduling. Their platform-neutral halves are
-  here: `SliceProtocol`, `BasemapPlan` / `BasemapAssembler`, `AreaStorage`
-  and `Failures` (internal), `PmtilesInfo` (public).
-- iOS/macOS build: xcframework binary target and simulator tests (macOS CI).
-- `scripts/check.sh` does not run the Swift tests (Docker dependency).
+- A real kill test on a device (Android has `scripts/kill-test-android.sh`):
+  the Swift tests recreate a killed process's on-disk state instead.
+- `ProtomapsBuilds` (basemap build discovery) lives in the café example on
+  Android and will in the iOS café example.

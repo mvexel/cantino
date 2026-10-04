@@ -280,8 +280,8 @@ extension AreaInfo: CanonicalJSON {
     /// compares it with the file).
     var canonical: JSONValue {
         .object([
-            "data": .string(dataPath),
-            "basemap": basemapPath.map(JSONValue.string) ?? .null,
+            "data": .string(dataURL.path),
+            "basemap": basemapURL.map { .string($0.path) } ?? .null,
             "metadata": metadata?.json ?? .null,
         ])
     }

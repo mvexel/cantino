@@ -19,7 +19,11 @@ iOS groundwork, merged onto 0.3.0.
 - `PmtilesInfo` exposes every `cantino_basemap_info` header field.
 - Parity corpus (`tests/parity`): one call list with byte-for-byte expected
   output, run by Rust (`cargo test`), Kotlin (instrumented) and Swift runners.
-- Swift package (`swift/`) mirroring the Kotlin store API.
+- Swift package (`swift/`) mirroring the Kotlin API, shipped to Apple
+  platforms as `CCantino.xcframework` (`scripts/build-xcframework.sh`):
+  store API, import profiles, and `AreaManager` downloads (URLSession in the
+  app's process; interrupted runs resume when the app next creates a
+  manager). Tested on the iOS simulator and macOS.
 
 ## 0.3.0 — 2026-10-04
 
