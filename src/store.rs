@@ -50,29 +50,58 @@ pub struct Dependencies {
     pub objects: Vec<Object>,
     pub missing: Vec<OsmId>,
 }
+/// One tag predicate of a `Query`. Matching is on raw strings: case-sensitive,
+/// no trimming; a missing tag and a tag with an empty value are distinct.
+///
+/// JSON wire form (C ABI, Kotlin adapter): `{"Exists":"k"}`,
+/// `{"Equals":["k","v"]}`, `{"NotExists":"k"}`.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum TagFilter {
+    /// Tag `k` is present with any value (an empty value counts).
     Exists(String),
+    /// Tag `k` has exactly value `v`.
     Equals(String, String),
+    /// Tag `k` is absent. Never drives a query: absence has no index range,
+    /// so it is only checked on candidates that another filter (an
+    /// `Exists`/`Equals` filter or the bbox) produced. A query whose only
+    /// filters are `NotExists` is rejected instead of silently scanning
+    /// the whole area.
+    NotExists(String),
 }
 impl TagFilter {
     fn key(&self) -> &str {
         match self {
-            Self::Exists(key) | Self::Equals(key, _) => key,
+            Self::Exists(key) | Self::Equals(key, _) | Self::NotExists(key) => key,
         }
+    }
+    /// Whether this filter can be a candidate source (has an index range).
+    fn drives(&self) -> bool {
+        !matches!(self, Self::NotExists(_))
     }
     fn matches(&self, object: &Object) -> bool {
         match self {
             Self::Exists(key) => object.tag(key).is_some(),
             Self::Equals(key, value) => object.tag(key) == Some(value.as_str()),
+            Self::NotExists(key) => object.tag(key).is_none(),
         }
     }
 }
+
+/// Most IDs one `Store::get_many` call accepts; the same bound as a query
+/// page, so one batch never holds more objects than one page can.
+pub const MAX_BATCH: usize = 10_000;
+
+/// How deep `Store::representative_point` follows relation members that are
+/// relations themselves. Deeper members are ignored (they contribute no
+/// point), which bounds the work on pathological nesting.
+pub const MAX_RELATION_DEPTH: usize = 8;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Query {
     /// All filters must match; missing and empty tag values are distinct.
+    /// `NotExists` filters need a driver: at least one `Exists`/`Equals`
+    /// filter or a bbox.
     pub tags: Vec<TagFilter>,
     /// Spatial filter. Tagged nodes match exactly when the point lies inside
     /// the box (edges included). Ways and relations match when their bounding
@@ -205,6 +234,7 @@ impl Store {
         })
     }
 
+    /// The object with `id`, or `None` when it is not in the area.
     pub fn get(&self, id: OsmId) -> Result<Option<Object>> {
         let (kind, id) = checked_id(id)?;
         match kind {
@@ -213,6 +243,28 @@ impl Store {
             _ => self.read_relations(RELATION_BY_ID, params![id]),
         }
         .map(|mut objects| objects.pop())
+    }
+
+    /// Looks up several objects at once: one result per input ID, in input
+    /// order, `None` where the object is not in the area. Duplicates in `ids`
+    /// are looked up (and returned) once per occurrence.
+    ///
+    /// Same cost per object as `get` (each is a primary-key lookup on a
+    /// cached statement); the point is one call across the C ABI / JNI
+    /// instead of one per object. At most `MAX_BATCH` IDs per call; more is
+    /// an `Error::Invalid`, never a truncation. All IDs are validated before
+    /// any is read, so an invalid ID fails the whole call.
+    pub fn get_many(&self, ids: &[OsmId]) -> Result<Vec<Option<Object>>> {
+        if ids.len() > MAX_BATCH {
+            return Err(Error::Invalid(format!(
+                "batch get takes at most {MAX_BATCH} IDs, got {}; split the request",
+                ids.len()
+            )));
+        }
+        for id in ids {
+            checked_id(*id)?;
+        }
+        ids.iter().map(|id| self.get(*id)).collect()
     }
 
     /// Counts recorded at import. Constant time.
@@ -310,10 +362,25 @@ impl Store {
     /// - With a bbox, the R-tree is a candidate source too. Whichever of the
     ///   best tag filter and the bbox selects fewer rows drives; the other is
     ///   applied per candidate (bbox via an R-tree rowid lookup).
+    /// - `NotExists` filters never drive; they are checked per candidate. A
+    ///   query whose only filters are `NotExists` (no other tag filter, no
+    ///   bbox) is rejected with `Error::Invalid`.
     /// - Without any filter, objects are read in primary-key order.
     pub fn query(&self, query: &Query) -> Result<Vec<Object>> {
         if !(1..=10000).contains(&query.limit) {
             return Err(Error::Invalid("query limit must be 1..=10000".into()));
+        }
+        // NotExists filters are post-checks only. Without a filter that can
+        // drive (Exists/Equals or a bbox), answering would mean a full scan
+        // of every table, which this method promises never to do for a
+        // filtered query, so reject it with a message naming the fix.
+        let drivers = query.tags.iter().filter(|filter| filter.drives()).count();
+        if drivers == 0 && query.bbox.is_none() && !query.tags.is_empty() {
+            return Err(Error::Invalid(
+                "a query with only NotExists filters has nothing to drive it; \
+                 add an Exists or Equals filter or a bbox"
+                    .into(),
+            ));
         }
         let cursor = match query.after {
             Some(after) => checked_id(after)?,
@@ -330,10 +397,12 @@ impl Store {
             }
             None => None,
         };
-        // Resolve keys once. An unknown key cannot match anything, and the
-        // filters are ANDed, so the whole query is empty.
-        let mut key_ids = Vec::with_capacity(query.tags.len());
-        for filter in &query.tags {
+        // Resolve driving keys once. An unknown key cannot match anything,
+        // and the filters are ANDed, so the whole query is empty. A NotExists
+        // filter on an unknown key matches every object; `matches` handles
+        // it by string, so it needs no dictionary id.
+        let mut key_ids = Vec::with_capacity(drivers);
+        for filter in query.tags.iter().filter(|filter| filter.drives()) {
             match self.keys.get(filter.key()) {
                 Some(id) => key_ids.push(*id),
                 None => return Ok(vec![]),
@@ -343,8 +412,9 @@ impl Store {
         let mut driver = Driver::Scan;
         let mut best = i64::MAX;
         // Estimates only matter when there is a choice to make.
-        let choose = query.tags.len() + usize::from(bounds.is_some()) > 1;
-        for (filter, key) in query.tags.iter().zip(&key_ids) {
+        let choose = drivers + usize::from(bounds.is_some()) > 1;
+        let driving = query.tags.iter().filter(|filter| filter.drives());
+        for (filter, key) in driving.zip(&key_ids) {
             let estimate = if choose {
                 self.estimate(filter, *key)?
             } else {
@@ -375,6 +445,7 @@ impl Store {
                 let (sql, value) = match filter {
                     TagFilter::Equals(_, value) => (TAG_EQUALS, Some(value.as_str())),
                     TagFilter::Exists(_) => (TAG_EXISTS, None),
+                    TagFilter::NotExists(_) => unreachable!("NotExists never drives"),
                 };
                 let mut statement = self.connection.prepare_cached(sql)?;
                 let mut rows = statement.query(params![key, value, cursor.0, cursor.1])?;
@@ -418,26 +489,137 @@ impl Store {
         Ok(objects)
     }
 
-    /// Resolve in original order. A missing node remains `None`, so a renderer
-    /// cannot accidentally draw a line across an unresolved gap.
+    /// The coordinates of way `id`'s nodes, resolved in the way's original
+    /// order with repeats kept (a closed way ends with its first coordinate
+    /// again). `None` when the way is not in the area. A node outside the
+    /// area remains a `None` entry, so a renderer cannot accidentally draw a
+    /// line across an unresolved gap.
+    ///
+    /// Cost: one primary-key lookup per node reference, reading only the
+    /// coordinate columns (not tags or metadata).
     pub fn way_coordinates(&self, id: WayId) -> Result<Option<Vec<Option<Coordinate>>>> {
         let Some(Object::Way(way)) = self.get(OsmId::Way(id))? else {
             return Ok(None);
         };
-        let mut statement = self
-            .connection
-            .prepare_cached("SELECT lat, lon FROM nodes WHERE id = ?1")?;
-        let coordinates = way
-            .nodes
-            .into_iter()
-            .map(|node| {
-                let point = statement
-                    .query_row([node.0], |row| Ok((row.get(0)?, row.get(1)?)))
-                    .optional()?;
-                Ok(point.map(|(lat_e7, lon_e7)| Coordinate { lat_e7, lon_e7 }))
-            })
-            .collect::<Result<_>>()?;
-        Ok(Some(coordinates))
+        Ok(Some(self.resolve_nodes(&way.nodes)?))
+    }
+
+    /// A single label/anchor point for an object, or `None` when the object
+    /// is not in the area or none of its geometry is.
+    ///
+    /// **This is not a guaranteed point-on-surface or a true centroid.** It
+    /// is a cheap, deterministic point for placing a marker, a label or a
+    /// distance origin. For a concave polygon (an L-shaped building, a
+    /// horseshoe) the point can lie outside the polygon; for a multipolygon
+    /// it can fall in a hole or between parts. Definition:
+    ///
+    /// - **Node**: its coordinate.
+    /// - **Closed way** (first and last node reference equal, at least two
+    ///   references): the arithmetic mean of its *distinct* vertices that are
+    ///   in the area (the repeated closing node counts once).
+    /// - **Open way**: the point at half the length of the polyline through
+    ///   its in-area nodes, in order. Nodes outside the area are skipped, so
+    ///   the polyline joins across such gaps. Lengths are measured on a local
+    ///   equirectangular projection (longitude scaled by the cosine of the
+    ///   mean latitude): accurate enough at street and city scale, not a
+    ///   geodesic. A zero-length way yields its first in-area node.
+    /// - **Relation**: the arithmetic mean of the representative points of
+    ///   its distinct members, counting only members that are in the area and
+    ///   have a point. Every member weighs the same, whatever its size.
+    ///   Member relations are followed recursively up to
+    ///   `MAX_RELATION_DEPTH` levels; a member relation that is already being
+    ///   resolved further up (a cycle) contributes nothing.
+    ///
+    /// Means are taken in degrees with no antimeridian handling (areas never
+    /// wrap; see `Bbox`), then rounded to the 1e-7 storage grid.
+    pub fn representative_point(&self, id: OsmId) -> Result<Option<Coordinate>> {
+        checked_id(id)?;
+        let mut path = BTreeSet::new();
+        self.point_of(id, 0, &mut path)
+    }
+
+    /// Recursive worker for `representative_point`. `path` holds the
+    /// relations currently being resolved (the recursion stack), which is
+    /// the cycle guard: a relation reached again through its own members is
+    /// skipped instead of recursing forever. It is a stack, not a global
+    /// visited set, so a relation shared by two sibling members still counts
+    /// for both.
+    fn point_of(
+        &self,
+        id: OsmId,
+        depth: usize,
+        path: &mut BTreeSet<RelationId>,
+    ) -> Result<Option<Coordinate>> {
+        match id {
+            OsmId::Node(node) => self.node_coordinate(node),
+            OsmId::Way(_) => {
+                let Some(Object::Way(way)) = self.get(id)? else {
+                    return Ok(None);
+                };
+                let closed = way.nodes.len() >= 2 && way.nodes.first() == way.nodes.last();
+                if closed {
+                    // Distinct by node ID, so the closing repeat (and any
+                    // other repeated vertex) is counted once.
+                    let mut seen = BTreeSet::new();
+                    let distinct: Vec<NodeId> = way
+                        .nodes
+                        .iter()
+                        .copied()
+                        .filter(|node| seen.insert(*node))
+                        .collect();
+                    let points: Vec<Coordinate> = self
+                        .resolve_nodes(&distinct)?
+                        .into_iter()
+                        .flatten()
+                        .collect();
+                    Ok(mean(&points))
+                } else {
+                    let points: Vec<Coordinate> = self
+                        .resolve_nodes(&way.nodes)?
+                        .into_iter()
+                        .flatten()
+                        .collect();
+                    Ok(polyline_midpoint(&points))
+                }
+            }
+            OsmId::Relation(relation) => {
+                // Depth 0 is the root object, so a root relation's members are
+                // at depth 1 and at most MAX_RELATION_DEPTH nested levels are
+                // followed below it.
+                if depth > MAX_RELATION_DEPTH || !path.insert(relation) {
+                    return Ok(None);
+                }
+                let result = self.relation_point(id, depth, path);
+                // Pop on every exit path, including errors, so the guard only
+                // ever describes the live recursion stack.
+                path.remove(&relation);
+                result
+            }
+        }
+    }
+
+    /// Mean of a relation's distinct members' points; see `point_of`.
+    fn relation_point(
+        &self,
+        id: OsmId,
+        depth: usize,
+        path: &mut BTreeSet<RelationId>,
+    ) -> Result<Option<Coordinate>> {
+        let Some(Object::Relation(relation)) = self.get(id)? else {
+            return Ok(None);
+        };
+        let mut seen = BTreeSet::new();
+        let mut points = vec![];
+        for member in &relation.members {
+            // A member listed twice (e.g. under two roles) counts once.
+            if !seen.insert(member.id) {
+                continue;
+            }
+            if let Some(point) = self.point_of(member.id, depth + 1, path)? {
+                points.push(point);
+            }
+        }
+        Ok(mean(&points))
     }
 
     pub fn missing_references(&self, id: OsmId) -> Result<Option<Vec<MissingReference>>> {
@@ -482,6 +664,25 @@ impl Store {
 
     // ---- internals ----
 
+    /// A node's coordinate only (no tags or metadata decoded).
+    fn node_coordinate(&self, id: NodeId) -> Result<Option<Coordinate>> {
+        let mut statement = self
+            .connection
+            .prepare_cached("SELECT lat, lon FROM nodes WHERE id = ?1")?;
+        let point = statement
+            .query_row([id.0], |row| Ok((row.get(0)?, row.get(1)?)))
+            .optional()?;
+        Ok(point.map(|(lat_e7, lon_e7)| Coordinate { lat_e7, lon_e7 }))
+    }
+
+    /// Coordinates for `nodes` in order; `None` where a node is not in the area.
+    fn resolve_nodes(&self, nodes: &[NodeId]) -> Result<Vec<Option<Coordinate>>> {
+        nodes
+            .iter()
+            .map(|node| self.node_coordinate(*node))
+            .collect()
+    }
+
     fn contains(&self, id: OsmId) -> Result<bool> {
         let (kind, id) = checked_id(id)?;
         let sql = [
@@ -497,6 +698,7 @@ impl Store {
         let (sql, value) = match filter {
             TagFilter::Equals(_, value) => (COUNT_EQUALS, Some(value.as_str())),
             TagFilter::Exists(_) => (COUNT_EXISTS, None),
+            TagFilter::NotExists(_) => unreachable!("NotExists is never estimated as a driver"),
         };
         let mut statement = self.connection.prepare_cached(sql)?;
         Ok(statement.query_row(params![key, value, ESTIMATE_CAP], |row| row.get(0))?)
@@ -672,6 +874,63 @@ impl Store {
             user: self.users.get(&uid).cloned().unwrap_or_default(),
         })
     }
+}
+
+/// Arithmetic mean in degrees, rounded to the e7 grid; `None` for no points.
+/// Summing i32 e7 values in f64 is exact far beyond any realistic vertex
+/// count, so the only rounding is the final one.
+fn mean(points: &[Coordinate]) -> Option<Coordinate> {
+    if points.is_empty() {
+        return None;
+    }
+    let count = points.len() as f64;
+    let lat = points.iter().map(|p| p.lat_e7 as f64).sum::<f64>() / count;
+    let lon = points.iter().map(|p| p.lon_e7 as f64).sum::<f64>() / count;
+    // A mean of valid coordinates is itself within WGS84 bounds, so the
+    // rounded values fit the i32 storage range.
+    Some(Coordinate {
+        lat_e7: lat.round() as i32,
+        lon_e7: lon.round() as i32,
+    })
+}
+
+/// The point at half the length of the polyline through `points`, measured
+/// on a local equirectangular projection (x = longitude scaled by the cosine
+/// of the mean latitude, y = latitude). `None` for no points; the first point
+/// when the total length is zero (one point, or all points equal).
+fn polyline_midpoint(points: &[Coordinate]) -> Option<Coordinate> {
+    let first = *points.first()?;
+    let mean_lat = points.iter().map(|p| p.lat()).sum::<f64>() / points.len() as f64;
+    let scale = mean_lat.to_radians().cos();
+    // Segment lengths in projected degree units; only ratios matter, so no
+    // conversion to metres is needed.
+    let length = |a: Coordinate, b: Coordinate| {
+        let dx = (b.lon() - a.lon()) * scale;
+        let dy = b.lat() - a.lat();
+        (dx * dx + dy * dy).sqrt()
+    };
+    let total: f64 = points.windows(2).map(|pair| length(pair[0], pair[1])).sum();
+    if total == 0.0 {
+        return Some(first);
+    }
+    let mut remaining = total / 2.0;
+    for pair in points.windows(2) {
+        let (a, b) = (pair[0], pair[1]);
+        let segment = length(a, b);
+        if segment > 0.0 && remaining <= segment {
+            // Linear interpolation along this segment; t is in [0, 1].
+            let t = remaining / segment;
+            let lat = a.lat_e7 as f64 + t * (b.lat_e7 as f64 - a.lat_e7 as f64);
+            let lon = a.lon_e7 as f64 + t * (b.lon_e7 as f64 - a.lon_e7 as f64);
+            return Some(Coordinate {
+                lat_e7: lat.round() as i32,
+                lon_e7: lon.round() as i32,
+            });
+        }
+        remaining -= segment;
+    }
+    // Floating-point leftovers can step just past the last segment.
+    points.last().copied()
 }
 
 fn typed(kind: i64, id: i64) -> Result<OsmId> {

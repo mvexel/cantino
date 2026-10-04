@@ -11,7 +11,8 @@ extern "C" {
 #endif
 
 typedef struct CantinoStore CantinoStore;
-// Return codes: 0 success; 1 object missing (get only); -1 error.
+// Return codes: 0 success; 1 object missing (get, way_coordinates,
+// representative_point only); -1 error.
 // Strings and paths are UTF-8. Every non-NULL result/error buffer must be freed
 // with cantino_free, including buffers returned alongside an error.
 // Store handles belong to their creating thread. Open/lookup/query/close must
@@ -27,10 +28,30 @@ void cantino_free(char *value);
 // Looks up one object; kind node=0, way=1, relation=2. Returns 0 with the
 // object JSON in *json, or 1 (and no JSON) when it is not in the area.
 int32_t cantino_get(CantinoStore *store,int32_t kind,int64_t id,char **json,char **error);
+// Looks up several objects in one call. request: JSON array of IDs
+// [{"type":"node","id":1},{"type":"way","id":7}]; writes a JSON array with one
+// entry per ID in input order: the object, or null when it is not in the area.
+// At most 10000 IDs (more is an error, never a truncation).
+int32_t cantino_get_many(CantinoStore *store,const char *request,char **json,char **error);
+// Way node coordinates in way order (repeats kept) as one flat JSON array of
+// e7 integers: [lat_e7,lon_e7,lat_e7,lon_e7,...], with null,null for a node
+// outside the area. Returns 1 (and no JSON) when the way is not in the area.
+int32_t cantino_way_coordinates(CantinoStore *store,int64_t way_id,char **json,char **error);
+// Representative point (kind as for get): writes {"lat_e7","lon_e7"}, or
+// returns 1 (no JSON) when the object or all of its geometry is outside the
+// area. A label/anchor point, NOT a guaranteed point-on-surface: node = its
+// coordinate; closed way = mean of distinct in-area vertices; open way = point
+// at half the length of the polyline over in-area nodes; relation = mean of
+// its distinct in-area members' points (nested relations up to 8 levels,
+// cycles skipped).
+int32_t cantino_representative_point(CantinoStore *store,int32_t kind,int64_t id,char **json,char **error);
 // Runs a query (JSON) and writes a JSON array of objects ordered by (kind, id).
 // Tag filters are ANDed; a bbox yields spatial candidates (tagged nodes exact,
 // ways/relations by bounding box; untagged nodes never). limit is 1..10000;
 // exceeding max_candidates is an error, never a truncation.
+// Filters: {"Exists":k}, {"Equals":[k,v]}, {"NotExists":k}. NotExists is only
+// checked on candidates from another filter or the bbox; a query whose only
+// filters are NotExists (and no bbox) is an error.
 // Query example: {"tags":[{"Equals":["amenity","cafe"]}],"limit":100}
 // Optional bbox: {"west":-111.89,"south":40.758,"east":-111.886,"north":40.762}
 // Cursor example: {"type":"node","id":12345}; node=0, way=1, relation=2.

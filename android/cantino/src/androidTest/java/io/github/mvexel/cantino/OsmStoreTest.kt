@@ -103,6 +103,67 @@ class OsmStoreTest {
     }
 
     @Test
+    fun wayCoordinatesAndRepresentativePoints() = onWorker {
+        OsmStore.open(importFixture().path).use { store ->
+            // Way 1 is nodes 1, 2, 1: order and the closing repeat survive.
+            val node1 = Coordinate(400_000_000, -1_110_000_000)
+            val node2 = Coordinate(400_010_000, -1_110_010_000)
+            assertEquals(listOf(node1, node2, node1), store.wayCoordinates(1))
+            assertEquals(40.001, store.wayCoordinates(1)!![1]!!.lat, 1e-9)
+            assertNull(store.wayCoordinates(42)) // not in the area
+
+            assertEquals(node2, store.representativePoint(OsmId(OsmKind.NODE, 2)))
+            // Closed way: mean of its distinct vertices (nodes 1 and 2).
+            val ring = Coordinate(400_005_000, -1_110_005_000)
+            assertEquals(ring, store.representativePoint(OsmId(OsmKind.WAY, 1)))
+            // Open way 2 runs from 39.9 to 40.1 along -111: halfway is 40.0.
+            assertEquals(Coordinate(400_000_000, -1_110_000_000), store.representativePoint(OsmId(OsmKind.WAY, 2)))
+            // Relation 1: way 1 counts, the missing node 99 does not.
+            assertEquals(ring, store.representativePoint(OsmId(OsmKind.RELATION, 1)))
+            assertNull(store.representativePoint(OsmId(OsmKind.NODE, 99)))
+        }
+    }
+
+    @Test
+    fun batchGetKeepsOrderAndReportsMissing() = onWorker {
+        OsmStore.open(importFixture().path).use { store ->
+            val ids = listOf(OsmId(OsmKind.WAY, 1), OsmId(OsmKind.NODE, 99), OsmId(OsmKind.NODE, 2), OsmId(OsmKind.WAY, 1))
+            val objects = store.get(ids)
+            assertEquals(ids.size, objects.size)
+            assertEquals(store.get(ids[0]), objects[0])
+            assertNull(objects[1])
+            assertEquals("Café Test", objects[2]!!.tags["name"])
+            assertEquals(objects[0], objects[3])
+            assertTrue(store.get(emptyList()).isEmpty())
+            val tooMany = List(OsmStore.MAX_BATCH + 1) { OsmId(OsmKind.NODE, 1) }
+            assertThrows(CantinoException::class.java) { store.get(tooMany) }
+            assertEquals(OsmStore.MAX_BATCH, store.get(tooMany.drop(1)).count { it != null })
+        }
+    }
+
+    @Test
+    fun notExistsFiltersButNeedsADriver() = onWorker {
+        OsmStore.open(importFixture().path).use { store ->
+            val unnamedHighways = Query(tags = listOf(TagFilter.Exists("highway"), TagFilter.NotExists("name")))
+            assertEquals(listOf(OsmId(OsmKind.WAY, 1), OsmId(OsmKind.WAY, 2)), store.query(unnamedHighways).map { it.id })
+            val cafesWithoutSeating = Query(
+                tags = listOf(TagFilter.Equals("amenity", "cafe"), TagFilter.NotExists("outdoor_seating")),
+            )
+            assertEquals(listOf(OsmId(OsmKind.NODE, 2)), store.query(cafesWithoutSeating).map { it.id })
+            assertTrue(
+                store.query(Query(tags = listOf(TagFilter.Exists("amenity"), TagFilter.NotExists("name")))).isEmpty(),
+            )
+            val error = assertThrows(CantinoException::class.java) {
+                store.query(Query(tags = listOf(TagFilter.NotExists("name"))))
+            }
+            assertTrue(error.message!!.contains("NotExists"))
+            // A bbox drives, so NotExists alongside one is fine.
+            val box = Bbox(west = -111.002, south = 39.999, east = -110.998, north = 40.002)
+            assertTrue(OsmId(OsmKind.WAY, 2) in store.query(Query(tags = listOf(TagFilter.NotExists("name")), bbox = box)).map { it.id })
+        }
+    }
+
+    @Test
     fun invalidQueryFailsAndStoreStaysUsable() = onWorker {
         OsmStore.open(importFixture().path).use { store ->
             assertThrows(CantinoException::class.java) {

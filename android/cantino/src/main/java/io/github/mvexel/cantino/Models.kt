@@ -13,7 +13,7 @@ import org.json.JSONObject
 // and instances may be shared freely between threads.
 //
 // Binary compatibility: types the library *returns* (OsmObject and its parts,
-// ObjectMetadata, ImportReport, ObjectCounts) are plain classes with
+// ObjectMetadata, ImportReport, ObjectCounts, Coordinate) are plain classes with
 // hand-written equals/hashCode/toString and internal constructors, not data
 // classes, so a field can be added later without breaking compiled apps
 // (a data class's copy() and componentN() would change signature). Types
@@ -270,11 +270,26 @@ public sealed interface TagFilter {
      * @property value Tag value, compared exactly (case-sensitive, no trimming).
      */
     public data class Equals(val key: String, val value: String) : TagFilter
+
+    /**
+     * The object does **not** have tag [key] (e.g. amenities without
+     * `opening_hours`).
+     *
+     * Absence has no index, so this filter never drives a query: it is
+     * checked on the candidates another filter produces. A [Query] needs at
+     * least one [Exists] or [Equals] filter, or a [Query.bbox], next to it; a
+     * query whose only filters are `NotExists` throws [CantinoException]
+     * instead of scanning the whole area.
+     *
+     * @property key Tag key, raw (case-sensitive).
+     */
+    public data class NotExists(val key: String) : TagFilter
 }
 
 internal fun TagFilter.toJson(): JSONObject = when (this) {
     is TagFilter.Exists -> JSONObject().put("Exists", key)
     is TagFilter.Equals -> JSONObject().put("Equals", JSONArray().put(key).put(value))
+    is TagFilter.NotExists -> JSONObject().put("NotExists", key)
 }
 
 /**
@@ -387,5 +402,35 @@ public class ImportReport internal constructor(
             json.getJSONObject("counts").let { ObjectCounts(it.getLong("nodes"), it.getLong("ways"), it.getLong("relations")) },
             json.getLong("database_bytes"),
         )
+    }
+}
+
+/**
+ * A WGS84 point, as returned by [OsmStore.wayCoordinates] and
+ * [OsmStore.representativePoint]. Like [OsmObject.Node], the values are
+ * integers in 1e-7 degrees ([latE7], [lonE7]), the storage format, so they
+ * compare exactly; [lat] and [lon] are the same values in degrees.
+ */
+public class Coordinate internal constructor(
+    /** Latitude in 1e-7 degrees. */
+    public val latE7: Int,
+    /** Longitude in 1e-7 degrees. */
+    public val lonE7: Int,
+) {
+    /** Latitude in degrees (WGS84). */
+    public val lat: Double get() = latE7 / 1e7
+
+    /** Longitude in degrees (WGS84). */
+    public val lon: Double get() = lonE7 / 1e7
+
+    override fun equals(other: Any?): Boolean = this === other || other is Coordinate &&
+        latE7 == other.latE7 && lonE7 == other.lonE7
+
+    override fun hashCode(): Int = hash(latE7, lonE7)
+
+    override fun toString(): String = "Coordinate(latE7=$latE7, lonE7=$lonE7)"
+
+    internal companion object {
+        fun fromJson(json: JSONObject) = Coordinate(json.getInt("lat_e7"), json.getInt("lon_e7"))
     }
 }

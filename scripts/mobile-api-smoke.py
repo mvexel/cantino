@@ -13,6 +13,9 @@ lib.cantino_import.argtypes = [string,string,string,c.POINTER(ptr),c.POINTER(ptr
 lib.cantino_open.argtypes = [string,c.POINTER(ptr),c.POINTER(ptr)]
 lib.cantino_get.argtypes = [ptr,c.c_int32,c.c_int64,c.POINTER(ptr),c.POINTER(ptr)]
 lib.cantino_query.argtypes = [ptr,string,c.POINTER(ptr),c.POINTER(ptr)]
+lib.cantino_get_many.argtypes = [ptr,string,c.POINTER(ptr),c.POINTER(ptr)]
+lib.cantino_way_coordinates.argtypes = [ptr,c.c_int64,c.POINTER(ptr),c.POINTER(ptr)]
+lib.cantino_representative_point.argtypes = [ptr,c.c_int32,c.c_int64,c.POINTER(ptr),c.POINTER(ptr)]
 lib.cantino_close.argtypes = [ptr,c.POINTER(ptr)]
 lib.cantino_free.argtypes = [ptr]
 lib.cantino_slice_job_request.argtypes = [string,string,string,c.POINTER(ptr),c.POINTER(ptr)]
@@ -57,6 +60,27 @@ with tempfile.TemporaryDirectory() as directory:
             pass
         # A failed query leaves the store usable.
         assert call(lib.cantino_get,handle,1,1)[1]['nodes'] == [1,2,1]
+        # NotExists: a post-check that needs a driver.
+        _, unnamed = call(lib.cantino_query,handle,b'{"tags":[{"Exists":"highway"},{"NotExists":"name"}]}')
+        assert [o['id'] for o in unnamed] == [1,2]
+        try:
+            call(lib.cantino_query,handle,b'{"tags":[{"NotExists":"name"}]}')
+            raise AssertionError('expected no-driver error')
+        except RuntimeError as failure:
+            assert 'NotExists' in str(failure)
+        # Batch get: input order, null for missing.
+        _, batch = call(lib.cantino_get_many,handle,b'[{"type":"way","id":1},{"type":"node","id":99},{"type":"node","id":2}]')
+        assert [o and o['id'] for o in batch] == [1,None,2]
+        # Way coordinates: flat [lat_e7, lon_e7, ...], repeats kept.
+        _, flat = call(lib.cantino_way_coordinates,handle,1)
+        assert flat == [400000000,-1110000000,400010000,-1110010000,400000000,-1110000000]
+        assert call(lib.cantino_way_coordinates,handle,42) == (1,None)
+        # Representative point: way 1 is closed (1,2,1): mean of nodes 1 and 2.
+        _, point = call(lib.cantino_representative_point,handle,1,1)
+        assert point == {'lat_e7':400005000,'lon_e7':-1110005000}
+        # Relation 1: its only in-area member is way 1 (node 99 is missing).
+        assert call(lib.cantino_representative_point,handle,2,1)[1] == point
+        assert call(lib.cantino_representative_point,handle,0,99) == (1,None)
     finally:
         assert lib.cantino_close(handle,c.byref(error)) == 0
         lib.cantino_free(error)
@@ -151,4 +175,4 @@ with tempfile.TemporaryDirectory() as directory:
     assert info['addressed_tiles'] == 22 and info['spec_version'] == 3
     assert info['file_bytes'] == (d/'out.pmtiles').stat().st_size == tiles['archive_bytes']
 status_call(lib.cantino_basemap_plan_free,None)
-print('Rust mobile C ABI import/open/get/query/error/free/slice/basemap checks passed')
+print('Rust mobile C ABI import/open/get/get_many/query/way_coordinates/representative_point/error/free/slice/basemap checks passed')

@@ -124,6 +124,68 @@ pub extern "system" fn Java_io_github_mvexel_cantino_NativeBridge_get<'local>(
     .resolve::<ThrowRuntimeExAndDefault>()
 }
 
+/// Batch lookup: JSON array of IDs in, JSON array of objects-or-null out.
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_io_github_mvexel_cantino_NativeBridge_getMany<'local>(
+    mut env: EnvUnowned<'local>,
+    _class: JClass<'local>,
+    handle: jlong,
+    request: JString<'local>,
+) -> JString<'local> {
+    env.with_env(|env| -> Result<JString<'local>, BridgeError> {
+        let request = c_string(request.try_to_string(env)?)?;
+        // SAFETY: live handle; request lives for the call.
+        json_call(env, |out, error| unsafe {
+            cantino_get_many(handle as *mut CantinoStore, request.as_ptr(), out, error)
+        })
+    })
+    .resolve::<ThrowRuntimeExAndDefault>()
+}
+
+/// Flat `[lat_e7, lon_e7, ...]` JSON array, or Java `null` when the way is
+/// not in the area (status 1).
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_io_github_mvexel_cantino_NativeBridge_wayCoordinates<'local>(
+    mut env: EnvUnowned<'local>,
+    _class: JClass<'local>,
+    handle: jlong,
+    id: jlong,
+) -> JString<'local> {
+    env.with_env(|env| -> Result<JString<'local>, BridgeError> {
+        // SAFETY: live handle owned by the Kotlin store on this thread.
+        let (status, json) = call(|out, error| unsafe {
+            cantino_way_coordinates(handle as *mut CantinoStore, id, out, error)
+        })?;
+        match (status, json) {
+            (0, Some(json)) => Ok(JString::from_str(env, json)?),
+            _ => Ok(JString::default()),
+        }
+    })
+    .resolve::<ThrowRuntimeExAndDefault>()
+}
+
+/// `{"lat_e7","lon_e7"}`, or Java `null` when there is no point (status 1).
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_io_github_mvexel_cantino_NativeBridge_representativePoint<'local>(
+    mut env: EnvUnowned<'local>,
+    _class: JClass<'local>,
+    handle: jlong,
+    kind: jint,
+    id: jlong,
+) -> JString<'local> {
+    env.with_env(|env| -> Result<JString<'local>, BridgeError> {
+        // SAFETY: live handle owned by the Kotlin store on this thread.
+        let (status, json) = call(|out, error| unsafe {
+            cantino_representative_point(handle as *mut CantinoStore, kind, id, out, error)
+        })?;
+        match (status, json) {
+            (0, Some(json)) => Ok(JString::from_str(env, json)?),
+            _ => Ok(JString::default()),
+        }
+    })
+    .resolve::<ThrowRuntimeExAndDefault>()
+}
+
 #[unsafe(no_mangle)]
 pub extern "system" fn Java_io_github_mvexel_cantino_NativeBridge_query<'local>(
     mut env: EnvUnowned<'local>,

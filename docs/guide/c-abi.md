@@ -18,7 +18,7 @@ Kotlin (OsmStore, AreaManager)      Swift (planned)      Python ctypes (tests)
 
 | Rule | Detail |
 | --- | --- |
-| Return codes | `0` success, `1` not found (`cantino_get` only), `-1` error |
+| Return codes | `0` success, `1` not found (`cantino_get`, `cantino_way_coordinates`, `cantino_representative_point`), `-1` error |
 | Strings | UTF-8, NUL-terminated. Structured input and output is JSON |
 | Ownership | Every non-NULL `char*` the library returns (result **or** `*error`) is owned by the caller and freed with `cantino_free`, including error strings returned alongside a failure. `cantino_free(NULL)` is a no-op |
 | Handles | `CantinoStore*`, `CantinoBasemapPlan*`, `CantinoBasemapAssembler*` belong to the thread that created them. Calls from another thread return `-1` with an error and leave the handle untouched |
@@ -29,7 +29,7 @@ Kotlin (OsmStore, AreaManager)      Swift (planned)      Python ctypes (tests)
 
 | Group | Functions | Threading |
 | --- | --- | --- |
-| Store | `cantino_open`, `cantino_get`, `cantino_query`, `cantino_close` | Owner thread |
+| Store | `cantino_open`, `cantino_get`, `cantino_get_many`, `cantino_query`, `cantino_way_coordinates`, `cantino_representative_point`, `cantino_close` | Owner thread |
 | Import | `cantino_import(input, destination, options, report, error)` | Any thread; synchronous, seconds of CPU and disk: never the UI thread |
 | SliceOSM protocol | `cantino_slice_job_request`, `cantino_slice_job`, `cantino_slice_progress` | Pure functions, any thread. The adapter does HTTP; these build requests and parse responses |
 | Basemap extract | `cantino_basemap_plan_*`, `cantino_basemap_asm_*` | Sans-IO state machine; owner thread per handle, fetch on any thread |
@@ -58,10 +58,27 @@ cantino_close(store, &error);   /* same thread as cantino_open */
 cantino_free(error);
 ```
 
-Query JSON: `tags` (array of `{"Equals":[k,v]}` / `{"Exists":k}`), optional
-`bbox`, optional `after` cursor `{"type":"node","id":123}`, `limit`
-1..10000, optional `max_candidates`. Semantics are the same as the Kotlin
+Query JSON: `tags` (array of `{"Equals":[k,v]}` / `{"Exists":k}` /
+`{"NotExists":k}`), optional `bbox`, optional `after` cursor
+`{"type":"node","id":123}`, `limit` 1..10000, optional `max_candidates`.
+`NotExists` never drives a query: a query whose only filters are `NotExists`
+and that has no `bbox` returns `-1`. Semantics are the same as the Kotlin
 `Query` ([Querying](querying.md)).
+
+## Geometry and batch lookups
+
+| Function | Input | Output |
+| --- | --- | --- |
+| `cantino_get_many(store, request, json, error)` | JSON array of IDs, `[{"type":"node","id":1},{"type":"way","id":7}]`, at most 10000 | JSON array, one entry per ID in input order: the object, or `null` when it is not in the area |
+| `cantino_way_coordinates(store, way_id, json, error)` | Way ID | Flat JSON array of e7 integers `[lat_e7,lon_e7,lat_e7,lon_e7,...]` in way order (repeats kept), `null,null` for a node outside the area. `1` when the way is not in the area |
+| `cantino_representative_point(store, kind, id, json, error)` | Kind code and ID, as for `cantino_get` | `{"lat_e7":...,"lon_e7":...}`, or `1` when the object or all of its geometry is outside the area |
+
+The representative point is a label/anchor point, **not** a guaranteed
+point-on-surface: node = its coordinate; closed way = mean of its distinct
+in-area vertices; open way = point at half the polyline length over its
+in-area nodes; relation = mean of its distinct in-area members' points
+(nested relations followed up to 8 levels, cycles skipped). See
+[Querying](querying.md#geometry-helpers).
 
 ## Basemap extract flow
 
