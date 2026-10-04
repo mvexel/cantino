@@ -43,6 +43,14 @@ mise exec -- ./gradlew :cantino:connectedDebugAndroidTest               # instru
 The AAR packages whatever is in `target/android/<ABI>/`, so rerun
 `scripts/build-android.sh` after changing Rust code.
 
+The Pages site (landing page, Maven repository, `/api/`, and this guide as
+HTML under `/guide/`) is built by `scripts/publish-pages.sh`. Rendering the
+guide needs [pandoc](https://pandoc.org/installing.html) 3.x on the `PATH`
+(it converts `docs/guide/*.md` with `scripts/guide-filter.lua` and
+`scripts/guide-template.html`; Mermaid diagrams are drawn in the browser).
+To check only the guide: `scripts/publish-pages.sh --guide-only --out build/pages`,
+then open `build/pages/guide/index.html`.
+
 Sample apps need the offline style assets first:
 
 ```sh

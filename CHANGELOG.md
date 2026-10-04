@@ -50,6 +50,11 @@ before 1.0 a minor version may break the API.
 - kotlinx-coroutines (`kotlinx-coroutines-android:1.10.2`) is now an `api`
   dependency (POM compile scope): apps no longer declare it themselves.
 - Quickstart and guide use the `runId` match instead of the `dropWhile` workaround.
+- Docs: the guide is published as HTML on the Pages site under `/guide/`
+  (`scripts/publish-pages.sh`, needs pandoc); new pages for SliceOSM in
+  production, opening hours, editing apps, and maintenance/roadmap; the
+  defaults of `Query` and `AreaConfig` are stated in KDoc (Dokka does not
+  render non-literal defaults).
 
 ### Breaking
 
