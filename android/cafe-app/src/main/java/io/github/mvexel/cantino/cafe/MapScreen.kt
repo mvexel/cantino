@@ -41,7 +41,7 @@ import java.time.format.DateTimeFormatter
  * The map screen: offline basemap from the area's PMTiles, cafés from the
  * offline OSM store as a GeoJSON overlay, filters, and a "nearby" list.
  *
- * Data flow: [StoreWorker.withStore] (store thread) → [CafeLoader] → plain
+ * Data flow: [CafeStore.withStore] (store thread) → [CafeLoader] → plain
  * [Cafe] values on the main thread → filtered in Kotlin → GeoJSON string for
  * MapLibre and rows for the list. Opening hours are evaluated at the moment
  * of filtering (and again on resume), so "open now" means now.
@@ -119,7 +119,7 @@ class MapScreen(
         mapView.onCreate(null)
         scope.launch {
             val loaded = try {
-                StoreWorker.withStore(activity) { store, area -> area to area.metadata?.bbox?.let { CafeLoader.load(store, it) } }
+                CafeStore.withStore(activity) { store, area -> area to area.metadata?.bbox?.let { CafeLoader.load(store, it) } }
             } catch (error: Exception) {
                 Log.e(TAG, "loading cafés failed", error)
                 status.text = "Could not open the offline area: ${error.message}"

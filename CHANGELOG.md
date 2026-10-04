@@ -3,6 +3,19 @@
 All notable changes to Cantino (formerly osm-framework). Versions follow semantic versioning;
 before 1.0 a minor version may break the API.
 
+## 0.2.0 (unreleased)
+
+- **`AsyncOsmStore`**: a coroutine wrapper that owns one dedicated thread,
+  opens the `OsmStore` on it and runs every call there (`suspend` `get`,
+  `query`, `close`, plus `withStore { }` to reach any `OsmStore` method).
+  Removes the thread-confinement trap of using an `OsmStore` from
+  `Dispatchers.IO`. The café app uses it instead of its own worker.
+- **`Bbox.around(lat, lon, widthKm, heightKm = widthKm)`**: a box around a
+  point (flat-earth approximation). Latitude clamps to ±85, longitude to ±180;
+  a box that would cross the antimeridian is cut at it, not wrapped.
+- **armeabi-v7a**: the AAR now also packages `armeabi-v7a/libcantino.so`
+  (32-bit ARM devices); `scripts/build-android.sh` builds it by default.
+
 ## 0.1.0 — first release
 
 Android library `io.github.mvexel:cantino:0.1.0` (AAR, minSdk 26,

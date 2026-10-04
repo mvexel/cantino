@@ -32,7 +32,7 @@ import kotlinx.coroutines.launch
  *   "not in this area" when [io.github.mvexel.cantino.OsmStore.get]
  *   returns null (extracts are clipped at the area edge).
  *
- * All store access goes through [StoreWorker] (its one thread). Opened with
+ * All store access goes through [CafeStore] (its one thread). Opened with
  * extras [EXTRA_KIND] (an [OsmKind] name) and [EXTRA_ID].
  */
 class DetailActivity : Activity() {
@@ -53,7 +53,7 @@ class DetailActivity : Activity() {
 
         scope.launch {
             val model = try {
-                StoreWorker.withStore(this@DetailActivity) { store, _ ->
+                CafeStore.withStore(this@DetailActivity) { store, _ ->
                     val obj = store.get(id)
                     // Resolve node coordinates / member presence here, on the
                     // store thread, so the UI thread only renders.

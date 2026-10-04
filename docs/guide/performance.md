@@ -42,7 +42,7 @@ basemap and 6 s with one (1 MB basemap).
 
 The AAR is 3.5 MB; each ABI's `libcantino.so` is about 3.3 MB (stripped). The
 native library depends only on libc, libm and libdl. MapLibre Native adds
-about 13 MB per ABI if you use it. Ship only `arm64-v8a` and `x86_64`
+about 13 MB per ABI if you use it. Ship only the ABIs you need (`arm64-v8a`, `armeabi-v7a`, `x86_64`)
 (`abiFilters`), or split per ABI with an App Bundle.
 
 ## Rules of thumb

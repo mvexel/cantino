@@ -117,19 +117,6 @@ object Geo {
     const val AREA_SIZE_KM = 10.0
 
     private const val EARTH_RADIUS_M = 6_371_000.0
-    private const val KM_PER_DEGREE_LAT = 111.32
-
-    /** A [sizeKm] × [sizeKm] box centred on [center] (flat-earth approximation, fine at city scale). */
-    fun squareAround(center: LatLon, sizeKm: Double = AREA_SIZE_KM): Bbox {
-        val halfLat = sizeKm / 2 / KM_PER_DEGREE_LAT
-        val halfLon = sizeKm / 2 / (KM_PER_DEGREE_LAT * cos(Math.toRadians(center.lat)))
-        return Bbox(
-            west = (center.lon - halfLon).coerceAtLeast(-180.0),
-            south = (center.lat - halfLat).coerceAtLeast(-85.0),
-            east = (center.lon + halfLon).coerceAtMost(180.0),
-            north = (center.lat + halfLat).coerceAtMost(85.0),
-        )
-    }
 
     fun center(bbox: Bbox) = LatLon((bbox.south + bbox.north) / 2, (bbox.west + bbox.east) / 2)
 

@@ -15,6 +15,7 @@ import android.widget.TextView
 import io.github.mvexel.cantino.AreaInfo
 import io.github.mvexel.cantino.AreaManager
 import io.github.mvexel.cantino.AreaState
+import io.github.mvexel.cantino.Bbox
 import io.github.mvexel.cantino.BasemapPhase
 import io.github.mvexel.cantino.BasemapSource
 import io.github.mvexel.cantino.ProtomapsBuilds
@@ -76,8 +77,8 @@ class MainActivity : Activity() {
         setContentView(vertical(children = arrayOf(text("Opening…"))))
 
         scope.launch {
-            val stateFlow = areas.state(StoreWorker.AREA_ID)
-            val published = withContext(Dispatchers.IO) { areas.publishedArea(StoreWorker.AREA_ID) }
+            val stateFlow = areas.state(CafeStore.AREA_ID)
+            val published = withContext(Dispatchers.IO) { areas.publishedArea(CafeStore.AREA_ID) }
             // Route on the first observed state, then keep following it.
             val first = stateFlow.first()
             when {
@@ -184,8 +185,8 @@ class MainActivity : Activity() {
             }
             Log.i(TAG, "basemap source $planet")
             areas.download(
-                StoreWorker.AREA_ID,
-                Geo.squareAround(center),
+                CafeStore.AREA_ID,
+                Bbox.around(center.lat, center.lon, Geo.AREA_SIZE_KM),
                 name = "cafes %.4f,%.4f".format(center.lat, center.lon),
                 basemap = BasemapSource.Extract(planet, maxZoom = BASEMAP_MAX_ZOOM),
             )
@@ -212,7 +213,7 @@ class MainActivity : Activity() {
             AreaState.Cancelled -> {
                 progress = null
                 scope.launch {
-                    val published = withContext(Dispatchers.IO) { areas.publishedArea(StoreWorker.AREA_ID) }
+                    val published = withContext(Dispatchers.IO) { areas.publishedArea(CafeStore.AREA_ID) }
                     if (published != null) showMap() else showLocationChooser("Download cancelled.")
                 }
             }
@@ -232,7 +233,7 @@ class MainActivity : Activity() {
     private fun showFailure(message: String, retryable: Boolean) {
         progress = null
         scope.launch {
-            val published = withContext(Dispatchers.IO) { areas.publishedArea(StoreWorker.AREA_ID) }
+            val published = withContext(Dispatchers.IO) { areas.publishedArea(CafeStore.AREA_ID) }
             val requested = Settings.requested(this@MainActivity)
             val buttons = listOfNotNull(
                 requested?.let { button("Retry") { startDownload(it) } },
@@ -335,7 +336,7 @@ class MainActivity : Activity() {
                         bar,
                         detail,
                         log,
-                        button("Cancel download") { areas.cancel(StoreWorker.AREA_ID) },
+                        button("Cancel download") { areas.cancel(CafeStore.AREA_ID) },
                     ),
                 ),
             )
