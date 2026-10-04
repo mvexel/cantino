@@ -90,7 +90,7 @@ internal object Failures {
 }
 
 /** A classification from [Failures]: [kind] is the core's class name. */
-internal class Classified(private val kind: String, val reason: FailureReason) {
+internal class Classified(val kind: String, val reason: FailureReason) {
     /** The [DownloadFailure] to throw, carrying [message]. */
     fun failure(message: String, cause: Throwable? = null): DownloadFailure = when (kind) {
         "transient" -> DownloadFailure.Transient(message, reason, cause)

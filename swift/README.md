@@ -46,10 +46,13 @@ Sources/Cantino/
   Wire.swift                  Codable decoding of the core's JSON
   SliceProtocol.swift         internal SliceProtocol: jobRequest, job, progress (cantino_slice_*), as Kotlin's
   Basemap.swift               public PmtilesInfo.read; internal BasemapPlan / BasemapAssembler (sans-IO extract engine)
+  AreaStorage.swift           internal AreaStorage (cantino_area_*: layout, staging, commit with hook, recover, published)
+                              and its models AreaInfo, AreaMetadata, BasemapMetadata, AreaLayout
+  Failures.swift              internal Failures: download failure classification (cantino_classify_failure)
   JSONValue.swift             deterministic JSON writer for requests and the parity canonical form
   Canonical.swift             parity corpus canonical form and outcome envelope (tests/parity/README.md)
-Tests/CantinoTests/           ports of OsmStoreTest, AsyncOsmStoreTest, BboxAroundTest; canonical and basemap
-                              tests; ParityTests, the Swift runner of tests/parity
+Tests/CantinoTests/           ports of OsmStoreTest, AsyncOsmStoreTest, BboxAroundTest; canonical, basemap,
+                              area store and failure tests; ParityTests, the Swift runner of tests/parity
 ```
 
 ## Build and test
@@ -119,6 +122,11 @@ target instead (later slice).
 | `internal object SliceProtocol` (data classes `JobRequest`, `Job`, `Progress`) | `internal enum SliceProtocol` with structs of the same names and fields; `jobRequest(base:bbox:name:)`, `job(base:response:)`, `progress(status:)` | Argument labels. Internal, as in Kotlin |
 | `BasemapExtract` drives `NativeBridge.basemapPlan*` / `basemapAsm*` (raw JSON strings, `Long` handles) | internal `BasemapPlan` / `BasemapAssembler` classes (thread-confined, `deinit` frees best-effort) with typed `ByteRange`, `BasemapStep` (`.fetch`/`.wait`/`.tilesReady`), `TilePlan`, `BasemapProgress`; `BasemapPlan(bboxJSON:...)` keeps the raw-string entry of `basemapPlanNew` | No networking yet: the public `BasemapExtract` (HTTP, background transfer) comes with the area lifecycle and will sit on these |
 | `CantinoException.Internal` / `IllegalStateException` for an internal core error | `CantinoStateError.internalError` (see above) | The parity canonical form maps it to code 5, `internal`, like every other runner |
+| `internal class AreaStorage(areas: File, downloads: File)`; `requireValidAreaId` throws `IllegalArgumentException` | `internal struct AreaStorage(root:)` (the caller picks the root; the core owns layout, staging, commit, recovery, the area lock and `published`); `AreaStorage.validate(areaId:)` throws `CantinoError.invalidArgument`. Methods: `layout(areaId:workId:)` (`String?` raw, or `UUID`), `dataFile`, `basemapFile`, `prepareStaging`, `discardStaging`, `writeStagedMetadata`, `commit`, `recover`, `published` | The same role as Kotlin's class minus what is Android-specific: no download scratch directory, no WorkManager checkpoint (the iOS area manager owns its own). Paths are `String`s (as `OsmStore.open`), work IDs `UUID`s |
+| `commit(areaId, workId, hasBasemap, beforeCommit: () -> Unit)` with `AreaTestHooks.afterCommitPoint` | `commit(areaId:workId:hasBasemap:beforeCommit:afterCommitPoint:)`, both closures (`beforeCommit` may throw) | The closures reach the core through the C callback and a context pointer; a throw from `beforeCommit` aborts with nothing changed and is rethrown (Swift errors cannot cross the C frame, so the box keeps it). `afterCommitPoint` is a parameter, not a global, for tests that stand in for a kill. Neither may call `AreaStorage` for the same area |
+| `AreaStorage.recover` swallows `Io` (logs it) | `recover(areaId:)` throws; `published(areaId:)` swallows `.io` from its recover step and reads anyway, as Kotlin's `published` does | The parity corpus needs the throwing form (Kotlin's runner calls `NativeBridge.areaRecover` for the same reason) |
+| `AreaMetadata.toJson` writes org.json key order | `AreaMetadata.json` / `writeStagedMetadata` write keys sorted (`JSONValue.canonicalString`) | The core validates the sidecar and writes it verbatim; every reader parses it, so key order is not part of the format |
+| `Failures.http/io/native` return `Classified(kind, reason)` | `Failures.http(_:context:)`, `io(_:)`, `native(_:context:)`, `native(code:context:)`, all over `Failures.classify(_ input: Input)`; typed contexts (`HTTPContext`, `IOContext`, `NativeContext`); `Classified` also carries `inlineRetry` / `schedulerRetry` | The parity corpus compares the whole classification the core returns |
 
 Thread confinement itself is the core's: every `cantino_*` store call
 compares the calling OS thread's Rust `ThreadId` with the opener's and
@@ -137,8 +145,13 @@ both lines. The contract (ops, outcome envelope, canonical JSON) is
 [`tests/parity/README.md`](../tests/parity/README.md); `Canonical.swift`
 and `JSONValue.swift` implement it. Store ops and `basemap_info` go through
 the public API; the slice and basemap-engine ops through the internal
-`SliceProtocol` and `BasemapPlan` / `BasemapAssembler` (as the Kotlin
-runner uses its internals for them). A mismatch is an adapter bug: fix the
+`SliceProtocol` and `BasemapPlan` / `BasemapAssembler`, and the area and
+failure ops (`area_validate_id`, `area_layout`, `area_published`,
+`area_recover`, `classify_failure`) through the internal `AreaStorage` and
+`Failures` (as the Kotlin runner uses its internals for them). The area ops
+run on a copy of `tests/fixtures/area-storage-0.2.0/` in the scratch
+directory (recovery mutates it). Current result: 240 calls run, 28
+`abi_only` skipped, the same as the Kotlin runner. A mismatch is an adapter bug: fix the
 adapter, never `expected.json`.
 
 ## Not in this slice
@@ -147,7 +160,7 @@ adapter, never `expected.json`.
   SliceOSM HTTP), the networked basemap extract (public `BasemapExtract`,
   `BasemapSource`, `ProtomapsBuilds`), and `Cantino.VERSION`: they need iOS
   background transfer and scheduling. Their platform-neutral halves are
-  here: `SliceProtocol` and `BasemapPlan` / `BasemapAssembler` (internal),
-  `PmtilesInfo` (public).
+  here: `SliceProtocol`, `BasemapPlan` / `BasemapAssembler`, `AreaStorage`
+  and `Failures` (internal), `PmtilesInfo` (public).
 - iOS/macOS build: xcframework binary target and simulator tests (macOS CI).
 - `scripts/check.sh` does not run the Swift tests (Docker dependency).

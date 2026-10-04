@@ -188,6 +188,11 @@ class ParityTest {
         }
         "basemap_bad_feed" -> basemapBadFeed(args)
         "basemap_extract" -> basemapExtract(args)
+        "area_validate_id" -> areaValidateId(args.getString("area_id"))
+        "area_layout" -> areaLayout(args)
+        "area_published" -> areaOp(args) { root -> areaPublished(root, args.getString("area_id")) }
+        "area_recover" -> areaOp(args) { root -> outcome { NativeBridge.areaRecover(root.path, args.getString("area_id")); null } }
+        "classify_failure" -> classifyFailure(args.get("input") as JSONObject)
         else -> error("unknown op $op")
     }
 
@@ -318,6 +323,112 @@ class ParityTest {
         }
     }
 
+    // ---- area store and failure classification (internal AreaStorage / Failures) ------
+
+    /**
+     * [AreaStorage.requireValidAreaId], the check [AreaManager] applies: the core's
+     * rejection surfaces as the documented [IllegalArgumentException], which is the
+     * `invalid_argument` outcome here.
+     */
+    private fun areaValidateId(areaId: String): Map<String, Any?> = try {
+        AreaStorage.requireValidAreaId(areaId)
+        mapOf("ok" to null)
+    } catch (e: IllegalArgumentException) {
+        errorOutcome(1, "invalid_argument")
+    }
+
+    /** `AreaStorage` exposes single paths only, so the whole layout comes from [NativeBridge.areaLayout]. */
+    @Suppress("UNCHECKED_CAST")
+    private fun areaLayout(args: JSONObject): Map<String, Any?> {
+        val root = path(args.getString("root"))
+        val workId = if (args.isNull("work_id")) null else args.getString("work_id")
+        val result = outcome { Canonical.parse(NativeBridge.areaLayout(root.path, args.getString("area_id"), workId)) }
+        return relativePaths(result, root) as Map<String, Any?>
+    }
+
+    /**
+     * `area_published` / `area_recover`: copies the fixture tree (assets, dot-directories
+     * included) to a fresh root, runs [block] on it and adds the listing of the files
+     * under the root afterwards (README, "Area ops").
+     */
+    private fun areaOp(args: JSONObject, block: (File) -> Map<String, Any?>): Map<String, Any?> {
+        val root = path(args.getString("root"))
+        check(!root.exists()) { "area roots must be fresh: $root" }
+        if (!args.isNull("fixture")) copyAsset(args.getString("fixture").removePrefix("tests/fixtures/"), root)
+        val result = relativePaths(block(root), root)
+        return mapOf("result" to result, "files" to fileSizes(root))
+    }
+
+    /** [AreaStorage.published]: the layer the app reads an area through (recovers first), mapped back to the ABI's JSON shape. */
+    private fun areaPublished(root: File, areaId: String): Map<String, Any?> {
+        val storage = AreaStorage(areas = root, downloads = File(scratch, "downloads-${root.name}"))
+        return outcome(missingOnNull = true) {
+            storage.published(areaId)?.let { info ->
+                mapOf(
+                    "data" to info.dataFile.path,
+                    "basemap" to info.basemapFile?.path,
+                    "metadata" to info.metadata?.let(::metadataTree),
+                )
+            }
+        }
+    }
+
+    /** The sidecar JSON of [AreaMetadata.toJson], as a canonical tree (org.json would write `40.0` as `40`). */
+    private fun metadataTree(m: AreaMetadata): Map<String, Any?> = mapOf(
+        "bbox" to mapOf("west" to m.bbox.west, "south" to m.bbox.south, "east" to m.bbox.east, "north" to m.bbox.north),
+        "name" to m.name,
+        "snapshot_timestamp" to m.snapshotTimestampRaw,
+        "imported_at_millis" to m.importedAtMillis,
+        "report" to mapOf(
+            "counts" to mapOf("nodes" to m.report.counts.nodes, "ways" to m.report.counts.ways, "relations" to m.report.counts.relations),
+            "database_bytes" to m.report.databaseBytes,
+        ),
+        "basemap" to m.basemap?.let {
+            mapOf(
+                "kind" to it.kind.wire, "source_url" to it.sourceUrl, "bytes" to it.fileBytes, "addressed_tiles" to it.addressedTiles,
+                "min_zoom" to it.minZoom, "max_zoom" to it.maxZoom, "requests" to it.requests, "transferred_bytes" to it.transferredBytes,
+            )
+        },
+        "work_id" to m.workId?.toString(),
+    )
+
+    /**
+     * [Failures] wraps `cantino_classify_failure` for the input shapes the app uses but
+     * returns only class and reason, so the full classification (with the retry flags)
+     * comes from [NativeBridge]; the class and reason [Failures] hands the app for http
+     * and io inputs are checked against it.
+     */
+    private fun classifyFailure(input: JSONObject): Map<String, Any?> {
+        val result = outcome(missingOnNull = true) {
+            NativeBridge.classifyFailure(input.toString())?.let { Canonical.parse(it) }
+        }
+        val ok = result["ok"] as? Map<*, *>
+        val classified = when {
+            input.has("http") -> Failures.http(input.getInt("http"), input.getString("context"))
+            input.has("io") -> Failures.io(input.getString("io"))
+            else -> return result
+        }
+        assertEquals(ok?.get("class"), classified?.kind)
+        assertEquals(ok?.get("reason"), classified?.reason?.name?.lowercase(java.util.Locale.ROOT))
+        return result
+    }
+
+    /** Rewrites every string that is a path under [root] relative to it (`root` itself becomes "."). */
+    private fun relativePaths(value: Any?, root: File): Any? = when (value) {
+        is String -> when {
+            value == root.path -> "."
+            value.startsWith(root.path + "/") -> value.removePrefix(root.path + "/")
+            else -> value
+        }
+        is List<*> -> value.map { relativePaths(it, root) }
+        is Map<*, *> -> value.entries.associate { (k, v) -> k as String to relativePaths(v, root) }
+        else -> value
+    }
+
+    /** Every regular file under [root] (relative path to size in bytes), or null when it does not exist. */
+    private fun fileSizes(root: File): Map<String, Any?>? =
+        if (!root.exists()) null else root.walkTopDown().filter { it.isFile }.associate { it.relativeTo(root).invariantSeparatorsPath to it.length() }
+
     // ---- outcomes -----------------------------------------------------------------------
 
     /**
@@ -409,6 +520,21 @@ class ParityTest {
      * repository-relative and bundled as an androidTest asset (tests/fixtures/x and
      * tests/parity/x as `x`, see build.gradle.kts), copied out on first use.
      */
+    /**
+     * Copies the asset directory [name] (or file) to [target], recursively. Fixture
+     * trees contain dot-directories (`.staging`); build.gradle.kts keeps them in the APK.
+     */
+    private fun copyAsset(name: String, target: File) {
+        val children = context.assets.list(name).orEmpty()
+        if (children.isEmpty()) {
+            target.parentFile!!.mkdirs()
+            target.writeBytes(asset(name))
+        } else {
+            target.mkdirs()
+            children.forEach { copyAsset("$name/$it", File(target, it)) }
+        }
+    }
+
     private fun path(name: String): File {
         if (name.startsWith("scratch:")) return File(scratch, name.removePrefix("scratch:"))
         val asset = when {

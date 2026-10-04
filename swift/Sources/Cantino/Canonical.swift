@@ -258,3 +258,41 @@ extension BasemapProgress: CanonicalJSON {
         ])
     }
 }
+
+// MARK: Area store and failure classification
+
+extension AreaLayout: CanonicalJSON {
+    /// `cantino_area_layout`'s object: the staging fields are null without a work ID.
+    var canonical: JSONValue {
+        func text(_ value: String?) -> JSONValue { value.map(JSONValue.string) ?? .null }
+        return .object([
+            "root": .string(root), "data": .string(data), "basemap": .string(basemap),
+            "sidecar": .string(sidecar), "journal": .string(journal), "lock": .string(lock),
+            "staging_dir": text(stagingDir), "staged_data": text(stagedData),
+            "staged_basemap": text(stagedBasemap), "staged_metadata": text(stagedMetadata),
+        ])
+    }
+}
+
+extension AreaInfo: CanonicalJSON {
+    /// `cantino_area_published`'s object. The metadata is the sidecar as the
+    /// adapter would write it (`database_bytes` included: unlike the import
+    /// report, the sidecar is a stored format, and the published check
+    /// compares it with the file).
+    var canonical: JSONValue {
+        .object([
+            "data": .string(dataPath),
+            "basemap": basemapPath.map(JSONValue.string) ?? .null,
+            "metadata": metadata?.json ?? .null,
+        ])
+    }
+}
+
+extension Failures.Classified: CanonicalJSON {
+    var canonical: JSONValue {
+        .object([
+            "class": .string(failureClass.rawValue), "reason": .string(reason.rawValue),
+            "inline_retry": .bool(inlineRetry), "scheduler_retry": .bool(schedulerRetry),
+        ])
+    }
+}

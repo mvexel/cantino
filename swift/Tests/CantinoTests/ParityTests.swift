@@ -244,9 +244,112 @@ private final class ParityRunner {
         case "basemap_extract":
             return try extract(args)
 
+        case "area_validate_id":
+            try AreaStorage.validate(areaId: args.required("area_id").requiredString())
+            return .ok(.null)
+
+        case "area_layout":
+            let root = try path(args["root"])
+            let layout = try AreaStorage(root: root).layout(
+                areaId: args.required("area_id").requiredString(), workId: args["work_id"]?.stringValue)
+            return .ok(relativePaths(layout.canonical, root: root))
+
+        case "area_published":
+            let areaId = try args.required("area_id").requiredString()
+            return try areaOp(args) { storage in .okOrMissing(try storage.published(areaId: areaId)) }
+
+        case "area_recover":
+            let areaId = try args.required("area_id").requiredString()
+            return try areaOp(args) { storage in
+                try storage.recover(areaId: areaId)
+                return .ok(.null)
+            }
+
+        case "classify_failure":
+            return .okOrMissing(try Failures.classify(failureInput(args.required("input"))))
+
         default:
             throw CorpusShapeError("unknown op \(op)")
         }
+    }
+
+    // MARK: Area store
+
+    /// `area_published` / `area_recover` (README "Area ops"): copies the
+    /// `fixture` directory (dot-directories included) to the fresh `root`
+    /// (a null fixture leaves it absent), runs `body` on it, and adds the
+    /// listing of the files under the root afterwards.
+    private func areaOp(_ args: JSONValue, _ body: (AreaStorage) throws -> JSONValue) throws -> JSONValue {
+        let root = try path(args["root"])
+        let files = FileManager.default
+        guard !files.fileExists(atPath: root) else { throw CorpusShapeError("area roots must be fresh: \(root)") }
+        if let fixture = args["fixture"], fixture != .null {
+            try files.copyItem(atPath: path(fixture), toPath: root)
+        }
+        let result: JSONValue
+        do {
+            result = try body(AreaStorage(root: root))
+        } catch {
+            result = outcome(of: error, id: "(area op)")
+        }
+        return .object(["result": relativePaths(result, root: root), "files": try fileSizes(root)])
+    }
+
+    /// Every string that is a path under `root`, relative to it (`root`
+    /// itself becomes `.`), as the Rust runner projects it.
+    private func relativePaths(_ value: JSONValue, root: String) -> JSONValue {
+        switch value {
+        case .string(let text):
+            if text == root { return .string(".") }
+            if text.hasPrefix(root + "/") { return .string(String(text.dropFirst(root.count + 1))) }
+            return value
+        case .array(let items): return .array(items.map { relativePaths($0, root: root) })
+        case .object(let fields): return .object(fields.mapValues { relativePaths($0, root: root) })
+        default: return value
+        }
+    }
+
+    /// Every regular file under `root` (relative path, `/`-separated, to
+    /// its size in bytes), or null when `root` does not exist.
+    private func fileSizes(_ root: String) throws -> JSONValue {
+        let files = FileManager.default
+        guard files.fileExists(atPath: root), let walker = files.enumerator(atPath: root) else { return .null }
+        var sizes: [String: JSONValue] = [:]
+        while let relative = walker.nextObject() as? String { // hidden entries included
+            let attributes = try files.attributesOfItem(atPath: root + "/" + relative)
+            guard attributes[.type] as? FileAttributeType == .typeRegular else { continue }
+            let size = (attributes[.size] as? NSNumber)?.int64Value ?? 0
+            sizes[relative] = .int(size)
+        }
+        return .object(sizes)
+    }
+
+    /// The structured failure of a `classify_failure` call as a typed
+    /// input; a context the typed enums do not have (the `abi_only` calls)
+    /// is not expressible.
+    private func failureInput(_ value: JSONValue) throws -> Failures.Input {
+        guard case .object(let fields) = value else { throw CorpusShapeError("failure \(value.canonicalString)") }
+        let context = fields["context"]?.stringValue
+        if let http = fields["http"], fields.count == 2 {
+            guard let context, let kind = Failures.HTTPContext(rawValue: context) else {
+                throw CorpusShapeError("http context \(value.canonicalString)")
+            }
+            return .http(Int(try http.requiredInt()), kind)
+        }
+        if let io = fields["io"], fields.count == 1 {
+            guard let kind = Failures.IOContext(rawValue: try io.requiredString()) else {
+                throw CorpusShapeError("io \(value.canonicalString)")
+            }
+            return .io(kind)
+        }
+        if let native = fields["native"], fields.count == 2 {
+            guard let context, let kind = Failures.NativeContext(rawValue: context),
+                  let code = Int32(exactly: try native.requiredInt()) else {
+                throw CorpusShapeError("native \(value.canonicalString)")
+            }
+            return .native(code, kind)
+        }
+        throw CorpusShapeError("failure \(value.canonicalString)")
     }
 
     // MARK: Basemap

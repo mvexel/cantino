@@ -45,6 +45,13 @@ android {
         // (tests/fixtures/x, tests/parity/x) to these flat asset names.
         getByName("androidTest").assets.directories.add("../../tests/parity")
     }
+    // aapt drops dot-files and dot-directories from assets by default (`.*`). The
+    // parity corpus bundles area store fixtures with a `.staging` directory
+    // (tests/fixtures/area-storage-0.2.0), so keep them: this is aapt's default
+    // pattern minus `.*`. The AAR ships no assets, so only test APKs are affected.
+    androidResources {
+        ignoreAssetsPattern = "!.svn:!.git:!.ds_store:!*.scc:<dir>_*:!CVS:!thumbs.db:!picasa.ini:!*~"
+    }
     publishing {
         singleVariant("release") { withSourcesJar() }
     }
