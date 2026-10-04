@@ -217,10 +217,12 @@ pub fn classify(failure: Failure) -> Option<Classification> {
         },
         Failure::Io(IoContext::Network) => class(Transient, Network),
         Failure::Io(IoContext::Storage) => class(Class::Storage, Reason::Storage),
-        Failure::Native(kind, NativeContext::Default | NativeContext::Engine) => match native_reason(kind) {
-            Reason::Storage => class(Class::Storage, Reason::Storage),
-            reason => class(Permanent, reason),
-        },
+        Failure::Native(kind, NativeContext::Default | NativeContext::Engine) => {
+            match native_reason(kind) {
+                Reason::Storage => class(Class::Storage, Reason::Storage),
+                reason => class(Permanent, reason),
+            }
+        }
         Failure::Native(_, NativeContext::ProtocolRequest) => class(Permanent, InvalidRequest),
         Failure::Native(_, NativeContext::ProtocolResponse) => class(Transient, Server),
     }
