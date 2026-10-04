@@ -17,13 +17,35 @@ Paths below are relative to `android/cafe-app/src/main/java/lol/osm/cantino/cafe
 | What | Code | Cantino API |
 | --- | --- | --- |
 | Location permission, one fix (`LocationManager`, 30 s timeout); fallback: type "lat,lon" or pick a preset | `MainActivity.startFirstRun`, `Location.kt` (`DeviceLocation.current`) | |
-| 10×10 km box around the fix | `Cafes.kt`: `Geo.squareAround`, `Geo.AREA_SIZE_KM` (a default, not a cap) | `Bbox` |
-| Offer dialog: what is kept (points of interest only) and the privacy line (the bbox goes to SliceOSM and the tile host) | `MainActivity.offerDownload` | |
+| A square centred on the fix; the user picks its radius (below) | `AreaRadius.kt`: `CHOICES_KM`, `DEFAULT_KM`, `AreaRadius.bbox` | `Bbox.around` |
+| Offer screen: the radius choice, what is kept (points of interest only) and the privacy line (the bbox goes to SliceOSM and the tile host) | `MainActivity.offerDownload` | |
 | Keep only points of interest: one import profile for the app | `Cafes.kt`: `CafeProfile` | `ImportProfile`, `KeepRule`, `AreaManager(context, AreaConfig(importOptions = ImportOptions(profile = …)))` |
 | Find a basemap build (demo) and start the download | `MainActivity.startDownload` | Example-local `ProtomapsBuilds.latestUrl()`, `AreaManager.download(…, BasemapSource.Extract(planet, maxZoom = 15))` |
 | Progress screen: phase, bytes (with total when known), per-phase durations | `MainActivity.ProgressScreen.update` | `AreaManager.state(areaId)`, every `AreaState` subtype |
 | Failure: Retry, or back to the map (the previous area is kept) | `MainActivity.showFailure` | `AreaState.Failed.retryable`, `publishedArea` |
 | Refresh: same bbox, full replace | `MainActivity.confirmRefresh` | `AreaMetadata.bbox`, `download` again |
+
+### Area size: the radius
+
+The area is a square centred on the device location (or the typed point, the
+preset, or the debug override). On the offer screen the user picks its
+**radius: 1, 2.5, 5 or 10 km, 5 km preselected**. Radius means *half the side
+of the square*: 5 km is a 10 × 10 km box reaching 5 km north, south, east and
+west of the centre (the corners are about 7 km away). The app passes twice
+the radius to `Bbox.around(lat, lon, widthKm)`, which takes the side.
+"Radius" means the same in the Inspector app and on both platforms.
+
+The default 10 × 10 km is a city centre's worth of cafés and, with the POI
+profile, about 5 MB (measured below for Salt Lake City); a bigger radius
+grows the download with the area (four times the area per doubling) and with
+how densely mapped the place is, so the offer shows the box size, not a
+megabyte estimate. The choices and the default are the two constants at the
+top of `AreaRadius.kt` / `AreaRadius.swift`: change them freely; Cantino has
+no size cap ([Area size](downloading.md#area-size)).
+
+Retry re-downloads the last requested centre and radius. Refresh does not use
+the radius: it downloads the published area's `AreaMetadata.bbox` as it is
+(full replace), whatever the radius selection now is.
 
 The state is collected for the activity's whole life (`MainActivity.onCreate`),
 so a relaunch during a download shows its progress, and the first emitted
@@ -113,6 +135,8 @@ scripts/build-android.sh
 cd android && mise exec -- ./gradlew :cafe-app:installDebug
 # Automated runs: never send a real location; use the debug override (debuggable builds only)
 adb shell am start -S -n lol.osm.cantino.cafe/.MainActivity --ef lat 40.7608 --ef lon -111.8910
+# Preselect a radius on the offer (km; one of the choices, otherwise ignored; not sticky)
+adb shell am start -S -n lol.osm.cantino.cafe/.MainActivity --ef radius 2.5
 ```
 
 Known limit: opening hours are evaluated in the phone's time zone. This is
@@ -140,13 +164,14 @@ Paths are relative to `ios/cafe-app/CafeApp/`; each file names its Android count
 
 | Android | iOS | Notes |
 | --- | --- | --- |
-| `MainActivity` (flow, progress, failure, refresh) | `AppModel.swift`, `FirstRunViews.swift` | The offer is a screen, not a dialog. Refresh downloads the published `AreaMetadata.bbox` itself |
+| `MainActivity` (flow, progress, failure, refresh) | `AppModel.swift`, `FirstRunViews.swift` | The radius is a segmented picker (radio buttons on Android) |
+| `AreaRadius.kt` | `AreaRadius.swift` | Same choices, default and labels |
 | `Location.kt` (`LocationManager`, debug extras) | `Location.swift` (`CLLocationManager`, one fix, 30 s) | Debug override: launch arguments, see below |
 | `CafeStore.kt` (`Mutex`) | `CafeStore.swift` (actor + FIFO gate) | Same reopen-by-`workId` rule; the gate holds select–open–read, since actors are reentrant |
 | `Cafes.kt` (`CafeProfile`), `RelationDetail.kt`, `OpeningHours.kt`, `ProtomapsBuilds.kt` | `Cafes.swift` (`CafeProfile`), `OpeningHours.swift`, `ProtomapsBuilds.swift` | Straight ports; relation markers use one batch `get` |
 | `MapScreen.kt` (radio groups) | `MapScreen.swift` (chips with counts) | Style copied into the bundle by `copy-basemap-assets.sh` (the `copyBasemapStyleAssets` counterpart); `asset://` resolves to the bundle |
 | `DetailActivity` | `DetailView.swift` | Way nodes resolved with one batch `get` |
-| JVM + instrumented tests | `CafeAppTests/` (26 Swift Testing tests, hosted on the simulator) | Opening hours (all Kotlin cases), Protomaps builds (URLProtocol stub), relation café (imported with the POI profile), POI profile applied, paging past 500, refresh race |
+| JVM + instrumented tests | `CafeAppTests/` (31 Swift Testing tests, hosted on the simulator) | Opening hours (all Kotlin cases), Protomaps builds (URLProtocol stub), area radius, relation café (imported with the POI profile), POI profile applied, paging past 500, refresh race |
 
 Airplane mode cannot be switched on for a simulator alone, so the closest
 honest check was used: after the download, a cold launch with the map,
@@ -158,7 +183,7 @@ area's `pmtiles://file://` archive.
 ```sh
 scripts/basemap-assets.sh && scripts/build-ios-cafe.sh install
 # Debug builds only; never real GPS in automated runs. -lat/-lon is sticky (-clear_debug_location YES).
-xcrun simctl launch booted lol.osm.cantino.cafe -lat 40.7608 -lon -111.8910 -auto_download YES
+xcrun simctl launch booted lol.osm.cantino.cafe -lat 40.7608 -lon -111.8910 -auto_download YES   # [-radius 2.5]
 # simctl cannot tap: these stand in for taps (DebugLaunch.swift)
 xcrun simctl launch booted lol.osm.cantino.cafe -list YES -outdoor yes -now open
 xcrun simctl launch booted lol.osm.cantino.cafe -object way/292007606

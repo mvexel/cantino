@@ -28,11 +28,24 @@ each iOS file in `ios/inspector-app/InspectorApp/` has the same name with `.swif
 | What | Code | Cantino API |
 | --- | --- | --- |
 | Location, typed `lat,lon`, or the Salt Lake City / Zürich presets; debug override for automated runs | `MainActivity`, `Location.kt` (copied from the café app) | |
-| 5×5 km box, a **full import** (no import profile: a filtered area would hide what Inspector exists to show) | `Geo.AREA_SIZE_KM`, `MainActivity.startDownload` | `Bbox.around`, `AreaManager.download(…, BasemapSource.Extract(planet, maxZoom = 15))` |
+| A square centred on the location; the user picks its radius on the offer screen (below) | `AreaRadius` (`CHOICES_KM`, `DEFAULT_KM`), `MainActivity.offerDownload` | `Bbox.around` |
+| A **full import** (no import profile: a filtered area would hide what Inspector exists to show) | `MainActivity.startDownload` | `AreaManager.download(…, BasemapSource.Extract(planet, maxZoom = 15))` |
 | One progress line (the café app shows the detailed screen) | `MainActivity.ProgressLine` | `AreaState` |
 | Refresh (same bbox) and "Download another area" (full replace; one area per app) | `MapScreen.showAreaMenu` | `AreaMetadata.bbox` |
 | Store holder, reopened after a refresh | `InspectorStore` (copied from `CafeStore`) | `AsyncOsmStore`, `AreaMetadata.workId` |
 | Basemap build lookup | `ProtomapsBuilds` (copied unchanged) | |
+
+The radius choices are those of the café app, **1, 2.5, 5 or 10 km**, and
+mean the same: half the side of the square (2.5 km is a 5 × 5 km box; the app
+passes twice the radius to `Bbox.around`, which takes the side). Inspector
+preselects **2.5 km** (5 × 5 km) instead of the café app's 5 km because it
+keeps every object: a 5 × 5 km city centre is about 24 MB (Salt Lake City)
+to 45 MB (Zürich) of database (acceptance table below), and the file grows
+with the area, about four times per doubling of the radius, more where the
+mapping is dense. The offer shows the box size, not a megabyte estimate,
+since density varies too much for an honest one. Refresh downloads the
+published bbox as it is, whatever radius is selected now. Rationale and the
+café defaults: [café walkthrough](cafe-app.md#area-size-the-radius).
 
 ## 2. Query bar and checks
 
@@ -87,6 +100,7 @@ The same names on both platforms ([parity](platform-parity.md#inspector)):
 | --- | --- | --- |
 | `QueryBarTest` (8, JVM) | `QueryBarTests` | syntax, quoting, errors, round trip, every preset parses |
 | `GeometryTest` (7, JVM) | `GeometryTests` | segment distance, gaps, runs, hit/near, ordering, labels |
+| `AreaRadiusTest` (5, JVM) | `AreaRadiusTests` | radius → bbox (half the side), choices and default, the `radius` launch option, labels, typed `lat,lon` |
 | `InspectTest` (7, instrumented) | `InspectTests` | on a real store imported from one shared fixture ([`inspector.osm`](../../android/inspector-app/src/androidTest/assets/inspector.osm)): taps on a crossing, mid-sidewalk and inside a park; ways using a node; missing references and broken geometry; check counts and the lone-`!key` error; paging |
 
 ## Acceptance, 2026-10-04
@@ -121,7 +135,7 @@ Counts over the whole area (the debug `counts` option logs and shows them):
 | `highway=steps` | 294 | 294 | 2,076 | 2,076 |
 | `highway=pedestrian` | 158 | 158 | 354 | 354 |
 
-Taps (debug `tap`, radius 5 m), first candidates, identical on both platforms
+Taps (debug `tap`, `tap_radius` 5 m), first candidates, identical on both platforms
 including distances:
 
 | Tap | SLC | Zürich |
@@ -152,23 +166,26 @@ scripts/basemap-assets.sh                       # style, glyphs, sprites (both p
 scripts/build-android.sh
 cd android && mise exec -- ./gradlew :inspector-app:installDebug
 # Debug builds only; never real GPS in automated runs. lat/lon is sticky (clear_debug_location).
-adb shell am start -n lol.osm.cantino.inspector/.MainActivity --ef lat 40.7608 --ef lon -111.8910 --ez auto_download true
+adb shell am start -n lol.osm.cantino.inspector/.MainActivity --ef lat 40.7608 --ef lon -111.8910 --ez auto_download true   # [--ef radius 5]
 adb shell "am start -n lol.osm.cantino.inspector/.MainActivity --es query 'amenity=* !opening_hours' --ez view_only true"
-adb shell am start -S -n lol.osm.cantino.inspector/.MainActivity --es tap 40.76174,-111.90233 --ef radius 5 --ei select 0
+adb shell am start -S -n lol.osm.cantino.inspector/.MainActivity --es tap 40.76174,-111.90233 --ef tap_radius 5 --ei select 0
 adb shell am start -S -n lol.osm.cantino.inspector/.MainActivity --es object relation/907522
 adb shell am start -S -n lol.osm.cantino.inspector/.MainActivity --ez counts true   # logcat tag InspectorCounts
 ```
 
 ```sh
 scripts/basemap-assets.sh && scripts/build-ios-inspector.sh install   # SIMULATOR=… or SIMULATOR_ID=<udid>
-xcrun simctl launch booted lol.osm.cantino.inspector -lat 40.7608 -lon -111.8910 -auto_download YES
+xcrun simctl launch booted lol.osm.cantino.inspector -lat 40.7608 -lon -111.8910 -auto_download YES   # [-radius 5]
 xcrun simctl launch booted lol.osm.cantino.inspector -query 'amenity=* !opening_hours' -view_only YES
-xcrun simctl launch booted lol.osm.cantino.inspector -tap 40.76174,-111.90233 -radius 5 -select 0
+xcrun simctl launch booted lol.osm.cantino.inspector -tap 40.76174,-111.90233 -tap_radius 5 -select 0
 xcrun simctl launch booted lol.osm.cantino.inspector -object relation/907522
 xcrun simctl launch booted lol.osm.cantino.inspector -counts YES                    # os_log category InspectorCounts
 ```
 
-Other options on both: `zoom`, `about`. Tests: `./gradlew
+`radius` is the download area's radius in km, as in the café app (one of the
+choices, otherwise ignored); `tap_radius` is the debug tap's hit radius in
+metres (it was called `radius` before the area radius existed). Other options
+on both: `zoom`, `about`. Tests: `./gradlew
 :inspector-app:testDebugUnitTest :inspector-app:connectedDebugAndroidTest`
 and `scripts/build-ios-inspector.sh test`.
 

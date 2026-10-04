@@ -5,6 +5,15 @@ formats may change without compatibility layers. See the [guide](docs/guide/READ
 
 ## Unreleased
 
+- Example apps (café and Inspector, Android and iOS): the download area is a
+  square centred on the device location whose **radius** (half the side;
+  1 / 2.5 / 5 / 10 km) the user picks on the offer screen, which is now a
+  screen on Android too. Defaults: café 5 km (10 × 10 km, as before),
+  Inspector 2.5 km (5 × 5 km, as before); one constant per app
+  (`AreaRadius`). Debug launch option `radius` (km) on both apps; the
+  Inspector's tap hit radius option is renamed `tap_radius`. The Android café
+  app's refresh now re-downloads the published bbox as it is (it rebuilt a
+  box from its centre).
 - **Inspector**, the second example app, for OSM developers and mappers
   (`android/inspector-app`, `ios/inspector-app`, feature-equivalent): a full
   import, a tag query bar (`k=v`, `k=*`, `!k`, ANDed, "this view only", load

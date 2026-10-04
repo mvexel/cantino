@@ -44,6 +44,7 @@ download and resume) passed on a physical iPhone 15 Pro Max (iOS 27).
 | --- | --- | --- |
 | `OpeningHoursTest` (14, JVM) | `OpeningHoursTests` (+ `localTimeFromADate`) | same cases |
 | `ProtomapsBuildsTest` (2, JVM) | `ProtomapsBuildsTests` | |
+| `AreaRadiusTest` (6, JVM) | `AreaRadiusTests` | radius → bbox, choices and default, `radius` launch option, labels; typed `lat,lon` (iOS: in `CafeTests`) |
 | `RelationCafeTest`, `CafeStoreTest` | `CafeTests` (+ paging, filters, location input, debug location) | |
 
 ## Inspector
@@ -52,6 +53,7 @@ download and resume) passed on a physical iPhone 15 Pro Max (iOS 27).
 | --- | --- | --- |
 | `QueryBarTest` (8, JVM) | `QueryBarTests` | same cases and error texts |
 | `GeometryTest` (7, JVM) | `GeometryTests` | same cases |
+| `AreaRadiusTest` (5, JVM) | `AreaRadiusTests` | same cases; iOS also reads `-radius` / `-tap_radius` |
 | `InspectTest` (7, instrumented) | `InspectTests` | same fixture file (`android/inspector-app/src/androidTest/assets/inspector.osm`, read in place on iOS) |
 
 The [Inspector acceptance](inspector-app.md#acceptance-2026-10-04) compares 14
