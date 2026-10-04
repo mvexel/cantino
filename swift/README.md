@@ -194,4 +194,4 @@ failure table.
 - A real kill test on a device (Android has `scripts/kill-test-android.sh`):
   the Swift tests recreate a killed process's on-disk state instead.
 - `ProtomapsBuilds` (basemap build discovery) lives in the café example on
-  Android and will in the iOS café example.
+  Android and in the iOS café example (`ios/cafe-app`).

@@ -93,3 +93,45 @@ Known limit: opening hours are evaluated in the phone's time zone. This is
 correct for the default flow because the area is downloaded around the user,
 but wrong when an area is used in another time zone; the area zone is not yet
 stored.
+
+## iOS
+
+[`ios/cafe-app`](../../ios/cafe-app) is the same app in SwiftUI with
+MapLibre Native 6.31.0 (iOS 17+), feature for feature, on the Swift
+adapter. On the iPhone 18 Pro simulator (iOS 27, 2026-10-04, downtown Salt
+Lake City) a live download and a refresh each took about 11 s (61 MB
+database, 6.5 MB basemap); the map showed 136 cafés (45 / 27 / 64 outdoor
+seating yes / no / unknown, 32 with unknown hours), as on Android.
+
+| Download | Map, no network used | Filters | Object detail |
+| --- | --- | --- | --- |
+| ![progress](../screenshots/2026-10-04-ios-cafe-progress.png) | ![map](../screenshots/2026-10-04-ios-cafe-map-offline.png) | ![filter](../screenshots/2026-10-04-ios-cafe-list-outdoor-yes.png) | ![way](../screenshots/2026-10-04-ios-cafe-detail-way.png) |
+
+Paths are relative to `ios/cafe-app/CafeApp/`; each file names its Android counterpart.
+
+| Android | iOS | Notes |
+| --- | --- | --- |
+| `MainActivity` (flow, progress, failure, refresh) | `AppModel.swift`, `FirstRunViews.swift` | The offer is a screen, not a dialog. Refresh downloads the published `AreaMetadata.bbox` itself |
+| `Location.kt` (`LocationManager`, debug extras) | `Location.swift` (`CLLocationManager`, one fix, 30 s) | Debug override: launch arguments, see below |
+| `CafeStore.kt` (`Mutex`) | `CafeStore.swift` (actor + FIFO gate) | Same reopen-by-`workId` rule; the gate holds select–open–read, since actors are reentrant |
+| `Cafes.kt`, `RelationDetail.kt`, `OpeningHours.kt`, `ProtomapsBuilds.kt` | `Cafes.swift`, `OpeningHours.swift`, `ProtomapsBuilds.swift` | Straight ports; relation markers use one batch `get` |
+| `MapScreen.kt` (radio groups) | `MapScreen.swift` (chips with counts) | Style copied into the bundle by `copy-basemap-assets.sh` (the `copyBasemapStyleAssets` counterpart); `asset://` resolves to the bundle |
+| `DetailActivity` | `DetailView.swift` | Way nodes resolved with one batch `get` |
+| JVM + instrumented tests | `CafeAppTests/` (24 Swift Testing tests, hosted on the simulator) | Opening hours (all Kotlin cases), Protomaps builds (URLProtocol stub), relation café, paging past 500, refresh race |
+
+Airplane mode cannot be switched on for a simulator alone, so the closest
+honest check was used: after the download, a cold launch with the map,
+filters and inspector open had no internet sockets (`lsof -a -i -p <pid>`
+empty), while the same check during a refresh showed the SliceOSM and
+tile-host connections. The style references only `asset://` and the
+area's `pmtiles://file://` archive.
+
+```sh
+scripts/basemap-assets.sh && scripts/build-ios-cafe.sh install
+# Debug builds only; never real GPS in automated runs. -lat/-lon is sticky (-clear_debug_location YES).
+xcrun simctl launch booted lol.osm.cantino.cafe -lat 40.7608 -lon -111.8910 -auto_download YES
+# simctl cannot tap: these stand in for taps (DebugLaunch.swift)
+xcrun simctl launch booted lol.osm.cantino.cafe -list YES -outdoor yes -now open
+xcrun simctl launch booted lol.osm.cantino.cafe -object way/292007606
+xcrun simctl launch booted lol.osm.cantino.cafe -refresh YES [-cancel_after 4]
+```

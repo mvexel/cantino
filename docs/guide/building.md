@@ -14,6 +14,7 @@ android/cantino      Kotlin library (AAR): OsmStore, AreaManager, models
 android/cafe-app     reference app
 android/sample-app   offline basemap demo
 swift/               Swift package (OsmStore, AsyncOsmStore, models), platform-neutral, tested on macOS and Linux
+ios/cafe-app         iOS reference app (SwiftUI, Xcode project, uses ../../swift)
 scripts/             build, check, bench, basemap assets, publishing
 ```
 
@@ -90,6 +91,30 @@ Sample apps need the offline style assets first:
 ```sh
 scripts/basemap-assets.sh      # → android/sample-app/build-assets (needs curl, git, node/npm)
 cd android && mise exec -- ./gradlew :cafe-app:assembleDebug :sample-app:assembleDebug
+```
+
+## iOS café app (host: macOS)
+
+[`ios/cafe-app`](../../ios/cafe-app) is a hand-written Xcode project (no
+generator): file-system-synchronized groups, the local `swift/` package and
+MapLibre Native 6.31.0 from SwiftPM (fetched from github.com on the first
+build). A build phase copies style, glyphs and sprites from
+`android/sample-app/build-assets`, so run `scripts/basemap-assets.sh` first.
+
+```sh
+scripts/build-ios-cafe.sh            # xcframework, then xcodebuild build for the simulator
+scripts/build-ios-cafe.sh test       # + the example's unit tests (opening hours, Protomaps builds, café logic)
+scripts/build-ios-cafe.sh install    # + install on the booted simulator
+SIMULATOR="iPhone 18 Pro" scripts/build-ios-cafe.sh test
+```
+
+By hand, from the repository root:
+
+```sh
+scripts/build-xcframework.sh
+xcodebuild test -project ios/cafe-app/CafeApp.xcodeproj -scheme CafeApp \
+    -destination "platform=iOS Simulator,name=iPhone 18 Pro" \
+    -derivedDataPath target/ios-cafe/derived -clonedSourcePackagesDirPath target/ios-cafe/packages
 ```
 
 ## Desktop tools
