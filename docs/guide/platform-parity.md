@@ -45,16 +45,29 @@ download and resume) passed on a physical iPhone 15 Pro Max (iOS 27).
 | `ProtomapsBuildsTest` (2, JVM) | `ProtomapsBuildsTests` | |
 | `RelationCafeTest`, `CafeStoreTest` | `CafeTests` (+ paging, filters, location input, debug location) | |
 
+## Inspector
+
+| Android | iOS | Notes |
+| --- | --- | --- |
+| `QueryBarTest` (8, JVM) | `QueryBarTests` | same cases and error texts |
+| `GeometryTest` (7, JVM) | `GeometryTests` | same cases |
+| `InspectTest` (7, instrumented) | `InspectTests` | same fixture file (`android/inspector-app/src/androidTest/assets/inspector.osm`, read in place on iOS) |
+
+The [Inspector acceptance](inspector-app.md#acceptance-2026-10-04) compares 14
+query counts and four taps in Salt Lake City and Zürich; both platforms
+imported byte-identical databases and returned identical results.
+
 ## Running both
 
 ```sh
 scripts/check.sh                                   # Rust, C ABI smoke, Rust parity runner
 SIMULATOR="iPhone 18 Pro" scripts/swift-test.sh    # Swift SDK on the simulator (omit SIMULATOR: macOS)
 SIMULATOR="iPhone 18 Pro" scripts/build-ios-cafe.sh test
+SIMULATOR="iPhone 18 Pro" scripts/build-ios-inspector.sh test
 scripts/build-android.sh
 cd android && ANDROID_SERIAL=<device> mise exec -- ./gradlew \
-    :cantino:testDebugUnitTest :cafe-app:testDebugUnitTest \
-    :cantino:connectedDebugAndroidTest :cafe-app:connectedDebugAndroidTest
+    :cantino:testDebugUnitTest :cafe-app:testDebugUnitTest :inspector-app:testDebugUnitTest \
+    :cantino:connectedDebugAndroidTest :cafe-app:connectedDebugAndroidTest :inspector-app:connectedDebugAndroidTest
 ANDROID_SERIAL=<device> scripts/kill-test-android.sh   # from the repository root
 ```
 

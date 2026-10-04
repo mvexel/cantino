@@ -5,6 +5,14 @@ formats may change without compatibility layers. See the [guide](docs/guide/READ
 
 ## Unreleased
 
+- **Inspector**, the second example app, for OSM developers and mappers
+  (`android/inspector-app`, `ios/inspector-app`, feature-equivalent): a full
+  import, a tag query bar (`k=v`, `k=*`, `!k`, ANDed, "this view only", load
+  more, count) with validator-style checks, tap-anywhere inspection (bbox
+  candidates and app-side hit testing against way geometry, "hit" vs "near"),
+  an object navigator (references, missing references, ways using a node,
+  osm.org link) and "about this area". App code only; no SDK change.
+  `scripts/build-ios-inspector.sh`; [walkthrough](docs/guide/inspector-app.md).
 - **Basemap-only areas:** `AreaManager.downloadBasemap(areaId, bbox,
   basemap)` on Android and iOS downloads a basemap without OSM data (no
   SliceOSM job, no import). `AreaInfo.dataFile` / `dataURL` and

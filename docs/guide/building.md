@@ -12,9 +12,11 @@ src/                 Rust core: import, SQLite store, queries, SliceOSM protocol
 include/cantino.h    C ABI header, the contract for every platform adapter
 android/cantino      Kotlin library (AAR): OsmStore, AreaManager, models
 android/cafe-app     reference app
+android/inspector-app Inspector example (for OSM developers and mappers)
 android/sample-app   offline basemap demo
 swift/               Swift package (OsmStore, AsyncOsmStore, AreaManager, models), for iOS and macOS; store API also on Linux
 ios/cafe-app         iOS reference app (SwiftUI, Xcode project, uses ../../swift)
+ios/inspector-app    iOS Inspector example (same structure as ios/cafe-app)
 scripts/             build, check, bench, basemap assets, publishing
 ```
 
@@ -40,8 +42,8 @@ cd android
 mise exec -- ./gradlew :cantino:assembleRelease                         # the AAR
 mise exec -- ./gradlew :cantino:publishReleasePublicationToLocalRepository  # Maven layout in android/build/repo
 mise exec -- ./gradlew :cantino:dokkaGeneratePublicationHtml            # API reference → cantino/build/dokka/html
-mise exec -- ./gradlew :cantino:testDebugUnitTest :cafe-app:testDebugUnitTest
-ANDROID_SERIAL=<device> mise exec -- ./gradlew :cantino:connectedDebugAndroidTest :cafe-app:connectedDebugAndroidTest
+mise exec -- ./gradlew :cantino:testDebugUnitTest :cafe-app:testDebugUnitTest :inspector-app:testDebugUnitTest
+ANDROID_SERIAL=<device> mise exec -- ./gradlew :cantino:connectedDebugAndroidTest :cafe-app:connectedDebugAndroidTest :inspector-app:connectedDebugAndroidTest
 ```
 
 Run the instrumented suites on an arm64 phone and an emulator (x86_64 on
@@ -95,7 +97,7 @@ Sample apps need the offline style assets first:
 
 ```sh
 scripts/basemap-assets.sh      # → android/sample-app/build-assets (needs curl, git, node/npm)
-cd android && mise exec -- ./gradlew :cafe-app:assembleDebug :sample-app:assembleDebug
+cd android && mise exec -- ./gradlew :cafe-app:assembleDebug :inspector-app:assembleDebug :sample-app:assembleDebug
 ```
 
 ## iOS café app (host: macOS)
@@ -120,6 +122,20 @@ scripts/build-xcframework.sh
 xcodebuild test -project ios/cafe-app/CafeApp.xcodeproj -scheme CafeApp \
     -destination "platform=iOS Simulator,name=iPhone 18 Pro" \
     -derivedDataPath target/ios-cafe/derived -clonedSourcePackagesDirPath target/ios-cafe/packages
+```
+
+## iOS Inspector app (host: macOS)
+
+[`ios/inspector-app`](../../ios/inspector-app) is built like the café app
+(hand-written Xcode project, local `swift/` package, MapLibre from SwiftPM,
+style assets copied by a build phase). Build products go to
+`target/ios-inspector`.
+
+```sh
+scripts/build-ios-inspector.sh            # xcframework, then xcodebuild build for the simulator
+scripts/build-ios-inspector.sh test       # + the example's unit tests (query bar, geometry, store-backed inspection)
+scripts/build-ios-inspector.sh install    # + install on the booted simulator
+SIMULATOR_ID=<udid> scripts/build-ios-inspector.sh test   # when two simulators share a name
 ```
 
 ## Desktop tools

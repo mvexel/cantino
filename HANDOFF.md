@@ -39,7 +39,9 @@ lock: `src/area_storage.rs`) and the download failure table (`src/failure.rs`).
 
 [Building from source](docs/guide/building.md) is the authoritative toolchain,
 build, test and publication guide. Keep both Rust examples, the minimal Android
-basemap app and both café apps (`android/cafe-app`, `ios/cafe-app`). The [quickstart](README.md#quickstart) and
+basemap app, both café apps (`android/cafe-app`, `ios/cafe-app`) and both
+Inspector apps (`android/inspector-app`, `ios/inspector-app`;
+[walkthrough](docs/guide/inspector-app.md)). The [quickstart](README.md#quickstart) and
 [guide](docs/guide/README.md) describe the supported API.
 
 The café acceptance flow is download → restart in airplane mode → basemap,
