@@ -202,8 +202,9 @@ internal class AreaDownloadWorker(context: Context, parameters: WorkerParameters
                     }
                 }
             } catch (error: java.io.IOException) {
-                // Past the commit point: the next run's recover() finishes
-                // the renames and then finds its area published.
+                // A file system failure in the commit. Before the commit point nothing changed; past
+                // it, the next run's recover finishes the renames and then
+                // finds its area published.
                 throw DownloadFailure.Transient("publishing interrupted: ${error.message}", FailureReason.STORAGE, error)
             }
         }
@@ -248,8 +249,9 @@ internal class AreaDownloadWorker(context: Context, parameters: WorkerParameters
                     withContext(Dispatchers.IO) { PmtilesInfo.read(output) }
                 } catch (error: CantinoException) {
                     // The engine wrote and validated this file itself, so
-                    // this is storage trouble or a bug; classify, never crash.
-                    throw DownloadFailure.Permanent("extracted basemap is unreadable: ${error.message}", error.failureReason(), error)
+                    // this is storage trouble or a bug; classify, never crash
+                    // (core table, context "engine": always permanent).
+                    throw Failures.native(error, "engine").failure("extracted basemap is unreadable: ${error.message}", error)
                 }
                 BasemapMetadata(
                     BasemapKind.EXTRACT,
@@ -355,12 +357,10 @@ internal class AreaDownloadWorker(context: Context, parameters: WorkerParameters
     private inline fun <T> protocol(transient: Boolean = false, block: () -> T): T = try {
         block()
     } catch (error: CantinoException) {
-        val message = "SliceOSM protocol: ${error.message}"
-        throw if (transient) {
-            DownloadFailure.Transient(message, FailureReason.SERVER, error)
-        } else {
-            DownloadFailure.Permanent(message, FailureReason.INVALID_REQUEST, error)
-        }
+        // Core table: protocol_response → transient SERVER,
+        // protocol_request → permanent INVALID_REQUEST, whatever the kind.
+        val context = if (transient) "protocol_response" else "protocol_request"
+        throw Failures.native(error, context).failure("SliceOSM protocol: ${error.message}", error)
     }
 
     private suspend fun report(

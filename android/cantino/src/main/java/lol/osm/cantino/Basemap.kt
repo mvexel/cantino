@@ -99,6 +99,16 @@ public enum class BasemapPhase {
  * @property tileEntries Directory entries.
  * @property tileContents Distinct tile blobs (deduplicated).
  * @property fileBytes Size of the file.
+ * @property specVersion PMTiles specification version (always 3: other versions are rejected).
+ * @property centerLon Longitude of the header's default map center, in degrees.
+ * @property centerLat Latitude of the header's default map center, in degrees.
+ * @property centerZoom Zoom level of the header's default map center.
+ * @property tileType Tile format as the PMTiles header code: 0 unknown, 1 MVT
+ *   (Mapbox Vector Tile), 2 PNG, 3 JPEG, 4 WebP, 5 AVIF.
+ * @property tileCompression Compression of the tile blobs as the PMTiles header
+ *   code: 0 unknown, 1 none, 2 gzip, 3 brotli, 4 zstd.
+ * @property clustered Whether tile data is stored in tile-ID order (the layout
+ *   the extract engine requires).
  */
 public data class PmtilesInfo(
     public val minZoom: Int,
@@ -108,6 +118,13 @@ public data class PmtilesInfo(
     public val tileEntries: Long,
     public val tileContents: Long,
     public val fileBytes: Long,
+    public val specVersion: Int,
+    public val centerLon: Double,
+    public val centerLat: Double,
+    public val centerZoom: Double,
+    public val tileType: Int,
+    public val tileCompression: Int,
+    public val clustered: Boolean,
 ) {
     /** Reading a local PMTiles file. */
     public companion object {
@@ -121,6 +138,7 @@ public data class PmtilesInfo(
         @JvmStatic
         public fun read(file: File): PmtilesInfo = JSONObject(NativeBridge.basemapInfo(file.path)).let { json ->
             val b = json.getJSONArray("bounds")
+            val c = json.getJSONArray("center") // [lon, lat, zoom]
             PmtilesInfo(
                 minZoom = json.getInt("min_zoom"),
                 maxZoom = json.getInt("max_zoom"),
@@ -129,6 +147,13 @@ public data class PmtilesInfo(
                 tileEntries = json.getLong("tile_entries"),
                 tileContents = json.getLong("tile_contents"),
                 fileBytes = json.getLong("file_bytes"),
+                specVersion = json.getInt("spec_version"),
+                centerLon = c.getDouble(0),
+                centerLat = c.getDouble(1),
+                centerZoom = c.getDouble(2),
+                tileType = json.getInt("tile_type"),
+                tileCompression = json.getInt("tile_compression"),
+                clustered = json.getBoolean("clustered"),
             )
         }
     }
@@ -281,13 +306,13 @@ internal class BasemapExtract(
      * Engine rejections of the source are permanent: retrying the same source
      * cannot help. The reason comes from the native category: a bad or
      * unsupported archive is INVALID_DATA, zooms/bbox the archive cannot serve
-     * are INVALID_REQUEST. A staging write that fails is STORAGE and, like
-     * every storage failure, retried by WorkManager once storage is no longer
-     * low ([failure] makes it a [DownloadFailure.Storage]).
+     * are INVALID_REQUEST. A staging write that fails is STORAGE and retried
+     * by WorkManager once storage is no longer low, like every storage
+     * failure (core table, `cantino_classify_failure` context "engine").
      */
     private inline fun <T> engine(block: () -> T): T = try {
         block()
     } catch (error: CantinoException) {
-        throw failure("basemap extract: ${error.message}", error)
+        throw Failures.native(error, "engine").failure("basemap extract: ${error.message}", error)
     }
 }

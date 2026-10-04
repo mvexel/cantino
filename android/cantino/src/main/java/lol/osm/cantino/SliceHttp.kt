@@ -11,6 +11,7 @@ import java.io.File
 import java.io.IOException
 import java.net.HttpURLConnection
 import java.net.URL
+import org.json.JSONObject
 
 /**
  * Why a download step failed, classified two ways: by what the worker does
@@ -52,34 +53,62 @@ internal sealed class DownloadFailure(
 }
 
 /**
- * The [FailureReason] for a native failure during a download, when the call
- * site adds no better context. Exhaustive over the sealed hierarchy:
- * - InvalidFile: the downloaded data (PBF, PMTiles) is bad.
- * - Io: the device's storage (disk full, unwritable staging file).
- * - InvalidArgument: what the worker passed came from the request (bbox,
- *   zooms, URLs), so the request is invalid.
- * - WrongThread: the worker's own threading is broken, a Cantino bug.
+ * Which [DownloadFailure] a failure input is, decided by the core
+ * (`cantino_classify_failure`, `src/failure.rs`) so Android and iOS classify
+ * identically. Kotlin keeps the messages; the class and [FailureReason] come
+ * from the core's table (HTTP status by request kind, network vs storage
+ * I/O, native error kind by call site).
  */
-internal fun CantinoException.failureReason(): FailureReason = when (this) {
-    is CantinoException.InvalidFile -> FailureReason.INVALID_DATA
-    is CantinoException.Io -> FailureReason.STORAGE
-    is CantinoException.InvalidArgument -> FailureReason.INVALID_REQUEST
-    is CantinoException.WrongThread -> FailureReason.UNKNOWN
+internal object Failures {
+    /** HTTP [status] answering a [context] request (`job`, `request`, `range`), or null if accepted. */
+    fun http(status: Int, context: String): Classified? = classify(JSONObject().put("http", status).put("context", context))
+
+    /** An I/O error on the `network` or in local `storage`. */
+    fun io(context: String): Classified = checkNotNull(classify(JSONObject().put("io", context))) { "io $context" }
+
+    /**
+     * A native [error] from a [context] call: `default` (import, PMTiles
+     * validation), `engine` (basemap extract), `protocol_request`,
+     * `protocol_response` (SliceOSM).
+     */
+    fun native(error: CantinoException, context: String): Classified =
+        checkNotNull(classify(JSONObject().put("native", error.code).put("context", context))) { "native $context" }
+
+    private fun classify(input: JSONObject): Classified? = NativeBridge.classifyFailure(input.toString())?.let {
+        val json = JSONObject(it)
+        Classified(json.getString("class"), FailureReason.valueOf(json.getString("reason").uppercase(java.util.Locale.ROOT)))
+    }
+
+    /** The `CANTINO_ERROR_*` code of a typed native error (the JNI layer chose the subclass from it). */
+    private val CantinoException.code: Int
+        get() = when (this) {
+            is CantinoException.InvalidArgument -> 1
+            is CantinoException.InvalidFile -> 2
+            is CantinoException.Io -> 3
+            is CantinoException.WrongThread -> 4
+        }
+}
+
+/** A classification from [Failures]: [kind] is the core's class name. */
+internal class Classified(val kind: String, val reason: FailureReason) {
+    /** The [DownloadFailure] to throw, carrying [message]. */
+    fun failure(message: String, cause: Throwable? = null): DownloadFailure = when (kind) {
+        "transient" -> DownloadFailure.Transient(message, reason, cause)
+        "permanent" -> DownloadFailure.Permanent(message, reason, cause)
+        "storage" -> DownloadFailure.Storage(message, cause) // reason is STORAGE by definition
+        "job_gone" -> DownloadFailure.JobGone(message) // reason is SERVER by definition
+        else -> throw IllegalStateException("unknown failure class $kind")
+    }
 }
 
 /**
- * A [DownloadFailure] for a native failure: storage becomes
- * [DownloadFailure.Storage] (retried by WorkManager once storage is no longer
- * low); everything else repeats on retry, so it is permanent.
+ * A [DownloadFailure] for a native failure of the import or of PMTiles
+ * validation: storage becomes [DownloadFailure.Storage] (retried by
+ * WorkManager once storage is no longer low); everything else repeats on
+ * retry, so it is permanent (core table, context `default`).
  */
-internal fun failure(message: String, error: CantinoException): DownloadFailure {
-    val reason = error.failureReason()
-    return if (reason == FailureReason.STORAGE) {
-        DownloadFailure.Storage(message, error)
-    } else {
-        DownloadFailure.Permanent(message, reason, error)
-    }
-}
+internal fun failure(message: String, error: CantinoException): DownloadFailure =
+    Failures.native(error, "default").failure(message, error)
 
 /**
  * Runs a write to a local download file. An IOException here is the
@@ -92,7 +121,7 @@ internal fun failure(message: String, error: CantinoException): DownloadFailure 
 private inline fun <T> disk(target: File, block: () -> T): T = try {
     block()
 } catch (error: IOException) {
-    throw DownloadFailure.Storage(
+    throw Failures.io("storage").failure(
         "cannot write ${target.name}: ${error.message ?: error.javaClass.simpleName}",
         error,
     )
@@ -238,21 +267,20 @@ internal class SliceHttp(private val connectTimeoutMillis: Int, private val read
         // Byte ranges address the stored representation; no transparent gzip.
         setRequestProperty("Accept-Encoding", "identity")
         val code = responseCode
-        if (code == 200) {
-            throw DownloadFailure.Permanent(
-                "server ignored the Range header (HTTP 200 instead of 206) for $url; " +
-                    "basemap extracts need a server or CDN with HTTP range support",
-                FailureReason.SERVER,
+        // The class and reason come from the core's table (context "range");
+        // only 206 passes. The messages are chosen here.
+        Failures.http(code, "range")?.let { classified ->
+            throw classified.failure(
+                when (code) {
+                    200 -> "server ignored the Range header (HTTP 200 instead of 206) for $url; " +
+                        "basemap extracts need a server or CDN with HTTP range support"
+                    // The archive is shorter than its own directories say (or
+                    // changed under us): the server's file, not the request.
+                    416 -> "HTTP 416 range $offset+$length not satisfiable at $url"
+                    in 200..299 -> "HTTP $code for a range request to $url (need 206)"
+                    else -> statusMessage(url, code)
+                },
             )
-        }
-        // The archive is shorter than its own directories say (or changed
-        // under us): the server's file, not the request.
-        if (code == 416) {
-            throw DownloadFailure.Permanent("HTTP 416 range $offset+$length not satisfiable at $url", FailureReason.SERVER)
-        }
-        checkStatus(url, goneOn404 = false)
-        if (code != 206) {
-            throw DownloadFailure.Permanent("HTTP $code for a range request to $url (need 206)", FailureReason.SERVER)
         }
         // "bytes first-last/total"
         val range = getHeaderField("Content-Range")
@@ -296,9 +324,8 @@ internal class SliceHttp(private val connectTimeoutMillis: Int, private val read
                 block(connection)
             } catch (error: IOException) {
                 ensureActive() // cancelled: report the cancellation, not the socket error it caused
-                throw DownloadFailure.Transient(
+                throw Failures.io("network").failure(
                     "network error: ${error.message ?: error.javaClass.simpleName}",
-                    FailureReason.NETWORK,
                     error,
                 )
             } finally {
@@ -307,22 +334,28 @@ internal class SliceHttp(private val connectTimeoutMillis: Int, private val read
             }
         }
 
+    /**
+     * Throws for a status the request does not accept. The core's table
+     * (`cantino_classify_failure`): 2xx passes; 404 is a vanished job
+     * ([DownloadFailure.JobGone]) only with [goneOn404] (context `job`);
+     * 408, 429 and 5xx are transient; any other status means the server
+     * understood and refused what we asked for (a bbox SliceOSM rejects, a
+     * basemap URL that does not exist): permanent, INVALID_REQUEST.
+     */
     private fun HttpURLConnection.checkStatus(url: String, goneOn404: Boolean) {
         val code = responseCode
-        if (code in 200..299) return
+        val classified = Failures.http(code, if (goneOn404) "job" else "request") ?: return
+        throw classified.failure(statusMessage(url, code))
+    }
+
+    /** "HTTP <code> from <url> <start of the error body>". */
+    private fun HttpURLConnection.statusMessage(url: String, code: Int): String {
         val detail = try {
             errorStream?.use { it.readBytes().decodeToString().take(200) }.orEmpty()
         } catch (_: IOException) {
             ""
         }
-        val message = "HTTP $code from $url ${detail.trim()}".trim()
-        throw when {
-            code == 404 && goneOn404 -> DownloadFailure.JobGone(message)
-            code == 408 || code == 429 || code >= 500 -> DownloadFailure.Transient(message, FailureReason.SERVER)
-            // Any other 4xx: the server understood and refused what we asked
-            // for (a bbox SliceOSM rejects, a basemap URL that does not exist).
-            else -> DownloadFailure.Permanent(message, FailureReason.INVALID_REQUEST)
-        }
+        return "HTTP $code from $url ${detail.trim()}".trim()
     }
 
     private companion object {

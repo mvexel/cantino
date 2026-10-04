@@ -11,8 +11,9 @@ extern "C" {
 #endif
 
 typedef struct CantinoStore CantinoStore;
-// Return codes: 0 success; 1 object missing (get, way_coordinates);
-// negative CANTINO_ERROR_* category on failure.
+// Return codes: 0 success; 1 nothing to return (get, way_coordinates: object
+// missing; area_published: no area; classify_failure: not a failure) or
+// aborted (area_commit); negative CANTINO_ERROR_* category on failure.
 //
 // The message in *error is for developers; branch on the status category.
 // The caller passed something invalid: bad query (limit, filters, only
@@ -157,6 +158,65 @@ int32_t cantino_basemap_asm_free(CantinoBasemapAssembler *assembler,char **error
 // "min_zoom","max_zoom","addressed_tiles","tile_entries","tile_contents",
 // "tile_type","tile_compression","clustered","file_bytes"}. Any thread.
 int32_t cantino_basemap_info(const char *path,char **json,char **error);
+// --- Area store (unreleased) -------------------------------------------------
+// The on-disk layout of one app's downloaded areas under `root` (Android:
+// filesDir/cantino-areas) and its crash-safe commit, shared by every adapter.
+// No handles: any thread; calls on the same area serialize on the area lock
+// (in-process always; flock on <root>/<area_id>.lock across processes when
+// that file can be opened). Layout (0.2.0's, plus the lock file):
+//   <root>/<area_id>.sqlite | .pmtiles | .json (sidecar) | .commit (journal)
+//   <root>/.staging/<area_id>/<work_id>/{area.sqlite,basemap.pmtiles,area.json}
+// area_id: 1..64 of [A-Za-z0-9_-]. work_id: a UUID (8-4-4-4-12 hex, any
+// case; lower case in paths). Invalid IDs are CANTINO_ERROR_INVALID_ARGUMENT,
+// file system failures CANTINO_ERROR_IO.
+// Layout JSON: {"root","data","basemap","sidecar","journal","lock",
+//   "staging_dir","staged_data","staged_basemap","staged_metadata"} (the
+//   staging fields are null without a work_id).
+// 0 when area_id is a valid area ID, else -CANTINO_ERROR_INVALID_ARGUMENT.
+int32_t cantino_area_validate_id(const char *area_id,char **error);
+// Writes the layout JSON; work_id may be NULL. Touches no file.
+int32_t cantino_area_layout(const char *root,const char *area_id,const char *work_id,char **json,char **error);
+// Start of a run: rolls a pending commit forward, deletes other runs' staging
+// directories, creates this run's; writes the layout JSON.
+int32_t cantino_area_prepare_staging(const char *root,const char *area_id,const char *work_id,char **json,char **error);
+// End of a run that did not publish: deletes its staging directory unless its
+// commit is pending (the roll-forward owns it then). Best effort.
+int32_t cantino_area_discard_staging(const char *root,const char *area_id,const char *work_id,char **error);
+// Writes the run's sidecar JSON atomically and verbatim, after checking it is
+// a valid sidecar (docs/guide/c-abi.md); an invalid one is refused.
+int32_t cantino_area_write_staged_metadata(const char *root,const char *area_id,const char *work_id,const char *metadata,char **error);
+// Commit hook stages. The hook runs on the calling thread under the area lock
+// and must not call cantino_area_* for the same area (not reentrant).
+#define CANTINO_AREA_STAGE_BEFORE_COMMIT 0      /* non-zero return aborts; nothing changed */
+#define CANTINO_AREA_STAGE_AFTER_COMMIT_POINT 1 /* committed; return value ignored */
+typedef int32_t (*cantino_area_commit_hook)(void *context,int32_t stage);
+// Publishes the run's staged data + sidecar (+ basemap when has_basemap != 0;
+// without one a published basemap is removed) together, via the roll-forward
+// journal. Returns 0 published, 1 aborted by the hook (nothing changed), < 0
+// error: invalid IDs or an incomplete staged version fail before the commit
+// point (nothing changed); an I/O error after it (a failed rename) leaves the
+// version committed for the next recover to finish. hook may be NULL.
+int32_t cantino_area_commit(const char *root,const char *area_id,const char *work_id,int32_t has_basemap,cantino_area_commit_hook hook,void *context,char **error);
+// Finishes a commit interrupted by a kill or a failed rename. Leaves staging
+// directories without a journal alone (a live run may own one).
+int32_t cantino_area_recover(const char *root,const char *area_id,char **error);
+// The published area (recovers first, reads under the lock): writes
+// {"data":path,"basemap":path|null,"metadata":sidecar|null}, or returns 1 (no
+// JSON) when none is published. metadata is null unless the sidecar parses
+// and describes the files (report.database_bytes = data file size;
+// basemap.bytes = basemap file size, or both absent).
+int32_t cantino_area_published(const char *root,const char *area_id,char **json,char **error);
+// --- Download failure classification (unreleased) ---------------------------
+// input: {"http":status,"context":"job"|"request"|"range"} |
+//        {"io":"network"|"storage"} |
+//        {"native":CANTINO_ERROR_* 1..5,"context":"default"|"engine"|
+//         "protocol_request"|"protocol_response"}
+// Writes {"class":"transient"|"permanent"|"storage"|"job_gone","reason":
+// "network"|"server"|"invalid_request"|"storage"|"invalid_data"|"unknown",
+// "inline_retry":bool,"scheduler_retry":bool}, or returns 1 (no JSON) when the
+// input is not a failure (a 2xx the request accepts; 206 for "range").
+// Malformed input is CANTINO_ERROR_INVALID_ARGUMENT. Any thread.
+int32_t cantino_classify_failure(const char *input,char **json,char **error);
 #ifdef __cplusplus
 }
 #endif

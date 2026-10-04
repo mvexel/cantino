@@ -41,6 +41,17 @@ android {
         getByName("main").jniLibs.directories.add("../../target/android")
         // The instrumented test imports the same fixture as the Rust tests.
         getByName("androidTest").assets.directories.add("../../tests/fixtures")
+        // The parity corpus (calls.json, expected.json, *.osm): single source of
+        // truth shared with the Rust runner; ParityTest maps repository paths
+        // (tests/fixtures/x, tests/parity/x) to these flat asset names.
+        getByName("androidTest").assets.directories.add("../../tests/parity")
+    }
+    // aapt drops dot-files and dot-directories from assets by default (`.*`). The
+    // parity corpus bundles area store fixtures with a `.staging` directory
+    // (tests/fixtures/area-storage-0.2.0), so keep them: this is aapt's default
+    // pattern minus `.*`. The AAR ships no assets, so only test APKs are affected.
+    androidResources {
+        ignoreAssetsPattern = "!.svn:!.git:!.ds_store:!*.scc:<dir>_*:!CVS:!thumbs.db:!picasa.ini:!*~"
     }
     publishing {
         singleVariant("release") { withSourcesJar() }

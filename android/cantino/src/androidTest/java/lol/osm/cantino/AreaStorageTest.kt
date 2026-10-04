@@ -9,25 +9,22 @@ import org.junit.runner.RunWith
 import java.io.File
 import java.io.IOException
 import java.util.UUID
-import java.util.concurrent.CountDownLatch
-import java.util.concurrent.Executors
-import java.util.concurrent.TimeUnit
 
-/** Publication consistency, without involving downloads or the native importer. */
+/**
+ * Publication consistency through the core's area store, without downloads
+ * or the importer. Reader/commit serialization is tested in the core
+ * (`src/area_storage/tests.rs`), which reads under its own lock.
+ */
 @RunWith(AndroidJUnit4::class)
 class AreaStorageTest {
     private val context = InstrumentationRegistry.getInstrumentation().targetContext
     private val areaId = "storage-${UUID.randomUUID()}"
     private val storage = AreaStorage(context).apply { prepare(areaId) }
     private val areas = File(context.filesDir, "cantino-areas")
-    private val executor = Executors.newFixedThreadPool(2)
 
     @After fun cleanup() {
-        AreaTestHooks.afterRecovery = null
         AreaTestHooks.afterCommitPoint = null
-        executor.shutdownNow()
-        executor.awaitTermination(5, TimeUnit.SECONDS)
-        listOf("sqlite", "pmtiles", "json", "commit").forEach { File(areas, "$areaId.$it").deleteRecursively() }
+        listOf("sqlite", "pmtiles", "json", "commit", "lock").forEach { File(areas, "$areaId.$it").deleteRecursively() }
         File(areas, ".staging/$areaId").deleteRecursively()
         File(context.noBackupFilesDir, "cantino-area-downloads/$areaId").deleteRecursively()
     }
@@ -44,36 +41,6 @@ class AreaStorageTest {
             run,
         ))
         return run
-    }
-
-    @Test fun publicationWaitsUntilReaderHasReadTheWholeSnapshot() {
-        val old = stage("old")
-        storage.commit(areaId, old, true) {}
-        val next = stage("new-version")
-        val reading = CountDownLatch(1)
-        val releaseReader = CountDownLatch(1)
-        val writerStarted = CountDownLatch(1)
-        val committing = CountDownLatch(1)
-        AreaTestHooks.afterRecovery = {
-            reading.countDown()
-            check(releaseReader.await(5, TimeUnit.SECONDS))
-        }
-        val read = executor.submit<AreaInfo?> { storage.published(areaId) }
-        assertTrue(reading.await(5, TimeUnit.SECONDS))
-        val write = executor.submit {
-            writerStarted.countDown()
-            storage.commit(areaId, next, true) { committing.countDown() }
-        }
-        try {
-            assertTrue(writerStarted.await(5, TimeUnit.SECONDS))
-            assertFalse("commit entered while reader still reads metadata", committing.await(150, TimeUnit.MILLISECONDS))
-        } finally {
-            releaseReader.countDown()
-        }
-        assertEquals(old, read.get(5, TimeUnit.SECONDS)!!.metadata!!.workId)
-        write.get(5, TimeUnit.SECONDS)
-        AreaTestHooks.afterRecovery = null
-        assertEquals(next, storage.published(areaId)!!.metadata!!.workId)
     }
 
     @Test fun failedRecoveryDoesNotExposeMixedFilesAndKeepsJournalForRetry() {

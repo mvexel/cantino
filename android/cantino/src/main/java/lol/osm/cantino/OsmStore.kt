@@ -25,7 +25,7 @@ import java.io.File
  * "Cantino internal error"), which no app can handle meaningfully.
  *
  * The native layer throws the subtypes directly (`src/android.rs`, from the
- * category in `cantino_last_error_code`); the mapping is never inferred from
+ * negative status of the C ABI); the mapping is never inferred from
  * the message text. Constructors are public so tests and fakes can throw
  * them.
  */

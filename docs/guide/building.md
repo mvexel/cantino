@@ -13,6 +13,7 @@ include/cantino.h    C ABI header, the contract for every platform adapter
 android/cantino      Kotlin library (AAR): OsmStore, AreaManager, models
 android/cafe-app     reference app
 android/sample-app   offline basemap demo
+swift/               Swift package (OsmStore, AsyncOsmStore, models), platform-neutral, tested on Linux
 scripts/             build, check, bench, basemap assets, publishing
 ```
 
@@ -60,6 +61,24 @@ guide needs [pandoc](https://pandoc.org/installing.html) 3.x on the `PATH`
 `scripts/guide-template.html`; Mermaid diagrams are drawn in the browser).
 To check only the guide: `scripts/publish-pages.sh --guide-only --out build/pages`,
 then open `build/pages/guide/index.html`.
+
+## Swift (Linux, platform-neutral)
+
+The Swift adapter in `swift/` is built and tested on Linux in Docker; no
+Swift toolchain on the host, no Xcode:
+
+```sh
+scripts/swift-test.sh          # cargo build --release, then `swift test` in the swift:6.4 image
+```
+
+It needs cargo and Docker. The script copies only `libcantino.a` to
+`target/swift/` (Package.swift links it statically with `-lm -ldl
+-lpthread`) and keeps SwiftPM's build products in `target/swift-build`.
+The container's glibc must be at least the host's (`SWIFT_IMAGE` selects
+another image). Not part of `scripts/check.sh`, because of the Docker
+dependency. Details and the deviations from the Kotlin API:
+[`swift/README.md`](../../swift/README.md). The iOS build (xcframework,
+simulator tests) is a later slice on macOS.
 
 Sample apps need the offline style assets first:
 

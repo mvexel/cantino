@@ -14,3 +14,10 @@
 -keepclasseswithmembernames class lol.osm.cantino.NativeBridge {
     native <methods>;
 }
+# The area commit hook is called from Rust by method name and signature
+# (onStage(I)V in src/android.rs): keep the interface and its implementations'
+# method name.
+-keep interface lol.osm.cantino.AreaCommitHook { void onStage(int); }
+-keepclassmembers class * implements lol.osm.cantino.AreaCommitHook {
+    void onStage(int);
+}

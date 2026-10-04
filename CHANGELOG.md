@@ -3,6 +3,24 @@
 Cantino is under development with no external consumers. API, ABI and file
 formats may change without compatibility layers. See the [guide](docs/guide/README.md).
 
+## Unreleased
+
+iOS groundwork, merged onto 0.3.0.
+
+- **Area store in the Rust core** (`src/area_storage.rs`, C ABI
+  `cantino_area_*`): layout, staging, the roll-forward commit journal,
+  recovery and the published-area read moved out of Kotlin so Android and
+  iOS share one implementation. Keeps 0.3.0's fail-closed recovery (a damaged
+  journal or failed rename is an I/O error, journal kept, never a mixed
+  area). The per-area lock also takes an `flock` on `<areaId>.lock` across
+  processes; readers read under the lock.
+- **Failure classification in the core** (`cantino_classify_failure`), the
+  retry table used by the Android download worker and the Swift adapter.
+- `PmtilesInfo` exposes every `cantino_basemap_info` header field.
+- Parity corpus (`tests/parity`): one call list with byte-for-byte expected
+  output, run by Rust (`cargo test`), Kotlin (instrumented) and Swift runners.
+- Swift package (`swift/`) mirroring the Kotlin store API.
+
 ## 0.3.0 — 2026-10-04
 
 A smaller SDK with import profiles, simpler public APIs and verified offline

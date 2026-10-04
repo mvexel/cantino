@@ -49,4 +49,41 @@ internal object NativeBridge {
 
     // Validates a local PMTiles v3 file and describes its header (any thread).
     @JvmStatic external fun basemapInfo(path: String): String
+
+    // Area store (src/area_storage.rs via cantino_area_*): no handles, any
+    // thread; `root` is AreaStorage's directory. See AreaStorage.
+    @JvmStatic external fun areaValidateId(areaId: String)
+    @JvmStatic external fun areaLayout(root: String, areaId: String, workId: String?): String
+    @JvmStatic external fun areaPrepareStaging(root: String, areaId: String, workId: String): String
+    @JvmStatic external fun areaDiscardStaging(root: String, areaId: String, workId: String)
+    @JvmStatic external fun areaWriteStagedMetadata(root: String, areaId: String, workId: String, metadata: String)
+
+    /** True when published; false when [hook] aborted (its exception is then thrown instead). */
+    @JvmStatic external fun areaCommit(root: String, areaId: String, workId: String, hasBasemap: Boolean, hook: AreaCommitHook): Boolean
+    @JvmStatic external fun areaRecover(root: String, areaId: String)
+
+    /** The published area JSON, or null when none is published. */
+    @JvmStatic external fun areaPublished(root: String, areaId: String): String?
+
+    /** cantino_classify_failure: classification JSON, or null when the input is not a failure. */
+    @JvmStatic external fun classifyFailure(input: String): String?
+}
+
+/**
+ * Called by the native commit ([NativeBridge.areaCommit]) on the committing
+ * thread, under the area lock, with [STAGE_BEFORE_COMMIT] (throw to abort:
+ * nothing is published) and [STAGE_AFTER_COMMIT_POINT] (the version is
+ * committed). Must not call back into [AreaStorage] for the same area. Bound
+ * by name from Rust (`onStage(I)V`); kept by the consumer R8 rules.
+ */
+internal fun interface AreaCommitHook {
+    fun onStage(stage: Int)
+
+    companion object {
+        /** CANTINO_AREA_STAGE_BEFORE_COMMIT. */
+        const val STAGE_BEFORE_COMMIT = 0
+
+        /** CANTINO_AREA_STAGE_AFTER_COMMIT_POINT. */
+        const val STAGE_AFTER_COMMIT_POINT = 1
+    }
 }
