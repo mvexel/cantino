@@ -1,0 +1,8 @@
+// Clang module for the Cantino C ABI. The header path is relative to this
+// file and points at the repository's single copy of the header
+// (include/cantino.h), so the Swift adapter can never compile against a
+// stale duplicate. Linking is configured in Package.swift, not here.
+module CCantino [system] {
+    header "../../../include/cantino.h"
+    export *
+}

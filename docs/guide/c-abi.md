@@ -2,13 +2,14 @@
 
 [`include/cantino.h`](../../include/cantino.h) is the contract between the
 Rust core and every platform adapter. Android's JNI layer wraps these
-functions; the iOS Swift adapter (planned) will call them directly; any
+functions; the Swift adapter ([`swift/`](../../swift/README.md), platform-neutral
+so far, tested on Linux) calls them directly; any
 language with a C FFI can too (`scripts/mobile-api-smoke.py` drives it from
 Python `ctypes`). The header is hand-written and documents every function.
 
 ```text
-Kotlin (OsmStore, AreaManager)      Swift (planned)      Python ctypes (tests)
-        │ JNI (src/android.rs)          │                       │
+Kotlin (OsmStore, AreaManager)  Swift (OsmStore, swift/)  Python ctypes (tests)
+        │ JNI (src/android.rs)          │ CCantino module        │
         └─────────── C ABI: include/cantino.h, JSON in and out ─┘
                                  │
                        Rust core (src/), SQLite
