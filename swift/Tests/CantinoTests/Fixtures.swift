@@ -83,13 +83,17 @@ func caught<T>(_ body: () async throws -> T) async -> (any Error)? {
 }
 
 /// "INVALID_ARGUMENT", "INVALID_FILE", "IO", "WRONG_THREAD" for a
-/// `CantinoError` (the header's names, via the parity canonical form),
-/// "CLOSED"/"INTERNAL" for a `CantinoStateError`, nil otherwise.
+/// `CantinoError` (the header's CANTINO_ERROR_* names), "CLOSED"/"INTERNAL"
+/// for a `CantinoStateError`, nil otherwise.
 func category(_ error: (any Error)?) -> String? {
     switch error {
     case let error as CantinoError:
-        if case .object(let fields) = error.canonical, case .string(let name)? = fields["error"] { return name }
-        return nil
+        switch error {
+        case .invalidArgument: return "INVALID_ARGUMENT"
+        case .invalidFile: return "INVALID_FILE"
+        case .io: return "IO"
+        case .wrongThread: return "WRONG_THREAD"
+        }
     case let error as CantinoStateError:
         if case .closed = error { return "CLOSED" }
         return "INTERNAL"
