@@ -32,6 +32,8 @@ Verify each `[x]` against the repo before trusting it.
    owner-thread wrapper, **§9 geometry helpers** (way coordinates,
    representative point, batch get), and typed errors (§13; breaking). The
    ⚡ quick wins from §10–§13 ride along as one slice in this release.
+   If `osm.lol` checks out, the `lol.osm.cantino` namespace rename (§12)
+   lands in 0.2 too, as the last sweep before the release build.
 2. **Download reliability** (§5). Done when: an instrumented test kills the
    process mid-download (`am kill`/`Process.killProcess`) and mid-commit and
    the next run resumes or rolls forward with the old area intact; decision
@@ -155,6 +157,7 @@ Target onboarding flow (Martijn, 2026-10-03): get location → offer to download
   - thread confinement + coroutines is an easy trap (store held across suspension on `Dispatchers.IO`); ship a small owner-thread wrapper like the café app's `StoreWorker`
   - `publishedArea`/`dataFile` block on disk: offer `suspend` variants
   - offline style assets (style.json, glyphs, sprites) need a node/npm script; consider publishing them as a downloadable artifact
+
 ## 8. Offline routing (later — not started; added 2026-10-03 by Martijn)
 - [ ] Research: on-device routing engines (e.g. Valhalla, GraphHopper, OSRM, Ferrostar/Valhalla mobile, pure-Rust options), their data models/graph formats vs our SQLite raw graph (build graph on device from the area db, or download pre-built tiles?), size/import cost for a ~10×10 km area, licensing, Android/iOS fit, and amount of work
 - [ ] Café app feature: real distance and travel time per chosen mode (walk/bike/car) in the nearby list, and "route to…" drawn on the map
@@ -213,6 +216,16 @@ Corporate dependency policies flag the current setup. Outward-facing steps
   hikers
 - [ ] Maven Central with signed artifacts; decide the group ID (personal
   `io.github.mvexel` vs an org namespace) before 1.0
+- [ ] **Namespace → `lol.osm.cantino`** (Martijn 2026-10-03, "if
+  possible"): Kotlin package, Maven group `lol.osm` (artifact `cantino`),
+  JNI symbols (`Java_lol_osm_cantino_*` in `src/android.rs`), Dokka/Pages
+  paths, README/guide snippets, café/sample apps. Ideally in 0.2 (already
+  a breaking release; renaming later breaks twice). Check first: Martijn
+  controls `osm.lol` (Maven Central verifies reverse-DNS groups by domain
+  TXT record; Pages Maven doesn't care); the OSMF trademark policy is fine
+  with "osm" in a package/domain used descriptively (it is not in the
+  product name). Mechanical sweep after the 0.2 API slices merge, before
+  the release build.
 
 ## 13. Docs and developer experience (both)
 - [ ] ⚡ Dokka renders non-literal defaults (`Query.maxCandidates`,
