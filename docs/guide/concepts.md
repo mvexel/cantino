@@ -61,11 +61,29 @@ while it is open). To see new data, close the store and open
 differs. The café app's [`CafeStore`](../../android/cafe-app/src/main/java/lol/osm/cantino/cafe/CafeStore.kt)
 does exactly that.
 
+## Capabilities
+
+Cantino aims to provide composable capabilities for apps that work with OSM
+data offline. Today they ship together, one library per platform; each is a
+separate layer in the code:
+
+| Capability | Core (Rust) | C ABI | Android / iOS |
+| --- | --- | --- | --- |
+| Snapshot store and queries | `store`, `schema`, `encoding`, `import` | `cantino_open`, `get`, `get_many`, `query`, `way_coordinates`, `import` | `OsmStore`, `AsyncOsmStore` |
+| Area acquisition | `slice`, `area_storage`, `failure` | `cantino_slice_*`, `cantino_area_*`, `cantino_classify_failure` | `AreaManager` (WorkManager / URLSession) |
+| Basemap acquisition | `basemap` | `cantino_basemap_*` | `BasemapSource`, `PmtilesInfo` |
+| Rendering | — | — | your app, with MapLibre Native and the basemap |
+
+Acquisition and basemap code does not depend on the store, so these layers
+can later become separate build options without a rewrite. Editing is
+outside the current implementation: an editor keeps its own edit layer and
+uses a snapshot as base data ([Editing apps](editing-apps.md)).
+
 ## What Cantino is not
 
 - Not a renderer: draw the basemap with MapLibre Native and your own data on
   top (GeoJSON sources, for example).
-- Not an editor: 0.3.0 is read-only.
+- Not an editor (yet): the current implementation is read-only.
 - Not exact geometry: bbox queries return **candidates** (see [Querying](querying.md)).
 - Not an interpreter of tags: `opening_hours`, `outdoor_seating` and the like
   are raw strings; their meaning is your app's business.
