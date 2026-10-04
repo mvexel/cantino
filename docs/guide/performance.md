@@ -1,8 +1,26 @@
 # Performance and sizes
 
-All numbers: Pixel 8 (Android 17, arm64), 2026-10-03, Cantino's SQLite core
+Unless noted, historical numbers: Pixel 8 (Android 17, arm64), 2026-10-03, Cantino's SQLite core
 through the AAR (ART, JNI, JSON and Kotlin decoding included). Raw records in
 [`docs/bench/`](../bench/).
+
+## Removing unused indexes: desktop comparison, 2026-10-04
+
+Default import of the same cached SLC PBF, Linux x86_64 release builds through
+Python ctypes; three runs per revision. Baseline `fb66a0c`, before removing
+`node_way` and `member_rel`; current format 2 after removal.
+[Raw samples](../bench/2026-10-04-slc-reverse-index-removal-desktop.json).
+
+| Measure | Before | After |
+| --- | --- | --- |
+| Database bytes | 128,503,808 | 102,289,408 (20.4% smaller) |
+| Median process peak RSS | 135,848 KiB | 108,848 KiB (19.9% lower) |
+| Median import elapsed | 4.267 s | 3.206 s |
+
+All retained table rows compare identically, with 1,437,753 nodes, 207,076 ways
+and 1,473 relations. Elapsed times are directional: concurrent builds on the
+shared host prevent a controlled speed comparison. The device measurements
+below predate this change and remain historical evidence.
 
 ## City extract: Salt Lake City
 
@@ -66,7 +84,7 @@ country-scale areas are not a goal (see the roadmap).
 
 The AAR is 3.5 MB; each ABI's `libcantino.so` is about 3.3 MB (stripped). The
 native library depends only on libc, libm and libdl. MapLibre Native adds
-about 13 MB per ABI if you use it. Ship only the ABIs you need (`arm64-v8a`, `armeabi-v7a`, `x86_64`)
+about 13 MB per ABI if you use it. Ship only the ABIs you need (`arm64-v8a`, `x86_64`)
 (`abiFilters`), or split per ABI with an App Bundle.
 
 ## Rules of thumb

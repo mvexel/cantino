@@ -484,6 +484,7 @@ mod tests {
     //! Protomaps fixture. The result must be byte-identical to driving the
     //! Rust engine directly.
     use super::*;
+    use crate::ErrorKind;
     use crate::basemap::{ByteRange, Step};
     use crate::mobile_api::cantino_free;
     use std::ffi::{CStr, CString};
@@ -664,20 +665,20 @@ mod tests {
         std::thread::spawn(move || {
             let plan = plan as *mut CantinoBasemapPlan;
             let r = call(|o, e| unsafe { cantino_basemap_plan_first_request(plan, o, e) });
-            assert_eq!(r.0, -1);
+            assert_eq!(r.0, -ErrorKind::WrongThread.code());
             assert!(r.2.unwrap().contains("different thread"));
             let r = call(|_, e| unsafe { cantino_basemap_plan_free(plan, e) });
-            assert_eq!(r.0, -1);
+            assert_eq!(r.0, -ErrorKind::WrongThread.code());
         })
         .join()
         .unwrap();
         let plan = plan as *mut CantinoBasemapPlan;
         // Wrong id and garbage are rejected; the plan stays usable.
         let r = call(|o, e| unsafe { cantino_basemap_plan_feed(plan, 7, [1u8].as_ptr(), 1, o, e) });
-        assert_eq!(r.0, -1);
+        assert_eq!(r.0, -ErrorKind::InvalidArgument.code());
         assert!(r.1.is_none());
         let r = call(|o, e| unsafe { cantino_basemap_plan_feed(plan, 0, null_mut(), 0, o, e) });
-        assert_eq!(r.0, -1, "short header");
+        assert_eq!(r.0, -ErrorKind::InvalidArgument.code(), "short header");
         // into_assembler before tiles_ready fails and consumes the plan.
         let dir = tempfile::tempdir().unwrap();
         let staging = c(dir.path().join("x.part").to_str().unwrap());
@@ -685,7 +686,7 @@ mod tests {
         let r = call(|_, e| unsafe {
             cantino_basemap_plan_into_assembler(plan, staging.as_ptr(), &mut asm, e)
         });
-        assert_eq!(r.0, -1);
+        assert_eq!(r.0, -ErrorKind::InvalidArgument.code());
         assert!(r.2.unwrap().contains("not ready"));
         assert!(asm.is_null());
         // Bad arguments to plan_new.
@@ -693,13 +694,13 @@ mod tests {
         let bad = c(r#"{"west":1}"#);
         let r =
             call(|_, e| unsafe { cantino_basemap_plan_new(bad.as_ptr(), -1, 15, 0.05, &mut p, e) });
-        assert_eq!(r.0, -1);
+        assert_eq!(r.0, -ErrorKind::InvalidArgument.code());
         assert!(p.is_null());
         let bbox = c(BBOX);
         let r = call(|_, e| unsafe {
             cantino_basemap_plan_new(bbox.as_ptr(), -1, 40, 0.05, &mut p, e)
         });
-        assert_eq!(r.0, -1);
+        assert_eq!(r.0, -ErrorKind::InvalidArgument.code());
         // Freeing NULL is a no-op.
         assert_eq!(
             unsafe { cantino_basemap_plan_free(null_mut(), null_mut()) },
@@ -729,7 +730,7 @@ mod tests {
         );
         let out = c(dir.path().join("y.pmtiles").to_str().unwrap());
         let r = call(|_, e| unsafe { cantino_basemap_asm_finish(asm, out.as_ptr(), e) });
-        assert_eq!(r.0, -1, "ranges missing");
+        assert_eq!(r.0, -ErrorKind::InvalidArgument.code(), "ranges missing");
         // Too long a body (a server ignoring Range) is rejected.
         let remaining: Vec<ByteRange> = ok_json(call(|o, e| unsafe {
             cantino_basemap_asm_remaining(asm, o, e)
@@ -740,7 +741,7 @@ mod tests {
         let r = call(|_, e| unsafe {
             cantino_basemap_asm_write_range_file(asm, remaining[0].id, whole_c.as_ptr(), e)
         });
-        assert_eq!(r.0, -1);
+        assert_eq!(r.0, -ErrorKind::InvalidArgument.code());
         assert!(r.2.unwrap().contains("ignore the Range"));
         assert!(staging_path.exists());
         ok(unsafe { cantino_basemap_asm_free(asm, &mut err) }, err);
@@ -751,12 +752,12 @@ mod tests {
         std::fs::write(&truncated, &src[..src.len() - 10]).unwrap();
         let t = c(truncated.to_str().unwrap());
         let r = call(|o, e| unsafe { cantino_basemap_info(t.as_ptr(), o, e) });
-        assert_eq!(r.0, -1);
+        assert_eq!(r.0, -ErrorKind::InvalidFile.code());
         assert!(r.2.unwrap().contains("truncated"));
         let r = call(|o, e| unsafe { cantino_basemap_info(whole_c.as_ptr(), o, e) });
         assert_eq!(r.0, 0);
         std::fs::write(&truncated, b"<html>not found</html>").unwrap();
         let r = call(|o, e| unsafe { cantino_basemap_info(t.as_ptr(), o, e) });
-        assert_eq!(r.0, -1);
+        assert_eq!(r.0, -ErrorKind::InvalidFile.code());
     }
 }

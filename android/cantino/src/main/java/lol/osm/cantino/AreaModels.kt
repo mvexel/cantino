@@ -8,64 +8,43 @@ import java.time.format.DateTimeParseException
 import java.util.UUID
 
 /**
- * Tuning and endpoints for [AreaManager]. The defaults target the public
- * SliceOSM service and suit a city-sized area; most apps pass `AreaConfig()`
- * or only set [foreground]. Tests inject a local server through [sliceBaseUrl].
+ * Download endpoint, HTTP timeouts, import options and optional foreground service.
+ * The config travels with the work request so interrupted runs resume with it.
+ * Transient failures retry automatically; polling and retry timing are internal defaults.
  *
- * Retries happen at two levels. Inside one run, a transient HTTP failure
- * (network error, timeout, 5xx, 408, 429) is retried [inlineRetries] times
- * with a delay starting at [inlineRetryDelayMillis] and doubling, so a
- * short server hiccup does not cost a WorkManager backoff. If that is not
- * enough the run ends with `Result.retry()` and WorkManager reschedules it
- * with exponential backoff from [backoffDelayMillis] (WorkManager enforces a
- * 10 s minimum), up to [maxRunAttempts] runs in total. Permanent failures
- * (other 4xx, data that fails to import) are never retried.
- *
- * The config is copied into each work request, so a run restarted after
- * process death uses the config it was started with.
- *
- * @property sliceBaseUrl SliceOSM service root (http or https, ending in `/`).
- *   Default [DEFAULT_SLICE_BASE_URL], `https://slice.openstreetmap.us/`.
- * @property pollIntervalMillis Delay between job status polls while SliceOSM slices.
- *   Default 2000 (2 s).
- * @property maxSliceWaitMillis Slicing longer than this within one run is
- *   treated as transient: the run retries later and resumes polling the same job.
- *   Default 480000 (8 min).
- * @property connectTimeoutMillis HTTP connect timeout per request. Default 15000 (15 s).
- * @property readTimeoutMillis HTTP read timeout: the longest silence tolerated mid-response.
- *   Default 60000 (60 s).
- * @property inlineRetries Retries of a transient HTTP failure within one run. Default 3.
- * @property inlineRetryDelayMillis First inline retry delay; doubles per retry. Default 1000 (1 s).
- * @property maxRunAttempts WorkManager runs in total before a transient cause becomes [AreaState.Failed].
- *   Default 5.
- * @property backoffDelayMillis Initial WorkManager backoff between runs (exponential, at least 10 s).
- *   Default 30000 (30 s).
- * @property importOptions Options for the on-device import of the downloaded extract.
- * @property basemapParallelism Parallel HTTP range requests of a
- *   [BasemapSource.Extract] (go-pmtiles uses 4). Default 4.
- * @property foreground Opt-in: run downloads as a foreground service with a
- *   progress notification (see [ForegroundConfig]). Null (the default) runs
- *   them as ordinary background work, subject to WorkManager's 10-minute
- *   limit per run.
+ * @property sliceBaseUrl SliceOSM service root, ending in `/`; defaults to
+ *   `https://slice.openstreetmap.us/`. A custom endpoint may use HTTP or HTTPS.
+ * @property connectTimeoutMillis HTTP connection timeout, default 15000 (15 seconds).
+ * @property readTimeoutMillis Maximum silence during an HTTP response, default 60000 (60 seconds).
+ * @property importOptions On-device import settings; defaults to a full import.
+ * @property foreground Optional progress notification and foreground service settings;
+ *   null runs ordinary background work. See [ForegroundConfig] for manifest setup.
  */
 public data class AreaConfig(
     val sliceBaseUrl: String = DEFAULT_SLICE_BASE_URL,
-    val pollIntervalMillis: Long = 2_000,
-    val maxSliceWaitMillis: Long = 8 * 60_000,
     val connectTimeoutMillis: Int = 15_000,
     val readTimeoutMillis: Int = 60_000,
+    val importOptions: ImportOptions = ImportOptions(),
+    val foreground: ForegroundConfig? = null,
+) {
+    public companion object {
+        public const val DEFAULT_SLICE_BASE_URL: String = "https://slice.openstreetmap.us/"
+    }
+}
+
+/** Internal scheduling defaults; tests can shorten waits without expanding the SDK API. */
+internal data class DownloadTuning(
+    val pollIntervalMillis: Long = 2_000,
+    val maxSliceWaitMillis: Long = 8 * 60_000,
     val inlineRetries: Int = 3,
     val inlineRetryDelayMillis: Long = 1_000,
     val maxRunAttempts: Int = 5,
     val backoffDelayMillis: Long = 30_000,
-    val importOptions: ImportOptions = ImportOptions(),
     val basemapParallelism: Int = 4,
-    val foreground: ForegroundConfig? = null,
 ) {
-    /** Defaults of [AreaConfig]. */
-    public companion object {
-        /** The public SliceOSM service (OpenStreetMap US). */
-        public const val DEFAULT_SLICE_BASE_URL: String = "https://slice.openstreetmap.us/"
+    companion object {
+        val defaults = DownloadTuning()
+        val current: DownloadTuning get() = AreaTestHooks.downloadTuning ?: defaults
     }
 }
 
@@ -156,12 +135,12 @@ public data class ForegroundConfig(
  *   open it with [OsmStore.open].
  * @property metadata What the download recorded (bbox, snapshot age, import
  *   report, basemap). Null when the sidecar is missing or does not describe
- *   these files (areas published by hand or before the sidecar existed);
+ *   these files;
  *   the files themselves are still complete and valid.
  * @property basemapFile The published PMTiles basemap, or null when the area
  *   was downloaded with [BasemapSource.None].
  */
-public class AreaInfo internal constructor(
+public data class AreaInfo(
     public val areaId: String,
     public val dataFile: File,
     public val metadata: AreaMetadata?,
@@ -174,12 +153,6 @@ public class AreaInfo internal constructor(
      */
     public val pmtilesUrl: String? get() = basemapFile?.let { "pmtiles://file://${it.absolutePath}" }
 
-    override fun equals(other: Any?): Boolean = this === other || other is AreaInfo &&
-        areaId == other.areaId && dataFile == other.dataFile && metadata == other.metadata && basemapFile == other.basemapFile
-
-    override fun hashCode(): Int = hash(areaId, dataFile, metadata, basemapFile)
-
-    override fun toString(): String = "AreaInfo(areaId=$areaId, dataFile=$dataFile, metadata=$metadata, basemapFile=$basemapFile)"
 }
 
 /** How a published basemap was obtained; see [BasemapSource]. */
@@ -207,7 +180,7 @@ public enum class BasemapKind(internal val wire: String) {
  * @property requests HTTP requests the download made (1 for a URL download).
  * @property transferredBytes Bytes transferred (the file size for a URL download).
  */
-public class BasemapMetadata internal constructor(
+public data class BasemapMetadata(
     public val kind: BasemapKind,
     public val sourceUrl: String,
     public val fileBytes: Long,
@@ -217,18 +190,6 @@ public class BasemapMetadata internal constructor(
     public val requests: Long,
     public val transferredBytes: Long,
 ) {
-    override fun equals(other: Any?): Boolean = this === other || other is BasemapMetadata &&
-        kind == other.kind && sourceUrl == other.sourceUrl && fileBytes == other.fileBytes &&
-        addressedTiles == other.addressedTiles && minZoom == other.minZoom && maxZoom == other.maxZoom &&
-        requests == other.requests && transferredBytes == other.transferredBytes
-
-    override fun hashCode(): Int =
-        hash(kind, sourceUrl, fileBytes, addressedTiles, minZoom, maxZoom, requests, transferredBytes)
-
-    override fun toString(): String =
-        "BasemapMetadata(kind=$kind, sourceUrl=$sourceUrl, fileBytes=$fileBytes, addressedTiles=$addressedTiles, " +
-            "minZoom=$minZoom, maxZoom=$maxZoom, requests=$requests, transferredBytes=$transferredBytes)"
-
     // Sidecar keys are a stored format: renaming a Kotlin property must not change them.
     internal fun toJson(): JSONObject = JSONObject()
         .put("kind", kind.wire)
@@ -262,8 +223,7 @@ public class BasemapMetadata internal constructor(
  * @property name The job name given to [AreaManager.download].
  * @property snapshotTimestamp SliceOSM's replication timestamp of the OSM data:
  *   show it to users as the age of the data. Null if the server did not
- *   report one or reported one that is not an RFC 3339 date-time (the
- *   sidecar file keeps the server's string as received, for diagnosis).
+ *   report one or reported one that is not an RFC 3339 date-time.
  * @property importedAtMillis Device clock (Unix milliseconds) when the area was published.
  * @property report The import's object counts and database size.
  * @property basemap The published basemap, null for [BasemapSource.None].
@@ -271,39 +231,22 @@ public class BasemapMetadata internal constructor(
  *   (null for areas published by hand). Changes with every refresh, so it
  *   also serves as a version key for caches of the area's content.
  */
-public class AreaMetadata internal constructor(
+public data class AreaMetadata(
     public val bbox: Bbox,
     public val name: String,
     /**
-     * The server's timestamp string as received (SliceOSM status
-     * `Timestamp`); stored in the sidecar unchanged. [snapshotTimestamp] is
-     * its parsed form.
+     * Parsed SliceOSM snapshot timestamp, or null when unknown or malformed.
      */
-    internal val snapshotTimestampRaw: String?,
+    public val snapshotTimestamp: Instant?,
     public val importedAtMillis: Long,
     public val report: ImportReport,
     public val basemap: BasemapMetadata? = null,
     public val workId: UUID? = null,
 ) {
-    public val snapshotTimestamp: Instant? = parseSnapshotTimestamp(snapshotTimestampRaw)
-
-    // Value semantics over the public view: two sidecars that spell the same
-    // instant differently describe the same snapshot.
-    override fun equals(other: Any?): Boolean = this === other || other is AreaMetadata &&
-        bbox == other.bbox && name == other.name && snapshotTimestamp == other.snapshotTimestamp &&
-        importedAtMillis == other.importedAtMillis && report == other.report &&
-        basemap == other.basemap && workId == other.workId
-
-    override fun hashCode(): Int = hash(bbox, name, snapshotTimestamp, importedAtMillis, report, basemap, workId)
-
-    override fun toString(): String =
-        "AreaMetadata(bbox=$bbox, name=$name, snapshotTimestamp=$snapshotTimestamp, importedAtMillis=$importedAtMillis, " +
-            "report=$report, basemap=$basemap, workId=$workId)"
-
     internal fun toJson(): JSONObject = JSONObject()
         .put("bbox", bbox.toJson())
         .put("name", name)
-        .put("snapshot_timestamp", snapshotTimestampRaw ?: JSONObject.NULL)
+        .put("snapshot_timestamp", snapshotTimestamp?.toString() ?: JSONObject.NULL)
         .put("imported_at_millis", importedAtMillis)
         .put("report", report.toJson())
         .put("basemap", basemap?.toJson() ?: JSONObject.NULL)
@@ -313,7 +256,7 @@ public class AreaMetadata internal constructor(
         fun fromJson(json: JSONObject) = AreaMetadata(
             Bbox.fromJson(json.getJSONObject("bbox")),
             json.getString("name"),
-            if (json.isNull("snapshot_timestamp")) null else json.getString("snapshot_timestamp"),
+            parseSnapshotTimestamp(if (json.isNull("snapshot_timestamp")) null else json.getString("snapshot_timestamp")),
             json.getLong("imported_at_millis"),
             ImportReport.fromJson(json.getJSONObject("report")),
             json.optJSONObject("basemap")?.let { BasemapMetadata.fromJson(it) },
@@ -353,7 +296,7 @@ public class AreaMetadata internal constructor(
  * | [INVALID_REQUEST] | Invalid bbox or name, other HTTP 4xx (a 400 on submit, a basemap URL that 404s), zooms the archive lacks | no |
  * | [STORAGE] | Disk full or a staging file that cannot be written; publishing interrupted by an I/O error | yes (retries wait until storage is no longer low) |
  * | [INVALID_DATA] | A PBF that fails to import (corrupt, truncated, not a snapshot), a basemap that is not a valid or supported PMTiles v3 archive | no |
- * | [UNKNOWN] | An unexpected error (a bug in Cantino), or a failure recorded by Cantino 0.1 | no |
+ * | [UNKNOWN] | An unexpected error (a bug in Cantino) | no |
  *
  * Low storage before a run starts does not fail it: WorkManager waits
  * ([AreaState.Queued]) until storage is no longer low.
@@ -394,10 +337,8 @@ public enum class FailureReason {
     INVALID_DATA,
 
     /**
-     * Not classified. Two real paths lead here and fit no other value: an
-     * unexpected exception in the download worker (a bug in Cantino, worth
-     * reporting with [AreaState.Failed.message]), and a failed run recorded
-     * by Cantino 0.1, which stored no reason, read after upgrading.
+     * An unexpected exception in the download worker (a bug in Cantino;
+     * report it with [AreaState.Failed.message]).
      */
     UNKNOWN,
 }
@@ -458,12 +399,9 @@ public sealed interface AreaState {
      *
      * @property published The area on disk, if any.
      */
-    public class Idle internal constructor(public val published: AreaInfo?) : AreaState {
+    public data class Idle(public val published: AreaInfo?) : AreaState {
         /** Always null: no run is known. */
         override val runId: UUID? get() = null
-        override fun equals(other: Any?): Boolean = this === other || other is Idle && published == other.published
-        override fun hashCode(): Int = hash(published)
-        override fun toString(): String = "Idle(published=$published)"
     }
 
     /**
@@ -472,31 +410,17 @@ public sealed interface AreaState {
      *
      * @property previousRuns Runs that already happened (0 before the first).
      */
-    public class Queued internal constructor(override val runId: UUID, public val previousRuns: Int) : AreaState {
-        override fun equals(other: Any?): Boolean = this === other || other is Queued &&
-            runId == other.runId && previousRuns == other.previousRuns
-        override fun hashCode(): Int = hash(runId, previousRuns)
-        override fun toString(): String = "Queued(runId=$runId, previousRuns=$previousRuns)"
-    }
+    public data class Queued(override val runId: UUID, public val previousRuns: Int) : AreaState
 
     /** Submitting the job to SliceOSM, or re-attaching to the job of an interrupted run. */
-    public class Submitting internal constructor(override val runId: UUID) : AreaState {
-        override fun equals(other: Any?): Boolean = this === other || other is Submitting && runId == other.runId
-        override fun hashCode(): Int = runId.hashCode()
-        override fun toString(): String = "Submitting(runId=$runId)"
-    }
+    public data class Submitting(override val runId: UUID) : AreaState
 
     /**
      * SliceOSM is cutting the extract.
      *
      * @property fraction Progress 0..1, or null before the server reports totals.
      */
-    public class Slicing internal constructor(override val runId: UUID, public val fraction: Double?) : AreaState {
-        override fun equals(other: Any?): Boolean = this === other || other is Slicing &&
-            runId == other.runId && fraction == other.fraction
-        override fun hashCode(): Int = hash(runId, fraction)
-        override fun toString(): String = "Slicing(runId=$runId, fraction=$fraction)"
-    }
+    public data class Slicing(override val runId: UUID, public val fraction: Double?) : AreaState
 
     /**
      * Downloading the OSM data (PBF).
@@ -504,27 +428,18 @@ public sealed interface AreaState {
      * @property bytes Bytes downloaded so far.
      * @property totalBytes Size of the download, or null when the server sends no length.
      */
-    public class Downloading internal constructor(
+    public data class Downloading(
         override val runId: UUID,
         public val bytes: Long,
         public val totalBytes: Long?,
-    ) : AreaState {
-        override fun equals(other: Any?): Boolean = this === other || other is Downloading &&
-            runId == other.runId && bytes == other.bytes && totalBytes == other.totalBytes
-        override fun hashCode(): Int = hash(runId, bytes, totalBytes)
-        override fun toString(): String = "Downloading(runId=$runId, bytes=$bytes, totalBytes=$totalBytes)"
-    }
+    ) : AreaState
 
     /**
      * Importing into SQLite, into a staging file: nothing is published yet.
      * The native import itself cannot be interrupted, but a cancel during it
      * is honored when it returns (the staged import is discarded).
      */
-    public class Importing internal constructor(override val runId: UUID) : AreaState {
-        override fun equals(other: Any?): Boolean = this === other || other is Importing && runId == other.runId
-        override fun hashCode(): Int = runId.hashCode()
-        override fun toString(): String = "Importing(runId=$runId)"
-    }
+    public data class Importing(override val runId: UUID) : AreaState
 
     /**
      * Downloading the basemap ([BasemapSource.Url] or [BasemapSource.Extract])
@@ -536,17 +451,12 @@ public sealed interface AreaState {
      * @property bytes Bytes transferred so far in [phase].
      * @property totalBytes Bytes to transfer in [phase], or null while unknown.
      */
-    public class Basemap internal constructor(
+    public data class Basemap(
         override val runId: UUID,
         public val phase: BasemapPhase,
         public val bytes: Long,
         public val totalBytes: Long?,
-    ) : AreaState {
-        override fun equals(other: Any?): Boolean = this === other || other is Basemap &&
-            runId == other.runId && phase == other.phase && bytes == other.bytes && totalBytes == other.totalBytes
-        override fun hashCode(): Int = hash(runId, phase, bytes, totalBytes)
-        override fun toString(): String = "Basemap(runId=$runId, phase=$phase, bytes=$bytes, totalBytes=$totalBytes)"
-    }
+    ) : AreaState
 
     /**
      * Published: OSM data and, if requested, the basemap. Open [area]'s
@@ -557,12 +467,7 @@ public sealed interface AreaState {
      *
      * @property area The area this run published.
      */
-    public class Ready internal constructor(override val runId: UUID, public val area: AreaInfo) : AreaState {
-        override fun equals(other: Any?): Boolean = this === other || other is Ready &&
-            runId == other.runId && area == other.area
-        override fun hashCode(): Int = hash(runId, area)
-        override fun toString(): String = "Ready(runId=$runId, area=$area)"
-    }
+    public data class Ready(override val runId: UUID, public val area: AreaInfo) : AreaState
 
     /**
      * Gave up. [reason] says why, by what the app can do about it (branch on
@@ -577,21 +482,14 @@ public sealed interface AreaState {
      * @property message Developer-facing description of the failure (not localized).
      * @property retryable True for a transient cause that exhausted its retries.
      * @property reason Category of the failure; [FailureReason.UNKNOWN] only
-     *   for unexpected errors and failures recorded before Cantino 0.2.
+     *   for unexpected errors.
      */
-    public class Failed internal constructor(
+    public data class Failed(
         override val runId: UUID,
         public val message: String,
         public val retryable: Boolean,
         public val reason: FailureReason,
-    ) : AreaState {
-        override fun equals(other: Any?): Boolean = this === other || other is Failed &&
-            runId == other.runId && message == other.message && retryable == other.retryable &&
-            reason == other.reason
-        override fun hashCode(): Int = hash(runId, message, retryable, reason)
-        override fun toString(): String =
-            "Failed(runId=$runId, message=$message, retryable=$retryable, reason=$reason)"
-    }
+    ) : AreaState
 
     /**
      * Cancelled by [AreaManager.cancel] before publishing began: nothing of
@@ -599,9 +497,5 @@ public sealed interface AreaState {
      * [AreaManager.download] of the same area is not reported: the state
      * follows the new run.)
      */
-    public class Cancelled internal constructor(override val runId: UUID) : AreaState {
-        override fun equals(other: Any?): Boolean = this === other || other is Cancelled && runId == other.runId
-        override fun hashCode(): Int = runId.hashCode()
-        override fun toString(): String = "Cancelled(runId=$runId)"
-    }
+    public data class Cancelled(override val runId: UUID) : AreaState
 }

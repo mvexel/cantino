@@ -21,7 +21,8 @@ areas.cancel("city")                                   // keeps the published ar
 | `download(areaId, bbox, name, basemap)` | any | Replaces a running download of the same ID. Returns the WorkManager run ID |
 | `cancel(areaId)` | any | No-op if nothing runs |
 | `state(areaId)` | any (collect in a coroutine) | Current state first, then every change |
-| `publishedArea(areaId)`, `dataFile`, `basemapFile` | **background** | Read the disk; may wait a few ms for a commit in progress |
+| `publishedArea(areaId)` | **background** | Read the disk; may wait a few ms for a commit in progress |
+| `loadPublishedArea(areaId)` | any coroutine | Same result, with disk reads dispatched off the caller’s thread |
 
 ## The state machine
 
@@ -100,9 +101,9 @@ val end = areas.state("home").first { it.runId == runId && it.isTerminal }
 Plain `state(areaId)` collection (a progress UI) needs no matching: it shows
 whatever run the area is on, and `runId` changes when a new run starts.
 
-The blocking disk reads `dataFile`, `basemapFile` and `publishedArea` have
-main-safe suspend counterparts: `loadDataFile`, `loadBasemapFile` and
-`loadPublishedArea` (they run on `Dispatchers.IO`).
+Use `loadPublishedArea(areaId)` from a coroutine, or `publishedArea(areaId)`
+on a worker thread. The returned `AreaInfo` contains both `dataFile` and
+`basemapFile`; the suspend method performs disk reads on `Dispatchers.IO`.
 
 ## Cancellation
 
@@ -117,14 +118,15 @@ arrives during the final milliseconds of renames is ignored: that run reports
 | Cause | What happens | `Failed.reason` |
 | --- | --- | --- |
 | Network error, timeout, truncated download | Retried inline (3×, 1 s doubling), then the run ends and WorkManager reruns it with exponential backoff (from 30 s), up to 5 runs. A rerun resumes polling the same SliceOSM job instead of resubmitting. Retries exhausted: `Failed(retryable = true)` | `NETWORK` |
-| HTTP 5xx / 408 / 429, a vanished SliceOSM job, an unparseable server answer, a job still slicing after `maxSliceWaitMillis` | As above (transient) | `SERVER` |
+| HTTP 5xx / 408 / 429, a vanished SliceOSM job, an unparseable server answer, a job still slicing after the internal wait limit | As above (transient) | `SERVER` |
 | A basemap server ignoring `Range` (or sending the wrong range) | `Failed(retryable = false)` at once | `SERVER` |
 | Other HTTP 4xx (a `400` from SliceOSM on submit, a basemap URL that is `404`), invalid bbox or name, zooms the basemap archive lacks | `Failed(retryable = false)` at once | `INVALID_REQUEST` |
 | A PBF that fails to import (corrupt, truncated, unsorted), a basemap that is not a valid PMTiles v3 archive | `Failed(retryable = false)` at once | `INVALID_DATA` |
 | Disk full while downloading or importing | Transient: WorkManager retries once storage is no longer low; `Failed(retryable = true)` if the retries run out | `STORAGE` |
 | An I/O error while publishing | Transient: the next run finishes the commit | `STORAGE` |
-| An unexpected error (a bug), or a failure recorded by Cantino 0.1 | `Failed(retryable = false)` | `UNKNOWN` |
+| An unexpected error (a bug) | `Failed(retryable = false)` | `UNKNOWN` |
 | Storage low before the run | Not a failure: the work stays `Queued` until storage recovers (WorkManager constraint) | |
+| Recovery cannot finish because storage is unavailable | Area reads throw `IOException` rather than expose a partial publication; the journal remains for retry | `STORAGE` |
 | Process killed | WorkManager reruns the work, resuming the same SliceOSM job; a run killed after its commit point is completed on the next access. Both are tested with a real `kill -9` (`scripts/kill-test-android.sh`) | |
 
 Branch on `reason` for what to tell the user; `message` is a developer-facing
@@ -139,10 +141,9 @@ is AreaState.Failed -> when (state.reason) {
 }
 ```
 
-All of these knobs are in `AreaConfig` (`inlineRetries`, `maxRunAttempts`,
-`backoffDelayMillis`, timeouts, `sliceBaseUrl`). Most apps pass
-`AreaConfig()` or only set `foreground`. Downloads restart from byte 0 on a
-retry (no byte-range resume; measured and decided against for now).
+`AreaConfig` exposes `sliceBaseUrl`, `importOptions`, `foreground`,
+`connectTimeoutMillis` and `readTimeoutMillis`. Polling, retries and basemap
+parallelism use internal defaults. Downloads restart from byte 0 on retry.
 
 ## Foreground mode
 

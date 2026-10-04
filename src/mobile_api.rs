@@ -1,15 +1,9 @@
 //! Small language-neutral ABI for a platform adapter to call the Rust core.
 //! Handles are confined to their creating thread. Buffers have explicit ownership;
 //! errors and panics return status codes instead of unwinding through C/Swift/JNI.
-//!
-//! Error reporting: a failing call returns -1 and writes an owned message to
-//! `*error`; its category (`ErrorKind` as a `CANTINO_ERROR_*` code) is kept
-//! per thread and read with `cantino_last_error_code`, errno-style. The
-//! category travels out of band so the 0.1 contract ("-1 is an error") stays
-//! intact for existing callers.
+//! Failures return `-ErrorKind::code()` and an owned diagnostic in `*error`.
 use crate::*;
 use std::{
-    cell::Cell,
     ffi::{CStr, CString},
     os::raw::c_char,
     panic::{AssertUnwindSafe, catch_unwind},
@@ -20,30 +14,7 @@ pub struct CantinoStore {
     store: Store,
     thread: ThreadId,
 }
-// `CANTINO_ERROR_*` code of the last ABI call on this thread: 0 after a
-// success, the error's `ErrorKind` after a failure. Thread-local because
-// every handle is thread-confined anyway and the adapter reads it right
-// after the failing call on the same thread; no lock, no cross-thread races.
-thread_local! {
-    // The initializer is const already; Clippy 1.99 still reports it on the
-    // Android targets (std expands thread_local! differently there).
-    #[allow(clippy::missing_const_for_thread_local)]
-    static LAST_ERROR: Cell<i32> = const { Cell::new(0) };
-}
-
-/// The `CANTINO_ERROR_*` code of the most recent ABI call made on the
-/// calling thread: 0 (`CANTINO_ERROR_NONE`) if it succeeded, otherwise the
-/// failure's category. Only meaningful right after a call returned -1;
-/// any later call on the thread overwrites it.
-#[unsafe(no_mangle)]
-pub extern "C" fn cantino_last_error_code() -> i32 {
-    LAST_ERROR.with(Cell::get)
-}
-
-/// Runs one ABI call body: catches panics, turns an `Err` into status -1
-/// plus an owned message in `*error`, and records the error's category for
-/// `cantino_last_error_code`. Every exported function that can fail goes
-/// through here, so classification happens in exactly one place.
+/// Catch panics and encode failures once for all exported calls.
 pub(crate) fn protect(error: *mut *mut c_char, function: impl FnOnce() -> Result<i32>) -> i32 {
     // SAFETY: the ABI contract requires error to be NULL or a writable slot.
     if !error.is_null() {
@@ -54,14 +25,12 @@ pub(crate) fn protect(error: *mut *mut c_char, function: impl FnOnce() -> Result
     let result = catch_unwind(AssertUnwindSafe(function));
     let (kind, message) = match result {
         Ok(Ok(code)) => {
-            LAST_ERROR.with(|last| last.set(0));
             return code;
         }
         Ok(Err(error)) => (error.kind(), error.to_string()),
         // A panic is a bug in the core by definition.
         Err(_) => (ErrorKind::Internal, "Rust core panicked".into()),
     };
-    LAST_ERROR.with(|last| last.set(kind.code()));
     if !error.is_null() {
         let message = CString::new(message.replace('\0', "\\0")).expect("NUL escaped");
         // SAFETY: the caller owns the allocated string and frees it through this ABI.
@@ -69,7 +38,7 @@ pub(crate) fn protect(error: *mut *mut c_char, function: impl FnOnce() -> Result
             *error = message.into_raw();
         }
     }
-    -1
+    -kind.code()
 }
 pub(crate) unsafe fn text<'a>(input: *const c_char) -> Result<&'a str> {
     if input.is_null() {
@@ -258,34 +227,6 @@ pub unsafe extern "C" fn cantino_way_coordinates(
     })
 }
 
-/// Representative (label/anchor) point of an object: writes
-/// `{"lat_e7":..,"lon_e7":..}`, or returns 1 (no JSON) when the object is not
-/// in the area or none of its geometry is. See `Store::representative_point`
-/// for the definition; it is not a guaranteed point-on-surface.
-///
-/// # Safety
-/// Handle and output pointers obey the header contract.
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn cantino_representative_point(
-    store: *mut CantinoStore,
-    kind: i32,
-    id: i64,
-    out: *mut *mut c_char,
-    error: *mut *mut c_char,
-) -> i32 {
-    if !out.is_null() {
-        unsafe {
-            *out = std::ptr::null_mut();
-        }
-    }
-    protect(error, || {
-        let id = typed_id(kind, id)?;
-        match unsafe { handle(store)? }.store.representative_point(id)? {
-            Some(point) => unsafe { output(out, &point) },
-            None => Ok(1),
-        }
-    })
-}
 /// # Safety
 /// `request` must be a live NUL-terminated UTF-8 JSON query for this call.
 #[unsafe(no_mangle)]
@@ -428,91 +369,63 @@ pub unsafe extern "C" fn cantino_slice_progress(
 
 #[cfg(test)]
 mod tests {
-    //! The error category travels with every failure (`cantino_last_error_code`).
-    //! The per-variant classification is in `tests/errors.rs`; this checks
-    //! the ABI side: the code is set per thread, reset by a success, and the
-    //! two kinds only the ABI can produce (WrongThread, Internal) appear.
     use super::*;
     use std::ptr::null_mut;
 
-    fn c(s: &str) -> CString {
-        CString::new(s).unwrap()
-    }
-
-    /// Calls an ABI function, frees both buffers, returns (status, code).
-    fn status_and_code(
-        function: impl FnOnce(*mut *mut c_char, *mut *mut c_char) -> i32,
-    ) -> (i32, i32) {
+    fn status(function: impl FnOnce(*mut *mut c_char, *mut *mut c_char) -> i32) -> i32 {
         let (mut out, mut error) = (null_mut(), null_mut());
         let status = function(&mut out, &mut error);
-        let code = cantino_last_error_code();
+        assert_eq!(!error.is_null(), status < 0);
         unsafe {
             cantino_free(out);
             cantino_free(error);
         }
-        (status, code)
-    }
-
-    fn open(path: &str) -> (i32, i32, *mut CantinoStore) {
-        let path = c(path);
-        let mut store = null_mut();
-        let (status, code) =
-            status_and_code(|_, error| unsafe { cantino_open(path.as_ptr(), &mut store, error) });
-        (status, code, store)
+        status
     }
 
     #[test]
-    fn every_failure_carries_its_category_per_thread() {
+    fn failures_return_their_category() {
         let directory = tempfile::tempdir().unwrap();
         let area = directory.path().join("area.sqlite");
         let fixture = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/fixtures/snapshot.osm");
         import_area(fixture, &area, ImportOptions::default()).unwrap();
-
-        // Io: missing file. InvalidFile: the XML fixture is no area.
-        let missing = directory.path().join("missing.sqlite");
-        assert_eq!(open(missing.to_str().unwrap()).1, ErrorKind::Io.code());
-        assert_eq!(open(fixture).1, ErrorKind::InvalidFile.code());
-        // NULL path argument: InvalidArgument.
         let mut store = null_mut();
-        let (status, code) = status_and_code(|_, error| unsafe {
-            cantino_open(std::ptr::null(), &mut store, error)
-        });
-        assert_eq!((status, code), (-1, ErrorKind::InvalidArgument.code()));
-
-        let (status, code, store) = open(area.to_str().unwrap());
-        assert_eq!((status, code), (0, 0), "success resets the code");
-        // InvalidArgument: a bad query; then a success resets to 0.
-        let query = c(r#"{"limit":0}"#);
-        let (status, code) = status_and_code(|out, error| unsafe {
-            cantino_query(store, query.as_ptr(), out, error)
-        });
-        assert_eq!((status, code), (-1, ErrorKind::InvalidArgument.code()));
         assert_eq!(
-            status_and_code(|out, error| unsafe { cantino_get(store, 0, 1, out, error) }),
-            (0, 0)
+            status(|_, error| unsafe { cantino_open(std::ptr::null(), &mut store, error) }),
+            -ErrorKind::InvalidArgument.code()
         );
-
-        // WrongThread: the handle used from another thread. That thread
-        // sees its own code; this thread's code is untouched.
+        let path = CString::new(area.to_str().unwrap()).unwrap();
+        assert_eq!(
+            status(|_, error| unsafe { cantino_open(path.as_ptr(), &mut store, error) }),
+            0
+        );
+        let query = CString::new(r#"{"limit":0}"#).unwrap();
+        assert_eq!(
+            status(|out, error| unsafe { cantino_query(store, query.as_ptr(), out, error) }),
+            -ErrorKind::InvalidArgument.code()
+        );
+        // Failure leaves the handle usable on its owning thread.
         let address = store as usize;
         let foreign = std::thread::spawn(move || {
-            let store = address as *mut CantinoStore;
-            status_and_code(|out, error| unsafe { cantino_get(store, 0, 1, out, error) })
+            status(|out, error| unsafe {
+                cantino_get(address as *mut CantinoStore, 0, 1, out, error)
+            })
         })
         .join()
         .unwrap();
-        assert_eq!(foreign, (-1, ErrorKind::WrongThread.code()));
-        assert_eq!(cantino_last_error_code(), 0);
-
+        assert_eq!(foreign, -ErrorKind::WrongThread.code());
         assert_eq!(
-            status_and_code(|_, error| unsafe { cantino_close(store, error) }),
-            (0, 0)
+            status(|out, error| unsafe { cantino_get(store, 0, 1, out, error) }),
+            0
         );
+        assert_eq!(status(|_, error| unsafe { cantino_close(store, error) }), 0);
     }
 
     #[test]
     fn panics_are_internal() {
-        let (status, code) = status_and_code(|_, error| protect(error, || panic!("boom")));
-        assert_eq!((status, code), (-1, ErrorKind::Internal.code()));
+        assert_eq!(
+            status(|_, error| protect(error, || panic!("boom"))),
+            -ErrorKind::Internal.code()
+        );
     }
 }

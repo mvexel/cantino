@@ -18,7 +18,7 @@ an editor, here is what you can rely on and what you must build.
   time of the SliceOSM extract ([SliceOSM: data lag](sliceosm.md#data-lag)).
 - **Immutable snapshots.** Queries see one consistent state; the data does not
   change under you until you refresh.
-- **Helpers for field apps**: `representativePoint`, `wayCoordinates`, batch
+- **Helpers for field apps**: `wayCoordinates`, batch
   `get`, `TagFilter.NotExists` ("amenities without `opening_hours`").
 
 ## What you do not get

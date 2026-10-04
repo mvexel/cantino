@@ -28,7 +28,7 @@ cafes.forEach { obj ->
   for the region. Without one, a rule that mentions `PH` is unknown on days it
   could apply.
 - **Sunrise and sunset** keywords need the place's coordinates
-  (`OsmStore.representativePoint`).
+  (the example’s `CafeLoader` helper).
 - Parse once per object and cache; do not reparse hundreds of strings per
   frame.
 

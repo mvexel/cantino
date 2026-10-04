@@ -15,7 +15,6 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.withContext
-import java.io.File
 import java.util.UUID
 import java.util.concurrent.TimeUnit
 
@@ -53,8 +52,7 @@ import java.util.concurrent.TimeUnit
  *   adds itself (see [ForegroundConfig]).
  *
  * Threading: [download], [cancel] and [state] are cheap and may be called
- * from any thread, including the main thread. [dataFile], [basemapFile] and
- * [publishedArea] read the disk (and may wait a few milliseconds for a commit
+ * from any thread, including the main thread. [publishedArea] read the disk (and may wait a few milliseconds for a commit
  * in progress): call them off the main thread. Instances are lightweight and
  * stateless; several may coexist (all state lives in WorkManager and on disk).
  * All of an app's area access must happen in one process.
@@ -103,7 +101,7 @@ public class AreaManager @JvmOverloads constructor(context: Context, private val
                     .setRequiresStorageNotLow(true)
                     .build(),
             )
-            .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, config.backoffDelayMillis, TimeUnit.MILLISECONDS)
+            .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, DownloadTuning.current.backoffDelayMillis, TimeUnit.MILLISECONDS)
             .addTag(TAG)
             .build()
         workManager.enqueueUniqueWork(workName(areaId), ExistingWorkPolicy.REPLACE, request)
@@ -150,46 +148,15 @@ public class AreaManager @JvmOverloads constructor(context: Context, private val
     }
 
     /**
-     * The published OSM data file of [areaId], or null if none has been
-     * published. Open it with [OsmStore.open]. Reads disk.
-     */
-    public fun dataFile(areaId: String): File? {
-        AreaStorage.requireValidAreaId(areaId)
-        storage.recover(areaId)
-        return storage.dataFile(areaId).takeIf { it.isFile }
-    }
-
-    /**
-     * The published PMTiles basemap of [areaId], or null (none requested, or
-     * no area). See [AreaInfo.pmtilesUrl] for the MapLibre URL. Reads disk.
-     */
-    public fun basemapFile(areaId: String): File? {
-        AreaStorage.requireValidAreaId(areaId)
-        storage.recover(areaId)
-        return storage.basemapFile(areaId).takeIf { it.isFile }
-    }
-
-    /**
      * The published area of [areaId] with its files and metadata (snapshot
      * age, bbox, import report), or null if none is published. Reads disk.
+     * Throws [java.io.IOException] if a pending publication cannot be recovered;
+     * no incomplete area is returned.
      */
     public fun publishedArea(areaId: String): AreaInfo? {
         AreaStorage.requireValidAreaId(areaId)
         return storage.published(areaId)
     }
-
-    /**
-     * [dataFile] without blocking the caller: the disk read runs on
-     * [Dispatchers.IO], so this is safe to call from the main thread. Same
-     * result and exceptions as [dataFile].
-     */
-    public suspend fun loadDataFile(areaId: String): File? = withContext(Dispatchers.IO) { dataFile(areaId) }
-
-    /**
-     * [basemapFile] without blocking the caller: runs on [Dispatchers.IO],
-     * safe to call from the main thread. Same result and exceptions as [basemapFile].
-     */
-    public suspend fun loadBasemapFile(areaId: String): File? = withContext(Dispatchers.IO) { basemapFile(areaId) }
 
     /**
      * [publishedArea] without blocking the caller: runs on [Dispatchers.IO],
@@ -220,8 +187,7 @@ public class AreaManager @JvmOverloads constructor(context: Context, private val
                 }
             }
             // A worker that threw instead of returning failure (a bug) leaves
-            // no output data; so does a run recorded by Cantino 0.1 (no
-            // KEY_REASON). Both read as UNKNOWN, never as a guessed reason.
+            // no output data; report UNKNOWN instead of guessing a cause.
             WorkInfo.State.FAILED -> AreaState.Failed(
                 info.id,
                 info.outputData.getString(AreaDownloadWorker.KEY_MESSAGE) ?: "download failed",

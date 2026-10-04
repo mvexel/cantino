@@ -166,17 +166,6 @@ internal class SliceHttp(private val connectTimeoutMillis: Int, private val read
         }
 
     /**
-     * HEAD [url]: true for 2xx, false for 404, otherwise the usual failure
-     * classes. Used to find the newest Protomaps daily build.
-     */
-    suspend fun exists(url: String): Boolean = connect(url) { connection ->
-        connection.requestMethod = "HEAD"
-        if (connection.responseCode == 404) return@connect false
-        connection.checkStatus(url, goneOn404 = false)
-        true
-    }
-
-    /**
      * Bytes `offset until offset + length` of [url] into memory (directory
      * ranges of a basemap extract: small). With [allowShort] the server may
      * answer with fewer bytes when the file ends earlier (the 16 KiB first
@@ -344,12 +333,12 @@ internal class SliceHttp(private val connectTimeoutMillis: Int, private val read
 
 /**
  * Retries transient failures within one run with doubling delays
- * ([AreaConfig.inlineRetries] retries after the first attempt). Permanent
+ * ([DownloadTuning.inlineRetries] retries after the first attempt). Permanent
  * failures and cancellation pass straight through.
  */
-internal suspend fun <T> retryingInline(config: AreaConfig, block: suspend () -> T): T {
-    var wait = config.inlineRetryDelayMillis
-    repeat(config.inlineRetries) {
+internal suspend fun <T> retryingInline(block: suspend () -> T): T {
+    var wait = DownloadTuning.current.inlineRetryDelayMillis
+    repeat(DownloadTuning.current.inlineRetries) {
         try {
             return block()
         } catch (_: DownloadFailure.Transient) {

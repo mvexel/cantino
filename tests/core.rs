@@ -504,10 +504,8 @@ fn untagged_nodes_keep_only_their_version_by_default() {
     assert_eq!(cafe.metadata().unwrap().changeset, 124);
     let way = store.get(OsmId::Way(WayId(1))).unwrap().unwrap();
     assert_eq!(way.metadata().unwrap().version, 2);
-    // Options from the OSMExpress era still parse; unknown fields are ignored.
-    let legacy: ImportOptions =
-        serde_json::from_str(r#"{"map_size":1073741824,"sort_pairs":3}"#).unwrap();
-    assert!(!legacy.preserve_untagged_metadata);
+    // Misspelled or obsolete options must not silently change an import.
+    assert!(serde_json::from_str::<ImportOptions>(r#"{"sort_pairs":3}"#).is_err());
 }
 
 #[cfg(unix)]

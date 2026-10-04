@@ -82,7 +82,7 @@ fn files_that_are_not_current_areas_are_invalid_files() {
     std::fs::copy(&path, &old).unwrap();
     rusqlite::Connection::open(&old)
         .unwrap()
-        .execute_batch("PRAGMA user_version = 9999")
+        .execute_batch("PRAGMA user_version = 1")
         .unwrap();
     let error = Store::open(&old).err().expect("old format must fail");
     assert_eq!(error.kind(), ErrorKind::InvalidFile);

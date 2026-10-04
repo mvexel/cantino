@@ -7,6 +7,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
 import org.json.JSONObject
+import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
@@ -47,16 +48,14 @@ class ProcessDeathTest {
     /** Survives the kill: what a phase hands to the next one. */
     private val notes get() = File(target.filesDir, "process-death-$areaId.json")
 
-    private fun manager() = AreaManager(
-        target,
-        AreaConfig(
-            sliceBaseUrl = base,
+    private fun manager(): AreaManager {
+        AreaTestHooks.downloadTuning = DownloadTuning(
             pollIntervalMillis = 100,
-            inlineRetries = 3,
             inlineRetryDelayMillis = 50,
             backoffDelayMillis = 10_000,
-        ),
-    )
+        )
+        return AreaManager(target, AreaConfig(sliceBaseUrl = base))
+    }
 
     private fun control(json: String): JSONObject = http("control", json)
     private fun serverState(): JSONObject = http("state", null)
@@ -115,7 +114,7 @@ class ProcessDeathTest {
         // The server outlives scenarios: count submits from here on.
         val submitsBefore = control("""{"pbf":"snapshot.osm.pbf","slow":false}""").getInt("submits")
         val manager = manager()
-        val runId = manager.download(areaId, Bbox(-111.01, 39.89, -110.99, 40.11), "kill test")
+        val runId = manager.download(areaId, Bbox(-111.01, 39.89, -110.99, 40.11), "kill test", BasemapSource.Url(base + "basemap/old.pmtiles"))
         val ready = await(manager, 60) { it is AreaState.Ready && it.runId == runId } as AreaState.Ready
         assertEquals(ObjectCounts(4, 2, 1), ready.area.metadata!!.report.counts)
         notes.writeText(JSONObject().put("old", runId.toString()).put("submits_before", submitsBefore).toString())
@@ -123,7 +122,7 @@ class ProcessDeathTest {
 
     private fun startReplacement(slow: Boolean): UUID {
         control("""{"pbf":"profile.osm.pbf","slow":$slow}""")
-        val runId = manager().download(areaId, Bbox(-111.01, 39.89, -110.99, 40.11), "kill test")
+        val runId = manager().download(areaId, Bbox(-111.01, 39.89, -110.99, 40.11), "kill test", BasemapSource.Url(base + "basemap/new.pmtiles"))
         notes.writeText(JSONObject(notes.readText()).put("run", runId.toString()).toString())
         return runId
     }
@@ -156,6 +155,7 @@ class ProcessDeathTest {
         assertEquals(old, published!!.metadata!!.workId)
         assertEquals(ObjectCounts(4, 2, 1), published.metadata!!.report.counts)
         assertFalse(isNewArea(published.dataFile))
+        assertBasemap(published, refreshed = false)
 
         control("""{"slow":false}""")
         // WorkManager reruns the killed work by itself (JobScheduler), no
@@ -163,6 +163,7 @@ class ProcessDeathTest {
         val ready = await(manager, 300) { it is AreaState.Ready && it.runId == runId } as AreaState.Ready
         assertEquals(ObjectCounts(10, 3, 4), ready.area.metadata!!.report.counts)
         assertTrue(isNewArea(ready.area.dataFile))
+        assertBasemap(ready.area, refreshed = true)
         assertEquals(runId, ready.area.metadata!!.workId)
         val server = serverState()
         assertEquals("seed + one job for the killed run, resumed after the kill", 2, submits())
@@ -187,11 +188,13 @@ class ProcessDeathTest {
         val manager = manager()
         val runId = note("run")
         val downloadsBefore = serverState().getInt("downloads")
+        val basemapsBefore = serverState().getInt("basemap_downloads")
         val published = manager.publishedArea(areaId)
         assertNotNull(published)
         assertEquals(runId, published!!.metadata!!.workId)
         assertEquals(ObjectCounts(10, 3, 4), published.metadata!!.report.counts)
         assertTrue(isNewArea(published.dataFile))
+        assertBasemap(published, refreshed = true)
         assertFalse(File(target.filesDir, "cantino-areas/$areaId.commit").exists())
 
         val ready = await(manager, 300) { it is AreaState.Ready && it.runId == runId } as AreaState.Ready
@@ -199,7 +202,18 @@ class ProcessDeathTest {
         val server = serverState()
         assertEquals("seed + the killed run; no new submit after the commit point", 2, submits())
         assertEquals("no new download after the commit point", downloadsBefore, server.getInt("downloads"))
+        assertEquals("no basemap download after the commit point", basemapsBefore, server.getInt("basemap_downloads"))
         Log.i(TAG, "commit scenario: $server")
+    }
+
+    private fun assertBasemap(area: AreaInfo, refreshed: Boolean) {
+        val fixture = InstrumentationRegistry.getInstrumentation().context.assets
+            .open("basemap/slc-nw-z12-15.pmtiles").use { it.readBytes() }
+        val expected = if (refreshed) fixture + "refreshed".toByteArray() else fixture
+        assertNotNull(area.basemapFile)
+        assertArrayEquals(expected, area.basemapFile!!.readBytes())
+        assertEquals(expected.size.toLong(), area.metadata!!.basemap!!.fileBytes)
+        assertEquals(base + "basemap/${if (refreshed) "new" else "old"}.pmtiles", area.metadata!!.basemap!!.sourceUrl)
     }
 
     private companion object {

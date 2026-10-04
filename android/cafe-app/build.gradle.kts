@@ -1,4 +1,4 @@
-// Café reference app (TODO.md phase 6): first-run area download (OSM data via
+// Café reference app: first-run area download (OSM data via
 // SliceOSM + PMTiles basemap extract), then an offline map of cafés with
 // outdoor-seating and opening-hours filters and a raw-object inspector.
 // Opening-hours interpretation lives here, in the app, never in the core.
@@ -13,10 +13,11 @@ android {
         applicationId = "lol.osm.cantino.cafe"
         minSdk = 26
         targetSdk = 36
+        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         versionCode = 1
         versionName = "0.1.0"
         // Same ABIs the framework AAR ships: phones and x86_64 emulators.
-        ndk { abiFilters += listOf("arm64-v8a", "armeabi-v7a", "x86_64") }
+        ndk { abiFilters += listOf("arm64-v8a", "x86_64") }
     }
     sourceSets {
         // Style, glyphs and sprites only (no basemap archive: the basemap is
@@ -48,6 +49,7 @@ dependencies {
     implementation("org.maplibre.gl:android-sdk:13.6.1")
 
     testImplementation("junit:junit:4.13.2")
+    testImplementation("com.squareup.okhttp3:mockwebserver3:5.4.0")
     androidTestImplementation("androidx.test:runner:1.7.0")
     androidTestImplementation("androidx.test.ext:junit:1.3.0")
     androidTestImplementation("junit:junit:4.13.2")

@@ -22,7 +22,7 @@ of Lisbon: a copy of the master map you carry away.*
 *The café reference app ([`android/cafe-app`](android/cafe-app)) in airplane
 mode: offline basemap, cafés from a tag + bbox query, and the raw object.*
 
-## What 0.3.0 does
+## What it does
 
 | Does | Does not (yet) |
 | --- | --- |
@@ -32,11 +32,13 @@ mode: offline basemap, cafés from a tag + bbox query, and the raw object.*
 | Lookup by ID; ANDed tag filters; bbox spatial candidates; keyset pagination | Exact geometry operations, routing, geocoding |
 | Optional import profiles: keep only the objects your app needs (a POI area is ~15× smaller) | Filter on the server: the download is always the full extract |
 | Raw tags, ordered way nodes and relation members, per-object metadata | Overlapping areas or country-scale extracts |
-| Android (arm64-v8a, armeabi-v7a, x86_64), minSdk 26 | iOS (next; Android features are paused until it is built, see the [roadmap](docs/guide/roadmap.md)) |
+| Android (arm64-v8a, x86_64), minSdk 26 | iOS (next; Android features are paused until it is built, see the [roadmap](docs/guide/roadmap.md)) |
 
 ## Install
 
-Cantino is served from a static Maven repository on GitHub Pages.
+Development artifacts use a static Maven repository on GitHub Pages.
+For the current checkout, [build and publish locally](docs/guide/building.md);
+the API below may differ from previously published artifacts.
 
 ```kotlin
 // settings.gradle.kts
@@ -55,7 +57,7 @@ android {
     defaultConfig {
         minSdk = 26
         // Cantino ships native code for these two ABIs only (phones and x86_64 emulators).
-        ndk { abiFilters += listOf("arm64-v8a", "armeabi-v7a", "x86_64") }
+        ndk { abiFilters += listOf("arm64-v8a", "x86_64") }
     }
 }
 
@@ -69,11 +71,6 @@ dependencies {
 The library adds `INTERNET` and `ACCESS_NETWORK_STATE` to your manifest
 (WorkManager adds its own). Nothing else is required; long downloads can opt
 into a [foreground service](docs/guide/downloading.md#foreground-mode).
-
-> 0.1.0 was published as `io.github.mvexel:cantino` (package
-> `io.github.mvexel.cantino`). From 0.2.0 the group is `lol.osm` and the
-> package `lol.osm.cantino`; the 0.1.0 artifacts stay on the Maven repo
-> under the old coordinates.
 
 ## Quickstart
 
@@ -95,7 +92,6 @@ import org.maplibre.android.camera.CameraPosition
 import org.maplibre.android.geometry.LatLng
 import org.maplibre.android.maps.MapView
 import org.maplibre.android.maps.Style
-import kotlin.math.cos
 
 class MainActivity : Activity() {
     private val scope = MainScope()
@@ -124,16 +120,36 @@ class MainActivity : Activity() {
     private suspend fun publishedOrDownload(): AreaInfo {
         val areas = AreaManager(this)
         areas.loadPublishedArea(AREA)?.let { return it }
-        val dLat = 5.0 / 111.32
-        val dLon = dLat / cos(Math.toRadians(lat))
-        val bbox = Bbox(west = lon - dLon, south = lat - dLat, east = lon + dLon, north = lat + dLat)
-        // Demo basemap: today's Protomaps build. Production apps use their own mirror (see the guide).
-        val runId = areas.download(AREA, bbox, basemap = BasemapSource.Extract(ProtomapsBuilds.latestUrl(), maxZoom = 15))
+        val bbox = Bbox.around(lat, lon, widthKm = 10.0)
+        val runId = areas.download(AREA, bbox, basemap = BasemapSource.Extract(latestDemoBasemap(), maxZoom = 15))
         // state() follows the area, not one run: match runId to wait for *this* download.
         val end = areas.state(AREA)
             .onEach { Log.i(TAG, "$it") } // Queued, Submitting, Slicing, Downloading, Importing, Basemap, Ready
             .first { it.runId == runId && it.isTerminal }
         return (end as? AreaState.Ready)?.area ?: error("download ended: $end")
+    }
+
+    // Demo only: production apps supply a URL they host (with HTTP range support).
+    private suspend fun latestDemoBasemap(): String = withContext(Dispatchers.IO) {
+        val today = java.time.LocalDate.now(java.time.ZoneOffset.UTC)
+        for (age in 0L..7L) {
+            val date = today.minusDays(age).format(java.time.format.DateTimeFormatter.BASIC_ISO_DATE)
+            val url = "https://build.protomaps.com/$date.pmtiles"
+            val connection = java.net.URL(url).openConnection() as java.net.HttpURLConnection
+            try {
+                connection.requestMethod = "HEAD"
+                connection.connectTimeout = 15_000
+                connection.readTimeout = 15_000
+                when (val status = connection.responseCode) {
+                    200 -> return@withContext url
+                    404 -> Unit
+                    else -> throw java.io.IOException("Basemap lookup failed: HTTP $status")
+                }
+            } finally {
+                connection.disconnect()
+            }
+        }
+        throw java.io.IOException("No recent demo basemap found")
     }
 
     private fun showBasemap(area: AreaInfo) = mapView.getMapAsync { map ->
@@ -186,7 +202,7 @@ store on its own thread, paging through large results, and the privacy note
   first-run download, map, filters, raw object inspector) and
   [`android/sample-app`](android/sample-app) (a bundled PMTiles basemap in
   MapLibre, no network at all).
-- **[CHANGELOG](CHANGELOG.md)**, including the compatibility policy.
+- **[CHANGELOG](CHANGELOG.md)**, development history.
 
 ## License and attribution
 

@@ -31,5 +31,5 @@ ureq = "3"
 jni = "0.22"
 
 [profile.release]
-# Matches the spike's measured configuration (spike/sqlite-b).
+# Keep release binaries small; measurements are in docs/bench/.
 lto = "thin"

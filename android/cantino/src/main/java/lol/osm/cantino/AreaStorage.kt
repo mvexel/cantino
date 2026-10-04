@@ -4,7 +4,6 @@ import android.content.Context
 import android.system.ErrnoException
 import android.system.Os
 import android.system.OsConstants
-import android.util.Log
 import androidx.annotation.VisibleForTesting
 import org.json.JSONException
 import org.json.JSONObject
@@ -142,7 +141,7 @@ internal class AreaStorage(context: Context) {
      * the version includes `basemap.pmtiles` (if not, a previously published
      * basemap is removed). [AreaTestHooks.afterCommitPoint] is a test hook.
      *
-     * Throws [IOException] only after the commit point if a rename failed:
+     * Throws [IOException] on a storage failure. If the journal was written,
      * the version is committed and the next [recover] finishes it.
      */
     fun commit(areaId: String, workId: UUID, hasBasemap: Boolean, beforeCommit: () -> Unit) =
@@ -165,29 +164,27 @@ internal class AreaStorage(context: Context) {
     /**
      * Finishes a commit left half-done by a dead process (or a failed
      * rename). Cheap when there is nothing to do; blocks while a commit of
-     * this area is running in this process.
+     * this area is running in this process. Throws [IOException] if recovery
+     * cannot finish; the journal remains for a later retry.
      */
     fun recover(areaId: String) = synchronized(lock(areaId)) {
-        try {
-            rollForward(areaId)
-        } catch (error: IOException) {
-            // Leave the journal; the next recover retries. Readers meanwhile
-            // see a mix of old and new parts, flagged by the sidecar checks.
-            Log.w(TAG, "cannot finish the pending commit of $areaId", error)
-        }
+        // Keep a failed journal for retry, but never return a mixed publication.
+        rollForward(areaId)
     }
 
     private data class Journal(val workId: UUID, val basemap: Boolean)
 
-    private fun readJournal(areaId: String): Journal? = try {
-        val json = JSONObject(journalFile(areaId).readText())
-        Journal(UUID.fromString(json.getString("work_id")), json.getBoolean("basemap"))
-    } catch (_: IOException) {
-        null
-    } catch (_: JSONException) {
-        null // never committed: the journal is written atomically, so a torn one cannot exist
-    } catch (_: IllegalArgumentException) {
-        null
+    private fun readJournal(areaId: String): Journal? {
+        val file = journalFile(areaId)
+        if (!file.exists()) return null
+        try {
+            val json = JSONObject(file.readText())
+            return Journal(UUID.fromString(json.getString("work_id")), json.getBoolean("basemap"))
+        } catch (error: JSONException) {
+            throw IOException("invalid commit journal for $areaId", error)
+        } catch (error: IllegalArgumentException) {
+            throw IOException("invalid commit journal for $areaId", error)
+        }
     }
 
     /** Step 3 of the commit. Caller holds the lock. Idempotent. */
@@ -197,12 +194,14 @@ internal class AreaStorage(context: Context) {
         if (journal.basemap) {
             moveIfPresent(stagedBasemap(areaId, workId), basemapFile(areaId))
         } else {
-            basemapFile(areaId).delete()
+            val basemap = basemapFile(areaId)
+            if (basemap.exists() && !basemap.delete()) throw IOException("cannot remove $basemap")
         }
         moveIfPresent(stagedArea(areaId, workId), dataFile(areaId))
         moveIfPresent(stagedInfo(areaId, workId), infoFile(areaId))
         syncDirectory(areas)
-        journalFile(areaId).delete()
+        val journalFile = journalFile(areaId)
+        if (!journalFile.delete()) throw IOException("cannot remove $journalFile")
         stagingDir(areaId, workId).deleteRecursively()
     }
 
@@ -228,16 +227,18 @@ internal class AreaStorage(context: Context) {
 
     /**
      * The published area, or null when none exists. Completes a pending
-     * commit first ([recover]). The metadata is trusted only if it describes
+     * commit first, failing with [IOException] if recovery cannot finish.
+     * The metadata is trusted only if it describes
      * the files present: the recorded database size must equal the data
      * file's, and the recorded basemap (or its absence) must match the
      * basemap file. Anything else reads as "metadata unknown" (null) rather
      * than as wrong metadata.
      */
-    fun published(areaId: String): AreaInfo? {
-        recover(areaId)
+    fun published(areaId: String): AreaInfo? = synchronized(lock(areaId)) {
+        rollForward(areaId)
+        AreaTestHooks.afterRecovery?.invoke()
         val file = dataFile(areaId)
-        if (!file.isFile) return null
+        if (!file.isFile) return@synchronized null
         val basemap = basemapFile(areaId).takeIf { it.isFile }
         val metadata = try {
             infoFile(areaId).takeIf { it.isFile }?.readText()?.let { AreaMetadata.fromJson(JSONObject(it)) }
@@ -253,7 +254,7 @@ internal class AreaStorage(context: Context) {
         val consistent = metadata != null &&
             metadata.report.databaseBytes == file.length() &&
             metadata.basemap?.fileBytes == basemap?.length()
-        return AreaInfo(areaId, file, metadata?.takeIf { consistent }, basemap)
+        AreaInfo(areaId, file, metadata?.takeIf { consistent }, basemap)
     }
 
     // --- Job checkpoint (process-death resume) -------------------------------
@@ -307,7 +308,6 @@ internal class AreaStorage(context: Context) {
     }
 
     companion object {
-        private const val TAG = "AreaStorage"
         private val AREA_ID = Regex("[A-Za-z0-9_-]{1,64}")
 
         /**
@@ -334,6 +334,11 @@ internal class AreaStorage(context: Context) {
  */
 @VisibleForTesting
 internal object AreaTestHooks {
+    /** Pauses a published-area read under its area lock, after recovery. */
+    @Volatile var afterRecovery: (() -> Unit)? = null
+
+    @Volatile var downloadTuning: DownloadTuning? = null
+
     /** Runs right after the (uninterruptible) native import returned, standing in for a long import. */
     @Volatile var afterImport: (() -> Unit)? = null
 

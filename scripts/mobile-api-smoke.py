@@ -16,24 +16,20 @@ lib.cantino_get.argtypes = [ptr,c.c_int32,c.c_int64,c.POINTER(ptr),c.POINTER(ptr
 lib.cantino_query.argtypes = [ptr,string,c.POINTER(ptr),c.POINTER(ptr)]
 lib.cantino_get_many.argtypes = [ptr,string,c.POINTER(ptr),c.POINTER(ptr)]
 lib.cantino_way_coordinates.argtypes = [ptr,c.c_int64,c.POINTER(ptr),c.POINTER(ptr)]
-lib.cantino_representative_point.argtypes = [ptr,c.c_int32,c.c_int64,c.POINTER(ptr),c.POINTER(ptr)]
 lib.cantino_close.argtypes = [ptr,c.POINTER(ptr)]
 lib.cantino_free.argtypes = [ptr]
 lib.cantino_slice_job_request.argtypes = [string,string,string,c.POINTER(ptr),c.POINTER(ptr)]
 lib.cantino_slice_job.argtypes = [string,string,c.POINTER(ptr),c.POINTER(ptr)]
 lib.cantino_slice_progress.argtypes = [string,c.POINTER(ptr),c.POINTER(ptr)]
-lib.cantino_last_error_code.argtypes = []
-lib.cantino_last_error_code.restype = c.c_int32
-# CANTINO_ERROR_* (include/cantino.h): the category of the last failed call
-# on the calling thread.
+# CANTINO_ERROR_* (include/cantino.h): failures return the negative category.
 NONE, INVALID_ARGUMENT, INVALID_FILE, IO, WRONG_THREAD, INTERNAL = range(6)
 
 def call(function, *args):
     result, error = ptr(), ptr()
     code = function(*args,c.byref(result),c.byref(error))
     try:
-        if code == -1:
-            raise RuntimeError(c.string_at(error).decode() if error.value else 'native failure')
+        if code < 0:
+            raise RuntimeError(code, c.string_at(error).decode() if error.value else 'native failure')
         return code, json.loads(c.string_at(result)) if result.value else None
     finally:
         lib.cantino_free(result)
@@ -45,17 +41,19 @@ with tempfile.TemporaryDirectory() as directory:
     # Default options (NULL): untagged nodes keep no metadata.
     _, report = call(lib.cantino_import,str(fixture).encode(),area,None)
     assert report['counts'] == {'nodes':4,'ways':2,'relations':1}
-    # Options JSON from older callers carries fields that no longer exist;
-    # they must be ignored. This import replaces the area above.
-    options = b'{"map_size":1073741824,"sort_pairs":3,"preserve_untagged_metadata":true}'
-    _, report = call(lib.cantino_import,str(fixture).encode(),area,options)
+    # Explicit supported options; unknown fields are rejected.
+    try:
+        call(lib.cantino_import,str(fixture).encode(),area,b'{"sort_pairs":3}')
+        raise AssertionError('expected invalid option error')
+    except RuntimeError as failure:
+        assert failure.args[0] == -INVALID_ARGUMENT
+    _, report = call(lib.cantino_import,str(fixture).encode(),area,b'{"preserve_untagged_metadata":true}')
     assert report['database_bytes'] > 0
     # Open failures: a missing file is IO, a file that is not an area (the
     # XML fixture) is INVALID_FILE.
     for path, expected in [(str(pathlib.Path(directory)/'missing.sqlite'), IO), (str(fixture), INVALID_FILE)]:
         handle, error = ptr(), ptr()
-        assert lib.cantino_open(path.encode(),c.byref(handle),c.byref(error)) == -1
-        assert lib.cantino_last_error_code() == expected, (path, lib.cantino_last_error_code())
+        assert lib.cantino_open(path.encode(),c.byref(handle),c.byref(error)) == -expected
         assert not handle.value
         lib.cantino_free(error)
     handle, error = ptr(), ptr()
@@ -70,24 +68,22 @@ with tempfile.TemporaryDirectory() as directory:
         try:
             call(lib.cantino_query,handle,b'{malformed')
             raise AssertionError('expected query error')
-        except RuntimeError:
-            assert lib.cantino_last_error_code() == INVALID_ARGUMENT
-        # The handle is confined to this thread: another thread gets -1 and
-        # WRONG_THREAD (in its own thread-local code); the store is untouched.
+        except RuntimeError as failure:
+            assert failure.args[0] == -INVALID_ARGUMENT
+        # Another thread gets -WRONG_THREAD; the store is untouched.
         seen = []
         def foreign():
             out, err = ptr(), ptr()
             status = lib.cantino_get(handle,0,1,c.byref(out),c.byref(err))
-            seen.append((status, lib.cantino_last_error_code()))
+            seen.append(status)
             lib.cantino_free(out)
             lib.cantino_free(err)
         worker = threading.Thread(target=foreign)
         worker.start()
         worker.join()
-        assert seen == [(-1, WRONG_THREAD)], seen
-        # A failed query leaves the store usable; a success resets the code.
+        assert seen == [-WRONG_THREAD], seen
+        # A failed query leaves the store usable.
         assert call(lib.cantino_get,handle,1,1)[1]['nodes'] == [1,2,1]
-        assert lib.cantino_last_error_code() == NONE
         # NotExists: a post-check that needs a driver.
         _, unnamed = call(lib.cantino_query,handle,b'{"tags":[{"Exists":"highway"},{"NotExists":"name"}]}')
         assert [o['id'] for o in unnamed] == [1,2]
@@ -103,12 +99,6 @@ with tempfile.TemporaryDirectory() as directory:
         _, flat = call(lib.cantino_way_coordinates,handle,1)
         assert flat == [400000000,-1110000000,400010000,-1110010000,400000000,-1110000000]
         assert call(lib.cantino_way_coordinates,handle,42) == (1,None)
-        # Representative point: way 1 is closed (1,2,1): mean of nodes 1 and 2.
-        _, point = call(lib.cantino_representative_point,handle,1,1)
-        assert point == {'lat_e7':400005000,'lon_e7':-1110005000}
-        # Relation 1: its only in-area member is way 1 (node 99 is missing).
-        assert call(lib.cantino_representative_point,handle,2,1)[1] == point
-        assert call(lib.cantino_representative_point,handle,0,99) == (1,None)
     finally:
         assert lib.cantino_close(handle,c.byref(error)) == 0
         lib.cantino_free(error)
@@ -146,12 +136,12 @@ lib.cantino_basemap_asm_free.argtypes = [ptr,c.POINTER(ptr)]
 lib.cantino_basemap_info.argtypes = [string,c.POINTER(ptr),c.POINTER(ptr)]
 
 def status_call(function, *args):
-    """For calls without a JSON result: raise on -1, always free the error."""
+    """For calls without a JSON result: raise on negative status, always free the error."""
     error = ptr()
     code = function(*args,c.byref(error))
     try:
-        if code == -1:
-            raise RuntimeError(c.string_at(error).decode() if error.value else 'native failure')
+        if code < 0:
+            raise RuntimeError(code, c.string_at(error).decode() if error.value else 'native failure')
     finally:
         lib.cantino_free(error)
 
@@ -203,4 +193,4 @@ with tempfile.TemporaryDirectory() as directory:
     assert info['addressed_tiles'] == 22 and info['spec_version'] == 3
     assert info['file_bytes'] == (d/'out.pmtiles').stat().st_size == tiles['archive_bytes']
 status_call(lib.cantino_basemap_plan_free,None)
-print('Rust mobile C ABI import/open/get/get_many/query/way_coordinates/representative_point/error/free/slice/basemap checks passed')
+print('Rust mobile C ABI import/open/get/get_many/query/way_coordinates/error/free/slice/basemap checks passed')

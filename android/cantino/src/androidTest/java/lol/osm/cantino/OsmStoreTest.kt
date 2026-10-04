@@ -103,7 +103,7 @@ class OsmStoreTest {
     }
 
     @Test
-    fun wayCoordinatesAndRepresentativePoints() = onWorker {
+    fun wayCoordinatesKeepOrderAndMissingNodes() = onWorker {
         OsmStore.open(importFixture().path).use { store ->
             // Way 1 is nodes 1, 2, 1: order and the closing repeat survive.
             val node1 = Coordinate(400_000_000, -1_110_000_000)
@@ -112,15 +112,7 @@ class OsmStoreTest {
             assertEquals(40.001, store.wayCoordinates(1)!![1]!!.lat, 1e-9)
             assertNull(store.wayCoordinates(42)) // not in the area
 
-            assertEquals(node2, store.representativePoint(OsmId(OsmKind.NODE, 2)))
-            // Closed way: mean of its distinct vertices (nodes 1 and 2).
-            val ring = Coordinate(400_005_000, -1_110_005_000)
-            assertEquals(ring, store.representativePoint(OsmId(OsmKind.WAY, 1)))
-            // Open way 2 runs from 39.9 to 40.1 along -111: halfway is 40.0.
-            assertEquals(Coordinate(400_000_000, -1_110_000_000), store.representativePoint(OsmId(OsmKind.WAY, 2)))
-            // Relation 1: way 1 counts, the missing node 99 does not.
-            assertEquals(ring, store.representativePoint(OsmId(OsmKind.RELATION, 1)))
-            assertNull(store.representativePoint(OsmId(OsmKind.NODE, 99)))
+
         }
     }
 

@@ -91,11 +91,6 @@ impl TagFilter {
 /// page, so one batch never holds more objects than one page can.
 pub const MAX_BATCH: usize = 10_000;
 
-/// How deep `Store::representative_point` follows relation members that are
-/// relations themselves. Deeper members are ignored (they contribute no
-/// point), which bounds the work on pathological nesting.
-pub const MAX_RELATION_DEPTH: usize = 8;
-
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Query {
@@ -289,17 +284,8 @@ impl Store {
     }
 
     /// The [`ImportProfile`] this area was imported with, or `None` for an
-    /// unfiltered import (including files written before profiles existed,
-    /// which have no `profile` table).
+    /// unfiltered import.
     pub fn profile(&self) -> Result<Option<ImportProfile>> {
-        let has_table: bool = self.connection.query_row(
-            "SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'profile')",
-            [],
-            |row| row.get(0),
-        )?;
-        if !has_table {
-            return Ok(None);
-        }
         let mut statement = self.connection.prepare_cached("SELECT json FROM profile")?;
         let mut rows = statement.query([])?;
         let Some(row) = rows.next()? else {
@@ -527,124 +513,6 @@ impl Store {
             return Ok(None);
         };
         Ok(Some(self.resolve_nodes(&way.nodes)?))
-    }
-
-    /// A single label/anchor point for an object, or `None` when the object
-    /// is not in the area or none of its geometry is.
-    ///
-    /// **This is not a guaranteed point-on-surface or a true centroid.** It
-    /// is a cheap, deterministic point for placing a marker, a label or a
-    /// distance origin. For a concave polygon (an L-shaped building, a
-    /// horseshoe) the point can lie outside the polygon; for a multipolygon
-    /// it can fall in a hole or between parts. Definition:
-    ///
-    /// - **Node**: its coordinate.
-    /// - **Closed way** (first and last node reference equal, at least two
-    ///   references): the arithmetic mean of its *distinct* vertices that are
-    ///   in the area (the repeated closing node counts once).
-    /// - **Open way**: the point at half the length of the polyline through
-    ///   its in-area nodes, in order. Nodes outside the area are skipped, so
-    ///   the polyline joins across such gaps. Lengths are measured on a local
-    ///   equirectangular projection (longitude scaled by the cosine of the
-    ///   mean latitude): accurate enough at street and city scale, not a
-    ///   geodesic. A zero-length way yields its first in-area node.
-    /// - **Relation**: the arithmetic mean of the representative points of
-    ///   its distinct members, counting only members that are in the area and
-    ///   have a point. Every member weighs the same, whatever its size.
-    ///   Member relations are followed recursively up to
-    ///   `MAX_RELATION_DEPTH` levels; a member relation that is already being
-    ///   resolved further up (a cycle) contributes nothing.
-    ///
-    /// Means are taken in degrees with no antimeridian handling (areas never
-    /// wrap; see `Bbox`), then rounded to the 1e-7 storage grid.
-    pub fn representative_point(&self, id: OsmId) -> Result<Option<Coordinate>> {
-        checked_id(id)?;
-        let mut path = BTreeSet::new();
-        self.point_of(id, 0, &mut path)
-    }
-
-    /// Recursive worker for `representative_point`. `path` holds the
-    /// relations currently being resolved (the recursion stack), which is
-    /// the cycle guard: a relation reached again through its own members is
-    /// skipped instead of recursing forever. It is a stack, not a global
-    /// visited set, so a relation shared by two sibling members still counts
-    /// for both.
-    fn point_of(
-        &self,
-        id: OsmId,
-        depth: usize,
-        path: &mut BTreeSet<RelationId>,
-    ) -> Result<Option<Coordinate>> {
-        match id {
-            OsmId::Node(node) => self.node_coordinate(node),
-            OsmId::Way(_) => {
-                let Some(Object::Way(way)) = self.get(id)? else {
-                    return Ok(None);
-                };
-                let closed = way.nodes.len() >= 2 && way.nodes.first() == way.nodes.last();
-                if closed {
-                    // Distinct by node ID, so the closing repeat (and any
-                    // other repeated vertex) is counted once.
-                    let mut seen = BTreeSet::new();
-                    let distinct: Vec<NodeId> = way
-                        .nodes
-                        .iter()
-                        .copied()
-                        .filter(|node| seen.insert(*node))
-                        .collect();
-                    let points: Vec<Coordinate> = self
-                        .resolve_nodes(&distinct)?
-                        .into_iter()
-                        .flatten()
-                        .collect();
-                    Ok(mean(&points))
-                } else {
-                    let points: Vec<Coordinate> = self
-                        .resolve_nodes(&way.nodes)?
-                        .into_iter()
-                        .flatten()
-                        .collect();
-                    Ok(polyline_midpoint(&points))
-                }
-            }
-            OsmId::Relation(relation) => {
-                // Depth 0 is the root object, so a root relation's members are
-                // at depth 1 and at most MAX_RELATION_DEPTH nested levels are
-                // followed below it.
-                if depth > MAX_RELATION_DEPTH || !path.insert(relation) {
-                    return Ok(None);
-                }
-                let result = self.relation_point(id, depth, path);
-                // Pop on every exit path, including errors, so the guard only
-                // ever describes the live recursion stack.
-                path.remove(&relation);
-                result
-            }
-        }
-    }
-
-    /// Mean of a relation's distinct members' points; see `point_of`.
-    fn relation_point(
-        &self,
-        id: OsmId,
-        depth: usize,
-        path: &mut BTreeSet<RelationId>,
-    ) -> Result<Option<Coordinate>> {
-        let Some(Object::Relation(relation)) = self.get(id)? else {
-            return Ok(None);
-        };
-        let mut seen = BTreeSet::new();
-        let mut points = vec![];
-        for member in &relation.members {
-            // A member listed twice (e.g. under two roles) counts once.
-            if !seen.insert(member.id) {
-                continue;
-            }
-            if let Some(point) = self.point_of(member.id, depth + 1, path)? {
-                points.push(point);
-            }
-        }
-        Ok(mean(&points))
     }
 
     pub fn missing_references(&self, id: OsmId) -> Result<Option<Vec<MissingReference>>> {
@@ -899,63 +767,6 @@ impl Store {
             user: self.users.get(&uid).cloned().unwrap_or_default(),
         })
     }
-}
-
-/// Arithmetic mean in degrees, rounded to the e7 grid; `None` for no points.
-/// Summing i32 e7 values in f64 is exact far beyond any realistic vertex
-/// count, so the only rounding is the final one.
-fn mean(points: &[Coordinate]) -> Option<Coordinate> {
-    if points.is_empty() {
-        return None;
-    }
-    let count = points.len() as f64;
-    let lat = points.iter().map(|p| p.lat_e7 as f64).sum::<f64>() / count;
-    let lon = points.iter().map(|p| p.lon_e7 as f64).sum::<f64>() / count;
-    // A mean of valid coordinates is itself within WGS84 bounds, so the
-    // rounded values fit the i32 storage range.
-    Some(Coordinate {
-        lat_e7: lat.round() as i32,
-        lon_e7: lon.round() as i32,
-    })
-}
-
-/// The point at half the length of the polyline through `points`, measured
-/// on a local equirectangular projection (x = longitude scaled by the cosine
-/// of the mean latitude, y = latitude). `None` for no points; the first point
-/// when the total length is zero (one point, or all points equal).
-fn polyline_midpoint(points: &[Coordinate]) -> Option<Coordinate> {
-    let first = *points.first()?;
-    let mean_lat = points.iter().map(|p| p.lat()).sum::<f64>() / points.len() as f64;
-    let scale = mean_lat.to_radians().cos();
-    // Segment lengths in projected degree units; only ratios matter, so no
-    // conversion to metres is needed.
-    let length = |a: Coordinate, b: Coordinate| {
-        let dx = (b.lon() - a.lon()) * scale;
-        let dy = b.lat() - a.lat();
-        (dx * dx + dy * dy).sqrt()
-    };
-    let total: f64 = points.windows(2).map(|pair| length(pair[0], pair[1])).sum();
-    if total == 0.0 {
-        return Some(first);
-    }
-    let mut remaining = total / 2.0;
-    for pair in points.windows(2) {
-        let (a, b) = (pair[0], pair[1]);
-        let segment = length(a, b);
-        if segment > 0.0 && remaining <= segment {
-            // Linear interpolation along this segment; t is in [0, 1].
-            let t = remaining / segment;
-            let lat = a.lat_e7 as f64 + t * (b.lat_e7 as f64 - a.lat_e7 as f64);
-            let lon = a.lon_e7 as f64 + t * (b.lon_e7 as f64 - a.lon_e7 as f64);
-            return Some(Coordinate {
-                lat_e7: lat.round() as i32,
-                lon_e7: lon.round() as i32,
-            });
-        }
-        remaining -= segment;
-    }
-    // Floating-point leftovers can step just past the last segment.
-    points.last().copied()
 }
 
 fn typed(kind: i64, id: i64) -> Result<OsmId> {

@@ -1,0 +1,88 @@
+{
+  "date": "2026-10-04",
+  "platform": "Linux x86_64 desktop, release Rust shared library through Python ctypes",
+  "input": "work/bench/slc.osm.pbf (cached SLC extract)",
+  "options": "default ImportOptions",
+  "baseline_revision": "fb66a0cfec399e83852d749cc3a5771f5ae2a0eb",
+  "change": "Remove unused node_way and member_rel tables and import machinery; format version 2",
+  "verification": "Object counts and SHA256 over ordered rows of every retained table identical",
+  "caveat": "Concurrent builds on shared host; time measurements directional, not isolated benchmark",
+  "samples": {
+    "before": [
+      {
+        "elapsed_s": 5.2341265580034815,
+        "max_rss_kib": 135836,
+        "report": {
+          "counts": {
+            "nodes": 1437753,
+            "ways": 207076,
+            "relations": 1473
+          },
+          "database_bytes": 128503808
+        }
+      },
+      {
+        "elapsed_s": 3.385761130004539,
+        "max_rss_kib": 135848,
+        "report": {
+          "counts": {
+            "nodes": 1437753,
+            "ways": 207076,
+            "relations": 1473
+          },
+          "database_bytes": 128503808
+        }
+      },
+      {
+        "elapsed_s": 4.267110582994064,
+        "max_rss_kib": 135868,
+        "report": {
+          "counts": {
+            "nodes": 1437753,
+            "ways": 207076,
+            "relations": 1473
+          },
+          "database_bytes": 128503808
+        }
+      }
+    ],
+    "after": [
+      {
+        "elapsed_s": 2.600190922006732,
+        "max_rss_kib": 108772,
+        "report": {
+          "counts": {
+            "nodes": 1437753,
+            "ways": 207076,
+            "relations": 1473
+          },
+          "database_bytes": 102289408
+        }
+      },
+      {
+        "elapsed_s": 3.2064047300082166,
+        "max_rss_kib": 108848,
+        "report": {
+          "counts": {
+            "nodes": 1437753,
+            "ways": 207076,
+            "relations": 1473
+          },
+          "database_bytes": 102289408
+        }
+      },
+      {
+        "elapsed_s": 3.371939142001793,
+        "max_rss_kib": 108872,
+        "report": {
+          "counts": {
+            "nodes": 1437753,
+            "ways": 207076,
+            "relations": 1473
+          },
+          "database_bytes": 102289408
+        }
+      }
+    ]
+  }
+}

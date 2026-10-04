@@ -9,16 +9,9 @@ import org.json.JSONObject
 // the Rust docs: raw tags, integer 1e-7 coordinates, ordered (possibly
 // repeated) references, metadata that may be absent.
 //
-// Every model here is an immutable value: equal content means equal objects,
-// and instances may be shared freely between threads.
-//
-// Binary compatibility: types the library *returns* (OsmObject and its parts,
-// ObjectMetadata, ImportReport, ObjectCounts, Coordinate) are plain classes with
-// hand-written equals/hashCode/toString and internal constructors, not data
-// classes, so a field can be added later without breaking compiled apps
-// (a data class's copy() and componentN() would change signature). Types
-// apps *construct* (OsmId, Bbox, TagFilter, Query, ImportOptions) stay data
-// classes; see CHANGELOG.md for what that means for compatibility.
+// Returned OSM objects own immutable collections and can cross threads.
+// Input options use ordinary Kotlin read-only collections; callers must not
+// mutate their backing collections while an operation uses them.
 
 /**
  * The three OSM object namespaces. IDs are only unique within a kind:
@@ -62,7 +55,7 @@ public data class OsmId(val kind: OsmKind, val id: Long) {
  * mean "unknown" rather than a real value (SliceOSM extracts usually carry
  * all fields). [timestampSeconds] is Unix seconds (UTC).
  */
-public class ObjectMetadata internal constructor(
+public data class ObjectMetadata(
     /** Object version. */
     public val version: Long,
     /** Edit time, Unix seconds (UTC). */
@@ -73,18 +66,9 @@ public class ObjectMetadata internal constructor(
     public val uid: Long,
     /** User name of the editor. */
     public val user: String,
-) {
-    override fun equals(other: Any?): Boolean = this === other || other is ObjectMetadata &&
-        version == other.version && timestampSeconds == other.timestampSeconds &&
-        changeset == other.changeset && uid == other.uid && user == other.user
+)
 
-    override fun hashCode(): Int = hash(version, timestampSeconds, changeset, uid, user)
-
-    override fun toString(): String =
-        "ObjectMetadata(version=$version, timestampSeconds=$timestampSeconds, changeset=$changeset, uid=$uid, user=$user)"
-}
-
-/** hashCode over [values] in order, for the hand-written value classes. */
+/** Ordered hash for the collection-owning OSM values. */
 internal fun hash(vararg values: Any?): Int = values.contentHashCode()
 
 /**
@@ -121,7 +105,7 @@ public sealed interface OsmObject {
      * [OsmStore.get], but they are not spatially indexed: a bbox [Query]
      * never returns them. Reach them through their ways.
      */
-    public class Node internal constructor(
+    public class Node(
         override val id: OsmId,
         /** Latitude in 1e-7 degrees. */
         public val latE7: Int,
@@ -129,9 +113,11 @@ public sealed interface OsmObject {
         public val lonE7: Int,
         /** Object version at which the node got its current coordinate. */
         public val locationVersion: Int,
-        override val tags: Map<String, String>,
+        tags: Map<String, String>,
         override val metadata: ObjectMetadata?,
     ) : OsmObject {
+        override val tags: Map<String, String> = java.util.Collections.unmodifiableMap(tags.toMap())
+
         /** Latitude in degrees (WGS84). */
         public val lat: Double get() = latE7 / 1e7
 
@@ -154,13 +140,16 @@ public sealed interface OsmObject {
      * referenced node may be missing from the area when the way crosses the
      * area's edge: [OsmStore.get] then returns null for it.
      */
-    public class Way internal constructor(
+    public class Way(
         override val id: OsmId,
         /** Node references in order (repeats are significant). */
-        public val nodeIds: List<Long>,
-        override val tags: Map<String, String>,
+        nodeIds: List<Long>,
+        tags: Map<String, String>,
         override val metadata: ObjectMetadata?,
     ) : OsmObject {
+        override val tags: Map<String, String> = java.util.Collections.unmodifiableMap(tags.toMap())
+        public val nodeIds: List<Long> = java.util.Collections.unmodifiableList(nodeIds.toList())
+
         override fun equals(other: Any?): Boolean = this === other || other is Way &&
             id == other.id && nodeIds == other.nodeIds && tags == other.tags && metadata == other.metadata
 
@@ -174,27 +163,24 @@ public sealed interface OsmObject {
      * (raw string, may be empty). The member object may be missing from the
      * area (outside it, or never part of the extract).
      */
-    public class Member internal constructor(
+    public data class Member(
         /** The referenced object. */
         public val id: OsmId,
         /** The member's role, raw (may be empty). */
         public val role: String,
-    ) {
-        override fun equals(other: Any?): Boolean = this === other || other is Member && id == other.id && role == other.role
-
-        override fun hashCode(): Int = hash(id, role)
-
-        override fun toString(): String = "Member(id=$id, role=$role)"
-    }
+    )
 
     /** A relation. [members] are in order; the same member may appear more than once. */
-    public class Relation internal constructor(
+    public class Relation(
         override val id: OsmId,
         /** Members in order. */
-        public val members: List<Member>,
-        override val tags: Map<String, String>,
+        members: List<Member>,
+        tags: Map<String, String>,
         override val metadata: ObjectMetadata?,
     ) : OsmObject {
+        override val tags: Map<String, String> = java.util.Collections.unmodifiableMap(tags.toMap())
+        public val members: List<Member> = java.util.Collections.unmodifiableList(members.toList())
+
         override fun equals(other: Any?): Boolean = this === other || other is Relation &&
             id == other.id && members == other.members && tags == other.tags && metadata == other.metadata
 
@@ -468,24 +454,17 @@ public data class KeepRule(
 }
 
 /** Number of objects per kind. */
-public class ObjectCounts internal constructor(
+public data class ObjectCounts(
     /** Nodes (tagged and untagged). */
     public val nodes: Long,
     /** Ways. */
     public val ways: Long,
     /** Relations. */
     public val relations: Long,
-) {
-    override fun equals(other: Any?): Boolean = this === other || other is ObjectCounts &&
-        nodes == other.nodes && ways == other.ways && relations == other.relations
-
-    override fun hashCode(): Int = hash(nodes, ways, relations)
-
-    override fun toString(): String = "ObjectCounts(nodes=$nodes, ways=$ways, relations=$relations)"
-}
+)
 
 /** Result of an import: objects stored per kind, and the size of the published database file in bytes. */
-public class ImportReport internal constructor(
+public data class ImportReport(
     /** Objects stored per kind. */
     public val counts: ObjectCounts,
     /** Size of the published database file in bytes. */
@@ -493,13 +472,6 @@ public class ImportReport internal constructor(
     /** The profile the area was filtered with (normalized), or null for a full import. */
     public val profile: ImportProfile? = null,
 ) {
-    override fun equals(other: Any?): Boolean = this === other || other is ImportReport &&
-        counts == other.counts && databaseBytes == other.databaseBytes && profile == other.profile
-
-    override fun hashCode(): Int = hash(counts, databaseBytes, profile)
-
-    override fun toString(): String = "ImportReport(counts=$counts, databaseBytes=$databaseBytes, profile=$profile)"
-
     /** Same shape as the Rust report, so it round-trips through [fromJson]. */
     internal fun toJson(): JSONObject = JSONObject()
         .put("counts", JSONObject().put("nodes", counts.nodes).put("ways", counts.ways).put("relations", counts.relations))
@@ -516,12 +488,12 @@ public class ImportReport internal constructor(
 }
 
 /**
- * A WGS84 point, as returned by [OsmStore.wayCoordinates] and
- * [OsmStore.representativePoint]. Like [OsmObject.Node], the values are
+ * A WGS84 point, as returned by [OsmStore.wayCoordinates].
+ * Like [OsmObject.Node], the values are
  * integers in 1e-7 degrees ([latE7], [lonE7]), the storage format, so they
  * compare exactly; [lat] and [lon] are the same values in degrees.
  */
-public class Coordinate internal constructor(
+public data class Coordinate(
     /** Latitude in 1e-7 degrees. */
     public val latE7: Int,
     /** Longitude in 1e-7 degrees. */
@@ -533,14 +505,4 @@ public class Coordinate internal constructor(
     /** Longitude in degrees (WGS84). */
     public val lon: Double get() = lonE7 / 1e7
 
-    override fun equals(other: Any?): Boolean = this === other || other is Coordinate &&
-        latE7 == other.latE7 && lonE7 == other.lonE7
-
-    override fun hashCode(): Int = hash(latE7, lonE7)
-
-    override fun toString(): String = "Coordinate(latE7=$latE7, lonE7=$lonE7)"
-
-    internal companion object {
-        fun fromJson(json: JSONObject) = Coordinate(json.getInt("lat_e7"), json.getInt("lon_e7"))
-    }
 }

@@ -20,7 +20,7 @@ scripts/             build, check, bench, basemap assets, publishing
 
 | Tool | Version | Notes |
 | --- | --- | --- |
-| Rust | 1.99.0 (pinned in `rust-toolchain.toml`) | `rustup target add aarch64-linux-android armv7-linux-androideabi x86_64-linux-android --toolchain 1.99.0` |
+| Rust | 1.99.0 (pinned in `rust-toolchain.toml`) | `rustup target add aarch64-linux-android x86_64-linux-android --toolchain 1.99.0` |
 | Android NDK | r29 (`29.0.14206865`), SDK-managed | Cross-compiles the Rust library; Gradle also uses it to strip |
 | Android SDK | compileSdk 36 | `android/local.properties`: `sdk.dir=…` |
 | JDK | Temurin 25 via [mise](https://mise.jdx.dev/) (`mise.toml`) | Run Gradle as `mise exec -- ./gradlew …` |
@@ -32,15 +32,25 @@ No C++ toolchain or Docker: SQLite is compiled by `rusqlite`'s bundled feature.
 
 ```sh
 scripts/check.sh               # rustfmt, clippy -D warnings, cargo test, C ABI smoke test (Python ctypes)
-scripts/build-android.sh       # → target/android/{arm64-v8a,armeabi-v7a,x86_64}/libcantino.so
+scripts/build-android.sh       # → target/android/{arm64-v8a,x86_64}/libcantino.so
 cd android
 mise exec -- ./gradlew :cantino:assembleRelease                         # the AAR
 mise exec -- ./gradlew :cantino:publishReleasePublicationToLocalRepository  # Maven layout in android/build/repo
 mise exec -- ./gradlew :cantino:dokkaGeneratePublicationHtml            # API reference → cantino/build/dokka/html
-mise exec -- ./gradlew :cantino:connectedDebugAndroidTest               # instrumented tests on a device/emulator
+mise exec -- ./gradlew :cantino:testDebugUnitTest :cafe-app:testDebugUnitTest
+ANDROID_SERIAL=<device> mise exec -- ./gradlew :cantino:connectedDebugAndroidTest :cafe-app:connectedDebugAndroidTest
 ```
 
-The AAR packages whatever is in `target/android/<ABI>/`, so rerun
+Run the instrumented suites on an arm64 phone and an x86_64 emulator.
+For download/persistence changes also run `ANDROID_SERIAL=<device>
+scripts/kill-test-android.sh` from the repository root on each device.
+
+Live service tests are opt-in. Pass
+`-Pandroid.testInstrumentationRunnerArguments.live=true` and, for the basemap
+test, `-Pandroid.testInstrumentationRunnerArguments.planetUrl=<pmtiles-url>`
+to the library instrumented test task. Use a current archive you host.
+
+The AAR packages the two supported ABIs from `target/android/<ABI>/`; rerun
 `scripts/build-android.sh` after changing Rust code.
 
 The Pages site (landing page, Maven repository, `/api/`, and this guide as
@@ -68,14 +78,15 @@ ANDROID_SERIAL=<device> scripts/bench-android.sh CITY.osm.pbf   # city benchmark
 ```
 
 Area files are portable between desktop and device (same format,
-`application_id` "CNTN", format version 1).
+`application_id` "CNTN"; see `FORMAT_VERSION` in `src/schema.rs`).
 
 ## Versioning
 
 One version for everything, from `Cargo.toml`: the Maven publication and
 `Cantino.VERSION` read it at build time. The C ABI header is versioned with
-the crate. Semantic versioning; before 1.0 a minor version may break the API
-(see the compatibility policy in the [CHANGELOG](../../CHANGELOG.md)).
+the crate. There are no external consumers yet: the API, ABI and file format
+may change without compatibility layers. Re-import development data after
+an incompatible format change.
 
 ## Publishing (maintainers)
 

@@ -8,6 +8,7 @@ It survives the kill and counts what each process asked for.
   POST /api/                 new job; the body is recorded; answers its UUID
   GET  /api/<job>            status: half done on the first poll, complete after
   GET  /files/<job>.osm.pbf  the current PBF (slowly in "slow" mode)
+  GET  /basemap/{old,new}.pmtiles  distinguishable valid basemap snapshots
   POST /control              {"pbf": fixture name, "slow": bool}; answers the state
   GET  /state                {"submits", "polls", "downloads", "completed_downloads",
                               "jobs", "pbf", "slow"}
@@ -35,6 +36,7 @@ state = {
     "polls": 0,
     "downloads": 0,
     "completed_downloads": 0,
+    "basemap_downloads": 0,
     "jobs": [],
     "pbf": "snapshot.osm.pbf",
     "slow": False,
@@ -81,6 +83,16 @@ class Handler(BaseHTTPRequestHandler):
             self.reply(404, "not found", "text/plain")
 
     def do_GET(self):
+        if self.path in ("/basemap/old.pmtiles", "/basemap/new.pmtiles"):
+            data = (FIXTURES / "basemap/slc-nw-z12-15.pmtiles").read_bytes()
+            # Unreferenced trailing bytes distinguish the replacement without
+            # changing the archive's tile offsets or content.
+            if self.path == "/basemap/new.pmtiles":
+                data += b"refreshed"
+            with lock:
+                state["basemap_downloads"] += 1
+            self.reply(200, data, "application/octet-stream")
+            return
         if self.path == "/state":
             with lock:
                 snapshot = json.dumps(state)

@@ -21,4 +21,4 @@ Map data © OpenStreetMap contributors, available under the Open Database Licens
 
 The whole public API: area downloads ([AreaManager], [AreaState], [AreaConfig],
 [BasemapSource]), the offline store ([OsmStore], [Query], [OsmObject]) and PMTiles
-helpers ([PmtilesInfo], [ProtomapsBuilds]).
+helpers ([PmtilesInfo]).

@@ -11,9 +11,6 @@ import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
-import java.time.LocalDate
-import java.time.ZoneOffset
-import java.time.format.DateTimeFormatter
 import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicLong
 
@@ -50,16 +47,11 @@ public sealed interface BasemapSource {
     /**
      * Cut the area's bbox out of a large remote PMTiles archive on the device
      * with HTTP range requests (the Rust engine plans and assembles, Kotlin
-     * fetches with [AreaConfig.basemapParallelism] parallel requests). The
+     * fetches with up to four parallel requests). The
      * server must support ranges (206); a server answering 200 fails the
      * download. Output zooms are the archive's minimum up to [maxZoom]
      * (clamped to the archive's); [overfetch] is the extra bytes allowed per
      * wanted byte to save requests (go-pmtiles' default 0.05).
-     *
-     * For demos [ProtomapsBuilds.latestUrl] finds the newest Protomaps daily
-     * planet build. Production apps should mirror a build to their own
-     * storage/CDN: Protomaps discourages hotlinking and builds expire after
-     * about a week.
      *
      * The constructor throws [IllegalArgumentException] unless [planetUrl] is
      * http(s), [maxZoom] is 0..31 and [overfetch] is finite and >= 0.
@@ -79,47 +71,6 @@ public sealed interface BasemapSource {
     private companion object {
         fun requireHttp(url: String) =
             require(url.startsWith("https://") || url.startsWith("http://")) { "basemap URL must be http(s): $url" }
-    }
-}
-
-/**
- * Newest Protomaps daily planet build, for demos and tests.
- *
- * Builds are published as `https://build.protomaps.com/YYYYMMDD.pmtiles` and
- * deleted after about a week; Protomaps asks not to hotlink them from
- * production apps. Ship your own mirror (e.g. an R2/S3 bucket with range
- * support) and pass its URL to [BasemapSource.Extract] instead.
- */
-public object ProtomapsBuilds {
-    /** Where Protomaps publishes its daily builds. */
-    public const val BASE_URL: String = "https://build.protomaps.com/"
-
-    /**
-     * HEADs the builds of [today] (UTC) and up to [maxAgeDays] days back and
-     * returns the URL of the newest one that exists (at most `maxAgeDays + 1`
-     * HEAD requests, newest first; network I/O on [Dispatchers.IO], so any
-     * caller context is fine). Throws [java.io.IOException] if none exists
-     * or the server cannot be reached. [baseUrl] is for tests and mirrors
-     * with the same naming.
-     */
-    @JvmStatic
-    @JvmOverloads
-    public suspend fun latestUrl(
-        today: LocalDate = LocalDate.now(ZoneOffset.UTC),
-        maxAgeDays: Int = 7,
-        baseUrl: String = BASE_URL,
-    ): String {
-        val http = SliceHttp(connectTimeoutMillis = 15_000, readTimeoutMillis = 15_000)
-        val base = baseUrl.trimEnd('/') + "/"
-        for (age in 0..maxAgeDays) {
-            val url = base + today.minusDays(age.toLong()).format(DateTimeFormatter.BASIC_ISO_DATE) + ".pmtiles"
-            try {
-                if (http.exists(url)) return url
-            } catch (failure: DownloadFailure) {
-                throw java.io.IOException("cannot check $url: ${failure.message}", failure)
-            }
-        }
-        throw java.io.IOException("no Protomaps build found in the last $maxAgeDays days at $base")
     }
 }
 
@@ -149,7 +100,7 @@ public enum class BasemapPhase {
  * @property tileContents Distinct tile blobs (deduplicated).
  * @property fileBytes Size of the file.
  */
-public class PmtilesInfo internal constructor(
+public data class PmtilesInfo(
     public val minZoom: Int,
     public val maxZoom: Int,
     public val bounds: Bbox,
@@ -158,17 +109,6 @@ public class PmtilesInfo internal constructor(
     public val tileContents: Long,
     public val fileBytes: Long,
 ) {
-    override fun equals(other: Any?): Boolean = this === other || other is PmtilesInfo &&
-        minZoom == other.minZoom && maxZoom == other.maxZoom && bounds == other.bounds &&
-        addressedTiles == other.addressedTiles && tileEntries == other.tileEntries &&
-        tileContents == other.tileContents && fileBytes == other.fileBytes
-
-    override fun hashCode(): Int = hash(minZoom, maxZoom, bounds, addressedTiles, tileEntries, tileContents, fileBytes)
-
-    override fun toString(): String =
-        "PmtilesInfo(minZoom=$minZoom, maxZoom=$maxZoom, bounds=$bounds, addressedTiles=$addressedTiles, " +
-            "tileEntries=$tileEntries, tileContents=$tileContents, fileBytes=$fileBytes)"
-
     /** Reading a local PMTiles file. */
     public companion object {
         /**
@@ -216,9 +156,9 @@ internal data class ExtractStats(
  * `src/basemap` (see `include/cantino.h`).
  *
  * Threads: the native plan and assembler are confined to the thread that
- * created them, so every native call of one extract runs on [native], a
+ * created them, so every native call of one extract runs on `native`, a
  * private single thread. HTTP runs on [Dispatchers.IO], up to
- * [AreaConfig.basemapParallelism] requests at a time; each response is then
+ * [DownloadTuning.basemapParallelism] requests at a time; each response is then
  * handed to the native thread. Directory responses (small) go across as
  * bytes; tile ranges are streamed to a temporary file in [workDir] and the
  * engine reads that file, so tile data never sits in the JVM heap (at most
@@ -233,7 +173,6 @@ internal data class ExtractStats(
  */
 internal class BasemapExtract(
     private val http: SliceHttp,
-    private val config: AreaConfig,
     private val workDir: File,
 ) {
     /**
@@ -269,7 +208,7 @@ internal class BasemapExtract(
                 check(batch.isNotEmpty()) { "extract plan stalled without outstanding requests" }
                 val next = mutableListOf<ByteRange>() // touched only on the native thread
                 fetchAll(batch) { range ->
-                    val bytes = retryingInline(config) {
+                    val bytes = retryingInline {
                         http.getRange(url, range.offset, range.length, allowShort = range.id == 0L)
                     }
                     requests.incrementAndGet()
@@ -303,7 +242,7 @@ internal class BasemapExtract(
             fetchAll(remaining) { range ->
                 val part = File(workDir, "range-${range.id}.part")
                 try {
-                    retryingInline(config) { http.downloadRange(url, range.offset, range.length, part) }
+                    retryingInline { http.downloadRange(url, range.offset, range.length, part) }
                     withContext(native) { engine { NativeBridge.basemapAsmWriteRangeFile(assembler, range.id, part.path) } }
                 } finally {
                     part.delete()
@@ -330,9 +269,9 @@ internal class BasemapExtract(
         }
     }
 
-    /** Runs [block] for every range, [AreaConfig.basemapParallelism] at a time; the first failure cancels the rest. */
+    /** Runs [block] for every range, [DownloadTuning.basemapParallelism] at a time; the first failure cancels the rest. */
     private suspend fun fetchAll(ranges: List<ByteRange>, block: suspend (ByteRange) -> Unit) = coroutineScope {
-        val permits = Semaphore(config.basemapParallelism.coerceAtLeast(1))
+        val permits = Semaphore(DownloadTuning.current.basemapParallelism.coerceAtLeast(1))
         for (range in ranges) {
             launch(Dispatchers.IO) { permits.withPermit { block(range) } }
         }

@@ -16,20 +16,21 @@ OsmStore.open(area.dataFile).use { store ->                       // on a worker
 ## Threading rule
 
 **An `OsmStore` belongs to the thread that opened it.** Every call
-(`get`, `query`, `wayCoordinates`, `representativePoint`, `close`) must come from that thread; any other thread gets a
+(`get`, `query`, `wayCoordinates`, `close`) must come from that thread; any other thread gets a
 `CantinoException.WrongThread`, never corrupted state. Calls are synchronous.
 
 | Pattern | Code |
 | --- | --- |
 | One-shot (open, query, close) | `withContext(Dispatchers.IO) { OsmStore.open(f).use { … } }`: a block without suspension points runs on one thread |
-| Long-lived store (recommended for apps) | A single-thread dispatcher that owns the store: `Executors.newSingleThreadExecutor().asCoroutineDispatcher()`, and every call goes through `withContext(thatDispatcher)` |
+| Long-lived store (recommended for apps) | `AsyncOsmStore.open(file)` owns a dedicated thread; call its suspend `get`, `query`, `withStore` and `close` methods |
 
 Do not hold a store across suspension points on `Dispatchers.IO`: the
 coroutine can resume on another thread. `open` loads dictionaries, so keep a
 long-lived store rather than opening one per query. Returned objects are
-plain immutable values: they outlive the store and can go to any thread.
+plain values with owned collection snapshots: they outlive the store and can
+go to any thread. Constructible data classes make app tests straightforward.
 
-The café app's [`StoreWorker`](../../android/cafe-app/src/main/java/lol/osm/cantino/cafe/StoreWorker.kt)
+The café app's [`CafeStore`](../../android/cafe-app/src/main/java/lol/osm/cantino/cafe/CafeStore.kt)
 is a complete long-lived pattern, including reopening after a refresh.
 
 ## Query semantics
@@ -91,34 +92,24 @@ OsmObject (sealed)            id: OsmId(kind, id)   tags: Map<String, String>   
   to `Double`. Compare and store `latE7`/`lonE7` if you need exact values.
 - **Geometry** is not assembled: a way is a list of node IDs; a multipolygon
   is a relation. The [geometry helpers](#geometry-helpers) give you a way's
-  coordinates and one anchor point per object; build anything else yourself.
+  coordinates; marker placement and assembled geometry belong in your app.
 
 ## Geometry helpers
 
 ```kotlin
 val line: List<Coordinate?>? = store.wayCoordinates(wayId)        // null = way not in area
-val anchor: Coordinate? = store.representativePoint(cafe.id)      // null = nothing in area
 val objects: List<OsmObject?> = store.get(listOf(id1, id2, id3))  // input order, null = missing
 ```
 
 | Call | Returns |
 | --- | --- |
 | `wayCoordinates(wayId)` | The way's node coordinates in order, repeats kept (a closed way ends where it starts), one native call. A **null entry** is a node outside the area: do not draw across it. Null for a way not in the area |
-| `representativePoint(id)` | One point for a marker, a label or a distance origin (see below). Null when the object, or all of its geometry, is outside the area |
 | `get(ids)` | One entry per ID in input order, null where the object is not in the area. One JNI crossing for the list; at most `OsmStore.MAX_BATCH` (10 000) IDs, more throws `CantinoException.InvalidArgument` |
 
 `Coordinate` holds `latE7`/`lonE7` (exact integers) and `lat`/`lon` in degrees.
 
-**The representative point is an anchor, not a guaranteed point-on-surface or
-a true centroid.** For an L-shaped building it can lie outside the outline;
-for a multipolygon it can fall in a hole. It is computed in the core as:
-
-| Object | Point |
-| --- | --- |
-| Node | Its coordinate |
-| Closed way (first node = last node) | Mean of its distinct vertices that are in the area |
-| Open way | The point at half the length of the line through its in-area nodes (nodes outside the area are skipped, so the line joins across the gap) |
-| Relation | Mean of the representative points of its distinct in-area members, each weighted equally; member relations followed up to 8 levels deep, cycles skipped |
+The café example averages resolvable vertices for its markers. This is app
+policy and can place a marker outside a building; see [the example](cafe-app.md).
 
 ### Metadata
 
@@ -160,5 +151,5 @@ val store = try {
 }
 ```
 
-The category comes from the native core (`cantino_last_error_code`, see
+The category comes from the native core (negative return codes, see
 [C ABI](c-abi.md#errors)); the subtype is never inferred from the message.

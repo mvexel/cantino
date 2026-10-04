@@ -31,11 +31,10 @@ use rusqlite::{Connection, Statement, params};
 use serde::{Deserialize, Serialize};
 use std::{collections::HashMap, path::Path};
 
-/// Import tuning. Unknown JSON fields are ignored (`serde` default), so options
-/// written for the earlier OSMExpress backend (`map_size`, `sort_pairs`) are
-/// still accepted and have no effect.
+/// Import settings. Unknown JSON fields are errors so mistakes cannot silently
+/// change the resulting area.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(default)]
+#[serde(default, deny_unknown_fields)]
 pub struct ImportOptions {
     /// Keep version, timestamp, changeset and user for untagged nodes too.
     /// Off by default: untagged nodes are mostly way vertices, and their
@@ -48,7 +47,7 @@ pub struct ImportOptions {
     /// bounded by this.
     pub cache_mb: u32,
     /// Keep only the objects an app needs (see [`ImportProfile`]). `None`
-    /// imports everything in one pass, as before profiles existed.
+    /// imports everything in one pass.
     pub profile: Option<ImportProfile>,
 }
 impl Default for ImportOptions {
@@ -566,8 +565,6 @@ pub(crate) struct Importer<'c> {
     values: Interner,
     users: HashMap<u32, String>,
     tag_rows: Vec<TagRow>,
-    node_way: Vec<(i64, i64)>,
-    member_rel: Vec<(i64, i64)>,
     /// Every node's ID and position, parallel and ascending, for way bounds.
     /// About 16 bytes per node: the dominant import allocation for a city.
     node_ids: Vec<i64>,
@@ -599,8 +596,6 @@ impl<'c> Importer<'c> {
             values: Interner::default(),
             users: HashMap::new(),
             tag_rows: Vec::new(),
-            node_way: Vec::new(),
-            member_rel: Vec::new(),
             node_ids: Vec::new(),
             node_points: Vec::new(),
             way_bounds: Vec::new(),
@@ -767,7 +762,6 @@ impl<'c> Importer<'c> {
             // order and repeats (closed ways) are preserved exactly.
             put_svar(&mut self.refs, node.wrapping_sub(previous));
             previous = node;
-            self.node_way.push((node, id));
             // Missing nodes (clipped extracts) leave a gap in the bounds; the
             // bounds then cover only the resolvable part of the way.
             if let Some((lon, lat)) = self.node_point(node) {
@@ -804,7 +798,6 @@ impl<'c> Importer<'c> {
             put_uvar(&mut self.refs, (u64::from(role) << 2) | kind as u64);
             put_svar(&mut self.refs, member.wrapping_sub(previous));
             previous = member;
-            self.member_rel.push((packed(kind, member), id));
             match kind {
                 NODE => {
                     if let Some((lon, lat)) = self.node_point(member) {
@@ -857,20 +850,6 @@ impl<'c> Importer<'c> {
             let mut insert = connection.prepare("INSERT INTO users VALUES(?1, ?2)")?;
             for (uid, name) in &self.users {
                 insert.execute(params![uid, name])?;
-            }
-        }
-
-        // Reverse references: sorted and deduplicated (a closed way references
-        // its first node twice) so inserts append to the B-tree.
-        for (table, mut rows) in [
-            ("node_way", std::mem::take(&mut self.node_way)),
-            ("member_rel", std::mem::take(&mut self.member_rel)),
-        ] {
-            rows.sort_unstable();
-            rows.dedup();
-            let mut insert = connection.prepare(&format!("INSERT INTO {table} VALUES(?1, ?2)"))?;
-            for (a, b) in &rows {
-                insert.execute(params![a, b])?;
             }
         }
 

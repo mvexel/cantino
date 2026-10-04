@@ -1,6 +1,7 @@
 package lol.osm.cantino.cafe
 
 import lol.osm.cantino.Bbox
+import lol.osm.cantino.OsmKind
 import lol.osm.cantino.OsmId
 import lol.osm.cantino.OsmObject
 import lol.osm.cantino.OsmStore
@@ -54,9 +55,8 @@ sealed interface OutdoorSeating {
 /**
  * One café as the app sees it. [location] is null when none of the object's
  * nodes are in the area (it is still listed, without a distance). For ways and
- * relations it is the framework's representative point
- * ([OsmStore.representativePoint]; good enough for a café building, not an
- * exact centroid or a point guaranteed to lie inside the polygon).
+ * relations it is a simple mean of available vertices; not an exact centroid
+ * or a point guaranteed to lie inside the polygon.
  */
 data class Cafe(
     val id: OsmId,
@@ -86,13 +86,21 @@ object CafeLoader {
     }
 
     /**
-     * Where to put [obj] on the map: the framework's representative point
-     * ([OsmStore.representativePoint]: node coordinate, mean of a closed
-     * way's vertices, midpoint along an open way, mean of a relation's member
-     * points). An anchor for a marker and a distance, not exact geometry.
+     * Café marker policy: node coordinate, mean of a way's distinct available
+     * vertices, or the first usable node/way member of a relation. Nested
+     * relations are deliberately skipped. This is a marker, not geometry.
      */
-    fun representativePoint(store: OsmStore, obj: OsmObject): LatLon? =
-        store.representativePoint(obj.id)?.let { LatLon(it.lat, it.lon) }
+    fun representativePoint(store: OsmStore, obj: OsmObject): LatLon? = when (obj) {
+        is OsmObject.Node -> LatLon(obj.lat, obj.lon)
+        is OsmObject.Way -> store.wayCoordinates(obj.id.id)?.filterNotNull()?.distinct()
+            ?.takeIf { it.isNotEmpty() }?.let { points ->
+                LatLon(points.map { it.lat }.average(), points.map { it.lon }.average())
+            }
+        is OsmObject.Relation -> obj.members.asSequence()
+            .filter { it.id.kind != OsmKind.RELATION }
+            .mapNotNull { store.get(it.id) }
+            .firstNotNullOfOrNull { representativePoint(store, it) }
+    }
 
     private const val PAGE = 500
 }

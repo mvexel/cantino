@@ -20,12 +20,17 @@ basemap. Size for 10×10 km at z0–15: about 6.5 MB.
 
 ## Hosting: demo vs production
 
+The café example owns its demo discovery helper:
+[`ProtomapsBuilds.kt`](../../android/cafe-app/src/main/java/lol/osm/cantino/cafe/ProtomapsBuilds.kt).
+Copy that file into your app for experimentation, then call:
+
 ```kotlin
-// Demo only: HEADs build.protomaps.com for today's build, then up to 7 days back.
-val planet = ProtomapsBuilds.latestUrl() // suspend; throws IOException if none
+val planet = ProtomapsBuilds.latestUrl() // example helper, not an SDK API
+val runId = areas.download("city", bbox, basemap = BasemapSource.Extract(planet))
 ```
 
-`ProtomapsBuilds.latestUrl()` is for demos and tests. Protomaps' daily builds
+The [quickstart](../../README.md#quickstart) includes a standalone version.
+Protomaps' daily builds
 expire after about a week and Protomaps asks apps not to hotlink them. For
 production, **mirror a build** to storage you control and pass its URL:
 

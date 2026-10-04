@@ -29,7 +29,6 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import java.io.File
 import java.time.Instant
-import java.time.LocalDate
 import java.util.Collections
 import java.util.UUID
 import java.util.concurrent.CountDownLatch
@@ -73,18 +72,43 @@ class AreaManagerTest {
         AreaTestHooks.afterCommitPoint = null
         AreaTestHooks.onForeground = null
         AreaTestHooks.foregroundManifestGaps = null
+        AreaTestHooks.downloadTuning = null
         server.close()
     }
 
-    private fun config() = AreaConfig(
-        sliceBaseUrl = server.url("/").toString(),
-        pollIntervalMillis = 100,
-        inlineRetries = 3,
-        inlineRetryDelayMillis = 50,
-        backoffDelayMillis = 10_000, // WorkManager's minimum
-    )
+    private fun config(): AreaConfig {
+        AreaTestHooks.downloadTuning = DownloadTuning(pollIntervalMillis = 100, inlineRetryDelayMillis = 50, backoffDelayMillis = 10_000)
+        return AreaConfig(sliceBaseUrl = server.url("/").toString())
+    }
 
     private fun manager() = AreaManager(target, config())
+
+    @Test
+    fun recoveryFailureRemainsStorageFailureAndRetainsJournal() {
+        val manager = manager()
+        AreaTestHooks.downloadTuning = DownloadTuning.current.copy(maxRunAttempts = 1)
+        val journal = File(target.filesDir, "cantino-areas/$areaId.commit")
+        journal.parentFile!!.mkdirs()
+        journal.writeText("corrupt journal")
+        try {
+            val runId = manager.download(areaId, bbox)
+            // A reader deliberately fails closed while this journal cannot
+            // be recovered; observe WorkManager directly for this failure.
+            val work = runBlocking {
+                withTimeout(30_000) {
+                    androidx.work.WorkManager.getInstance(target).getWorkInfoByIdFlow(runId)
+                        .first { it?.state?.isFinished == true }!!
+                }
+            }
+            assertEquals(androidx.work.WorkInfo.State.FAILED, work.state)
+            assertEquals(FailureReason.STORAGE.name, work.outputData.getString(AreaDownloadWorker.KEY_REASON))
+            assertTrue(work.outputData.getBoolean(AreaDownloadWorker.KEY_RETRYABLE, false))
+            assertEquals("corrupt journal", journal.readText())
+            assertEquals(0, slice.submits.get())
+        } finally {
+            journal.delete()
+        }
+    }
 
     @Test
     fun happyPathPublishesAreaWithSnapshotTimestamp() {
@@ -117,7 +141,7 @@ class AreaManagerTest {
         assertTrue(states.seen.any { it is AreaState.Importing })
         assertTrue(states.seen.any { it is AreaState.Slicing && it.fraction == 0.5 })
 
-        assertEquals(listOf("Café Test"), cafeNames(manager.dataFile(areaId)!!))
+        assertEquals(listOf("Café Test"), cafeNames(manager.publishedArea(areaId)?.dataFile!!))
         val published = manager.publishedArea(areaId)!!
         assertEquals(ready.area, published)
         assertEquals(bbox, published.metadata!!.bbox)
@@ -154,7 +178,7 @@ class AreaManagerTest {
         assertEquals(true, foregroundDuringRun)
         assertTrue("setForeground was never called", notificationIds.isNotEmpty())
         assertEquals(setOf("cantino-area-download:$areaId".hashCode()), notificationIds.toSet())
-        assertEquals(listOf("Café Test"), cafeNames(manager.dataFile(areaId)!!))
+        assertEquals(listOf("Café Test"), cafeNames(manager.publishedArea(areaId)?.dataFile!!))
         waitUntil { !foregroundServiceRunning() }
         assertNoStagingLeft()
         states.close()
@@ -182,7 +206,7 @@ class AreaManagerTest {
 
         assertEquals("setForeground must not be called", 0, foregroundCalls.get())
         assertEquals(false, foregroundDuringRun)
-        assertEquals(listOf("Café Test"), cafeNames(manager.dataFile(areaId)!!))
+        assertEquals(listOf("Café Test"), cafeNames(manager.publishedArea(areaId)?.dataFile!!))
         assertNoStagingLeft()
         states.close()
     }
@@ -221,7 +245,7 @@ class AreaManagerTest {
         assertTrue(ready is AreaState.Ready)
         assertEquals("job must be resumed, not resubmitted", 1, slice.submits.get())
         assertTrue(states.seen.any { it is AreaState.Queued && it.previousRuns == 1 })
-        assertEquals(listOf("Café Test"), cafeNames(manager.dataFile(areaId)!!))
+        assertEquals(listOf("Café Test"), cafeNames(manager.publishedArea(areaId)?.dataFile!!))
         states.close()
     }
 
@@ -258,7 +282,7 @@ class AreaManagerTest {
         assertEquals(FailureReason.INVALID_DATA, failed.reason)
         assertTrue(failed.message, failed.message.startsWith("import failed"))
         assertEquals(1, slice.downloads.get())
-        assertEquals(listOf("Old Café"), cafeNames(manager.dataFile(areaId)!!))
+        assertEquals(listOf("Old Café"), cafeNames(manager.publishedArea(areaId)?.dataFile!!))
         // The old area's files and metadata are still what was published before.
         assertOldAreaIntact(manager, before)
         assertNoStagingLeft()
@@ -308,7 +332,7 @@ class AreaManagerTest {
         assertTrue(failed.message, failed.message.contains("HTTP 400"))
         assertEquals(1, slice.submits.get())
         assertEquals(0, slice.polls.get())
-        assertEquals(null, manager.dataFile(areaId))
+        assertEquals(null, manager.publishedArea(areaId)?.dataFile)
         states.close()
     }
 
@@ -339,7 +363,6 @@ class AreaManagerTest {
         assertTrue(metadata.report.counts.nodes > 0)
         states.close()
     }
-
 
     // --- Basemap ----------------------------------------------------------------
 
@@ -511,23 +534,10 @@ class AreaManagerTest {
         assertTrue("$ready", ready is AreaState.Ready)
         ready as AreaState.Ready
         assertEquals(workId, ready.area.metadata!!.workId)
-        assertEquals(listOf("Café Test"), cafeNames(manager.dataFile(areaId)!!))
+        assertEquals(listOf("Café Test"), cafeNames(manager.publishedArea(areaId)?.dataFile!!))
         assertFalse(states.seen.any { it is AreaState.Cancelled })
         waitUntil { stagingDirs().isEmpty() }
         states.close()
-    }
-
-    @Test
-    fun latestProtomapsBuildIsTheNewestThatExists() {
-        slice.protomapsBuilds = setOf("/20261001.pmtiles", "/20260930.pmtiles")
-        val url = runBlocking {
-            ProtomapsBuilds.latestUrl(LocalDate.of(2026, 10, 3), baseUrl = server.url("/").toString())
-        }
-        assertEquals(server.url("/20261001.pmtiles").toString(), url)
-        val none = runCatching {
-            runBlocking { ProtomapsBuilds.latestUrl(LocalDate.of(2026, 10, 3), maxAgeDays = 1, baseUrl = server.url("/").toString()) }
-        }
-        assertTrue(none.exceptionOrNull() is java.io.IOException)
     }
 
     /**
@@ -540,9 +550,7 @@ class AreaManagerTest {
         assumeTrue("pass -e live true to run", InstrumentationRegistry.getArguments().getString("live") == "true")
         val manager = AreaManager(target)
         val id = "live-slc-basemap"
-        val resolveStarted = System.nanoTime()
-        val planet = runBlocking { ProtomapsBuilds.latestUrl() }
-        Log.i("AreaLive", "latest build $planet resolved in %.0f ms".format((System.nanoTime() - resolveStarted) / 1e6))
+        val planet = requireNotNull(InstrumentationRegistry.getArguments().getString("planetUrl")) { "pass -e planetUrl <PMTiles URL>" }
         val states = Recorder(manager, id)
         val started = System.nanoTime()
         manager.download(id, Bbox(-111.895, 40.765, -111.885, 40.771), "Cantino live test", BasemapSource.Extract(planet, 15))
@@ -586,7 +594,7 @@ class AreaManagerTest {
         val oldBasemap = pmtiles.copyOf() // same format, distinguishable by the sidecar
         storage.stagedBasemap(areaId, oldRun).writeBytes(oldBasemap)
         val metadata = AreaMetadata(
-            Bbox(-111.1, 39.9, -110.9, 40.1), "old", "2026-01-01T00:00:00Z", 1L, report,
+            Bbox(-111.1, 39.9, -110.9, 40.1), "old", Instant.parse("2026-01-01T00:00:00Z"), 1L, report,
             BasemapMetadata(BasemapKind.URL, "http://old.example/x.pmtiles", oldBasemap.size.toLong(), 22, 12, 15, 1, oldBasemap.size.toLong()),
             oldRun,
         )
@@ -600,8 +608,8 @@ class AreaManagerTest {
     /** Data, basemap and sidecar are exactly the ones [publishOldArea] published. */
     private fun assertOldAreaIntact(manager: AreaManager, before: Pair<AreaInfo, ByteArray>) {
         assertEquals(before.first, manager.publishedArea(areaId))
-        assertEquals(listOf("Old Café"), cafeNames(manager.dataFile(areaId)!!))
-        assertArrayEquals(before.second, manager.basemapFile(areaId)!!.readBytes())
+        assertEquals(listOf("Old Café"), cafeNames(manager.publishedArea(areaId)?.dataFile!!))
+        assertArrayEquals(before.second, manager.publishedArea(areaId)?.basemapFile!!.readBytes())
     }
 
     /** WorkManager's foreground service is running in the foreground (own services are always visible). */
@@ -707,14 +715,12 @@ class AreaManagerTest {
      * poll and complete on the second; the file is the fixture PBF. Also a
      * basemap host: `/basemap.pmtiles` (plain download) and
      * `/planet.pmtiles` (HTTP range requests, sliced from the fixture
-     * archive, 206 + Content-Range like a CDN), plus HEAD-able Protomaps
-     * build names. Knobs inject the failures each test needs.
+     * archive, 206 + Content-Range like a CDN). Knobs inject test failures.
      */
     private class FakeSlice(pbf: ByteArray, private val planet: ByteArray) : Dispatcher() {
         @Volatile var basemapBody: ByteArray = planet
         @Volatile var basemapCode = 200
         @Volatile var ignoreRange = false
-        @Volatile var protomapsBuilds: Set<String> = emptySet()
         val basemapRequests = AtomicInteger()
         val rangeHeaders: MutableList<String> = Collections.synchronizedList(mutableListOf())
         @Volatile var submitCode = 201
@@ -782,7 +788,6 @@ class AreaManagerTest {
                             .build()
                     }
                 }
-                request.method == "HEAD" && path in protomapsBuilds -> MockResponse.Builder().build()
                 else -> MockResponse.Builder().code(404).build()
             }
         }

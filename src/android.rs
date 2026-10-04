@@ -7,8 +7,8 @@
 //! translates between Java strings and the C ABI's owned UTF-8 buffers.
 //!
 //! Errors surface in Java as the typed Kotlin exception for their category
-//! (`ErrorKind`, read from `cantino_last_error_code` right after the failing
-//! call): `CantinoException.InvalidArgument`, `.InvalidFile`, `.Io`,
+//! (`ErrorKind`, encoded in the negative return status):
+//! `CantinoException.InvalidArgument`, `.InvalidFile`, `.Io`,
 //! `.WrongThread`, thrown directly from here with the core's message, so the
 //! Kotlin side never parses strings. Internal errors (core bugs, panics) are
 //! `IllegalStateException`. The exception classes are looked up by name, so
@@ -41,8 +41,7 @@ enum BridgeError {
     /// pending, which then wins).
     #[error("{0}")]
     Jni(#[from] jni::errors::Error),
-    /// A C ABI call failed; `kind` is its category from
-    /// `cantino_last_error_code`.
+    /// A C ABI call failed; `kind` is decoded from its negative status.
     #[error("{message}")]
     Framework { kind: ErrorKind, message: String },
     /// A Java string with an embedded NUL cannot become a C string: the
@@ -139,8 +138,7 @@ fn take(buffer: *mut c_char) -> Option<String> {
 
 /// Runs one C ABI call with fresh output slots. Returns the status code and the
 /// result buffer; a negative status becomes the ABI's error message plus its
-/// category, read from `cantino_last_error_code` on this same thread before
-/// anything else can overwrite it. The error buffer is always taken so it is
+/// category encoded in the status. The error buffer is always taken so it is
 /// freed even when status is 0.
 fn call(
     function: impl FnOnce(*mut *mut c_char, *mut *mut c_char) -> i32,
@@ -148,14 +146,13 @@ fn call(
     let mut out = ptr::null_mut();
     let mut error = ptr::null_mut();
     let status = function(&mut out, &mut error);
-    let code = cantino_last_error_code();
     let out = take(out);
     let error = take(error);
     if status < 0 {
         return Err(BridgeError::Framework {
-            // Every failing ABI call records a known code (protect); an
+            // Every failing ABI call returns a known code (protect); an
             // unknown one would be a version skew bug, hence Internal.
-            kind: ErrorKind::from_code(code).unwrap_or(ErrorKind::Internal),
+            kind: ErrorKind::from_code(-status).unwrap_or(ErrorKind::Internal),
             message: error.unwrap_or_else(|| "unknown framework error".into()),
         });
     }
@@ -249,28 +246,6 @@ pub extern "system" fn Java_lol_osm_cantino_NativeBridge_wayCoordinates<'local>(
         // SAFETY: live handle owned by the Kotlin store on this thread.
         let (status, json) = call(|out, error| unsafe {
             cantino_way_coordinates(handle as *mut CantinoStore, id, out, error)
-        })?;
-        match (status, json) {
-            (0, Some(json)) => Ok(JString::from_str(env, json)?),
-            _ => Ok(JString::default()),
-        }
-    })
-    .resolve::<ThrowTyped>()
-}
-
-/// `{"lat_e7","lon_e7"}`, or Java `null` when there is no point (status 1).
-#[unsafe(no_mangle)]
-pub extern "system" fn Java_lol_osm_cantino_NativeBridge_representativePoint<'local>(
-    mut env: EnvUnowned<'local>,
-    _class: JClass<'local>,
-    handle: jlong,
-    kind: jint,
-    id: jlong,
-) -> JString<'local> {
-    env.with_env(|env| -> Result<JString<'local>, BridgeError> {
-        // SAFETY: live handle owned by the Kotlin store on this thread.
-        let (status, json) = call(|out, error| unsafe {
-            cantino_representative_point(handle as *mut CantinoStore, kind, id, out, error)
         })?;
         match (status, json) {
             (0, Some(json)) => Ok(JString::from_str(env, json)?),

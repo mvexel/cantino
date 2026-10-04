@@ -31,11 +31,14 @@ object CafeStore {
     const val AREA_ID = "cafe-area"
     private const val TAG = "CafeStore"
 
-    // Serialises open/reopen/close decisions; the store calls themselves run
-    // on AsyncOsmStore's thread, outside the lock.
+    // Hold through the read: a refresh must not close a store selected by a
+    // caller that has not yet submitted its work to the owner thread.
     private val lock = Mutex()
     private var store: AsyncOsmStore? = null
     private var openedIdentity: String? = null
+
+    /** Test barrier at the selection/use boundary where refresh used to race. */
+    internal var beforeRead: (suspend () -> Unit)? = null
 
     /**
      * Runs [block] on the store thread with a store opened on the current
@@ -43,7 +46,7 @@ object CafeStore {
      */
     suspend fun <T> withStore(context: Context, block: (OsmStore, AreaInfo) -> T): T {
         val appContext = context.applicationContext
-        val (current, published) = lock.withLock {
+        return lock.withLock {
             val published = withContext(Dispatchers.IO) { AreaManager(appContext).publishedArea(AREA_ID) } ?: run {
                 closeStore()
                 throw NoAreaException()
@@ -55,9 +58,9 @@ object CafeStore {
                 store = AsyncOsmStore.open(published.dataFile)
                 openedIdentity = identity
             }
-            store!! to published
+            beforeRead?.invoke()
+            store!!.withStore { block(it, published) }
         }
-        return current.withStore { block(it, published) }
     }
 
     private suspend fun closeStore() {

@@ -24,7 +24,7 @@
 #   --guide-only     only render the guide into <out>/guide (needs just pandoc);
 #                    no native build, Gradle or landing page
 #
-# Needs: the Android toolchain of HANDOFF.md (Rust 1.99 + Android targets,
+# Needs: the Android toolchain in docs/guide/building.md (Rust 1.99 + Android targets,
 # NDK r29, Android SDK, mise for the JDK) and pandoc 3 (renders the guide).
 set -eu
 root=$(CDPATH= cd -- "$(dirname "$0")/.." && pwd)
@@ -83,19 +83,14 @@ command -v pandoc >/dev/null 2>&1 || { echo "pandoc is required to render the gu
 if [ "$native" = 1 ]; then
     "$root/scripts/build-android.sh"
 fi
-for abi in arm64-v8a armeabi-v7a x86_64; do
+for abi in arm64-v8a x86_64; do
     [ -s "$root/target/android/$abi/libcantino.so" ] || {
         echo "missing target/android/$abi/libcantino.so; run scripts/build-android.sh" >&2
         exit 2
     }
 done
 
-# 2. Start from the published Maven repo when a gh-pages worktree has one, so
-#    maven-metadata.xml keeps listing earlier versions.
-#    The worktree is created first so a fresh checkout of gh-pages is seen too.
-#    Everything already under maven/ is carried over untouched, which keeps the
-#    0.1.0 artifacts at their original io/github/mvexel/cantino/ path (the group
-#    was renamed to lol.osm in 0.2.0; existing 0.1.0 consumers must keep resolving).
+# 2. Prepare the optional site worktree and a clean output directory.
 if [ -n "$worktree" ]; then
     if [ ! -e "$worktree/.git" ]; then
         if git -C "$root" show-ref --verify --quiet refs/heads/gh-pages; then
@@ -109,9 +104,6 @@ if [ -n "$worktree" ]; then
 fi
 rm -rf "$out"
 mkdir -p "$out"
-if [ -n "$worktree" ] && [ -d "$worktree/maven" ]; then
-    cp -a "$worktree/maven" "$out/maven"
-fi
 
 # 3. AAR into the Maven layout + Dokka HTML.
 (cd "$root/android" && mise exec -- ./gradlew --console=plain \
@@ -201,11 +193,6 @@ echo "Site written to $out:"
 
 # 5. Optional local gh-pages worktree (never pushed from here).
 if [ -n "$worktree" ]; then
-    # Never drop published artifacts: the old-group 0.1.0 release must survive.
-    if [ -d "$worktree/maven/io/github/mvexel/cantino" ] && [ ! -d "$out/maven/io/github/mvexel/cantino" ]; then
-        echo "refusing to publish: $out/maven lost the 0.1.0 artifacts under io/github/mvexel/cantino" >&2
-        exit 1
-    fi
     # Replace everything except .git with the new site.
     find "$worktree" -mindepth 1 -maxdepth 1 ! -name .git -exec rm -rf {} +
     cp -a "$out/." "$worktree/"
@@ -232,12 +219,6 @@ cat <<EOF
 
   # 2. Tag the release (API reference source links point at v$version)
   git -C "$root" tag v$version && git -C "$root" push origin v$version
-
-  # 3. Enable GitHub Pages from gh-pages (once)
-  gh api -X POST repos/mvexel/cantino/pages -f source[branch]=gh-pages -f source[path]=/
-
-  # 4. Make the repository public (once)
-  gh repo edit mvexel/cantino --visibility public --accept-visibility-change-consequences
 
 Then check https://mvexel.github.io/cantino/maven/lol/osm/cantino/$version/cantino-$version.pom
 EOF

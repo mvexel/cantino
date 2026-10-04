@@ -58,7 +58,7 @@ an already-open store keeps reading the old one (the old file stays alive
 while it is open). To see new data, close the store and open
 `publishedArea(id).dataFile` again. A practical rule: remember
 `AreaMetadata.workId` (it changes with every refresh) and reopen when it
-differs. The café app's [`StoreWorker`](../../android/cafe-app/src/main/java/lol/osm/cantino/cafe/StoreWorker.kt)
+differs. The café app's [`CafeStore`](../../android/cafe-app/src/main/java/lol/osm/cantino/cafe/CafeStore.kt)
 does exactly that.
 
 ## What Cantino is not

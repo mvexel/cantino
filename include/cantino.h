@@ -11,15 +11,10 @@ extern "C" {
 #endif
 
 typedef struct CantinoStore CantinoStore;
-// Return codes: 0 success; 1 object missing (get, way_coordinates,
-// representative_point only); -1 error.
+// Return codes: 0 success; 1 object missing (get, way_coordinates);
+// negative CANTINO_ERROR_* category on failure.
 //
-// Error categories (since 0.2.0). After a call returns -1, its category is
-// cantino_last_error_code(), read on the same thread before the next ABI
-// call (errno-style: kept per thread, overwritten by every call, 0 after a
-// success). The message in *error is for developers; branch on the code.
-// Values are stable ABI: never renumbered, new ones only appended.
-#define CANTINO_ERROR_NONE 0
+// The message in *error is for developers; branch on the status category.
 // The caller passed something invalid: bad query (limit, filters, only
 // NotExists without bbox), invalid bbox, too many spatial candidates, batch
 // over 10000 IDs, non-positive ID, unknown kind, NULL pointer, malformed
@@ -39,9 +34,6 @@ typedef struct CantinoStore CantinoStore;
 #define CANTINO_ERROR_WRONG_THREAD 4
 // A bug in the core, including a caught panic. Report it.
 #define CANTINO_ERROR_INTERNAL 5
-// The CANTINO_ERROR_* category of the last ABI call on the calling thread
-// (CANTINO_ERROR_NONE if it succeeded). Any thread; never fails.
-int32_t cantino_last_error_code(void);
 //
 // Strings and paths are UTF-8. Every non-NULL result/error buffer must be freed
 // with cantino_free, including buffers returned alongside an error.
@@ -67,14 +59,6 @@ int32_t cantino_get_many(CantinoStore *store,const char *request,char **json,cha
 // e7 integers: [lat_e7,lon_e7,lat_e7,lon_e7,...], with null,null for a node
 // outside the area. Returns 1 (and no JSON) when the way is not in the area.
 int32_t cantino_way_coordinates(CantinoStore *store,int64_t way_id,char **json,char **error);
-// Representative point (kind as for get): writes {"lat_e7","lon_e7"}, or
-// returns 1 (no JSON) when the object or all of its geometry is outside the
-// area. A label/anchor point, NOT a guaranteed point-on-surface: node = its
-// coordinate; closed way = mean of distinct in-area vertices; open way = point
-// at half the length of the polyline over in-area nodes; relation = mean of
-// its distinct in-area members' points (nested relations up to 8 levels,
-// cycles skipped).
-int32_t cantino_representative_point(CantinoStore *store,int32_t kind,int64_t id,char **json,char **error);
 // Runs a query (JSON) and writes a JSON array of objects ordered by (kind, id).
 // Tag filters are ANDed; a bbox yields spatial candidates (tagged nodes exact,
 // ways/relations by bounding box; untagged nodes never). limit is 1..10000;
@@ -92,7 +76,8 @@ int32_t cantino_query(CantinoStore *store,const char *request,char **json,char *
 // Options: {"preserve_untagged_metadata":bool,"cache_mb":MiB,"profile":P}, where
 // P = {"keep":[{"kinds":"nwr","key":"amenity","values":["cafe"]}]} keeps
 // matching objects plus everything they reference ("values" optional).
-// Import options may be NULL for defaults or a JSON object. Import is synchronous
+// Import options may be NULL for defaults or a JSON object; unknown fields fail.
+// Import is synchronous
 // and performs disk/CPU work; the adapter must schedule it off the UI thread.
 int32_t cantino_import(const char *input,const char *destination,const char *options,char **report,char **error);
 // SliceOSM protocol helpers: pure functions, callable from any thread, no

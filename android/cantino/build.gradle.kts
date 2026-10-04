@@ -31,6 +31,7 @@ android {
     ndkVersion = "29.0.14206865"
     defaultConfig {
         minSdk = 26
+        ndk { abiFilters += listOf("arm64-v8a", "x86_64") }
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         // Keeps the exception classes the JNI layer throws by name (and the
         // native bridge) in apps that minify; see the file.
@@ -77,7 +78,7 @@ androidComponents {
 dependencies {
     // Area downloads (AreaManager). HTTP is HttpURLConnection.
     implementation("androidx.work:work-runtime-ktx:2.12.0")
-    // Public API: AreaManager.state() returns a Flow; ProtomapsBuilds.latestUrl()
+    // Public API: AreaManager.state() returns a Flow; AsyncOsmStore
     // and AreaManager.load*() are suspend. Same version work-runtime-ktx 2.12.0 resolves.
     api("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.2")
 
@@ -154,9 +155,7 @@ dokka {
     dokkaSourceSets.configureEach {
         // Explicit API mode makes the public surface deliberate; document only it.
         documentedVisibilities.set(setOf(org.jetbrains.dokka.gradle.engine.parameters.VisibilityModifier.Public))
-        // Set to true to audit KDoc coverage: as of 0.1.0 the only undocumented
-        // public symbols are the equals/hashCode/toString overrides of the
-        // value classes, so it stays off to keep the build output clean.
+        // Enable locally to audit KDoc coverage.
         reportUndocumented.set(false)
         skipEmptyPackages.set(true)
         includes.from("dokka-module.md")

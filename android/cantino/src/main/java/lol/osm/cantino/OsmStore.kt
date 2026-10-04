@@ -73,8 +73,7 @@ public sealed class CantinoException(message: String, cause: Throwable? = null) 
 /**
  * An open, read-only offline area database.
  *
- * Get one from [open], with the file from [AreaManager.dataFile] /
- * [AreaInfo.dataFile] or from your own [importArea]. Every entry point
+ * Get one from [open], with [AreaInfo.dataFile] from [AreaManager.loadPublishedArea] or from your own [importArea]. Every entry point
  * takes either a [File] or a path string.
  *
  * **Threading: confined to one thread.** The native handle (one read-only
@@ -209,31 +208,6 @@ public class OsmStore private constructor(private var handle: Long) : AutoClosea
             if (flat.isNull(2 * index)) null else Coordinate(flat.getInt(2 * index), flat.getInt(2 * index + 1))
         }
     }
-
-    /**
-     * A single point to put a marker or label for the object with [id], or
-     * to measure a distance from. Null when the object is not in this area
-     * or none of its geometry is.
-     *
-     * **This is an anchor point, not a guaranteed point-on-surface or a true
-     * centroid**: for a concave building or a multipolygon it can lie outside
-     * the shape. Computed in the native core:
-     * - **Node**: its coordinate.
-     * - **Closed way** (first node = last node): the mean of its distinct
-     *   vertices that are in the area.
-     * - **Open way**: the point at half the length of the line through its
-     *   in-area nodes (nodes outside the area are skipped).
-     * - **Relation**: the mean of the representative points of its distinct
-     *   members that are in the area, each member weighted equally. Member
-     *   relations are followed up to 8 levels deep; cycles are skipped.
-     *
-     * Throws [CantinoException.InvalidArgument] for a non-positive ID,
-     * [CantinoException.WrongThread] off the owner thread,
-     * [IllegalStateException] if the store is closed.
-     */
-    public fun representativePoint(id: OsmId): Coordinate? =
-        NativeBridge.representativePoint(live(), id.kind.code, id.id)
-            ?.let { Coordinate.fromJson(JSONObject(it)) }
 
     /**
      * Runs [query] and returns at most [Query.limit] objects; see [Query] for

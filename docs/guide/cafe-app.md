@@ -19,7 +19,7 @@ Paths below are relative to `android/cafe-app/src/main/java/lol/osm/cantino/cafe
 | Location permission, one fix (`LocationManager`, 30 s timeout); fallback: type "lat,lon" or pick a preset | `MainActivity.startFirstRun`, `Location.kt` (`DeviceLocation.current`) | |
 | 10×10 km box around the fix | `Cafes.kt`: `Geo.squareAround`, `Geo.AREA_SIZE_KM` (a default, not a cap) | `Bbox` |
 | Offer dialog with the privacy line (the bbox goes to SliceOSM and the tile host) | `MainActivity.offerDownload` | |
-| Find a basemap build (demo) and start the download | `MainActivity.startDownload` | `ProtomapsBuilds.latestUrl()`, `AreaManager.download(…, BasemapSource.Extract(planet, maxZoom = 15))` |
+| Find a basemap build (demo) and start the download | `MainActivity.startDownload` | Example-local `ProtomapsBuilds.latestUrl()`, `AreaManager.download(…, BasemapSource.Extract(planet, maxZoom = 15))` |
 | Progress screen: phase, bytes (with total when known), per-phase durations | `MainActivity.ProgressScreen.update` | `AreaManager.state(areaId)`, every `AreaState` subtype |
 | Failure: Retry, or back to the map (the previous area is kept) | `MainActivity.showFailure` | `AreaState.Failed.retryable`, `publishedArea` |
 | Refresh: same bbox, full replace | `MainActivity.confirmRefresh` | `AreaMetadata.bbox`, `download` again |
@@ -49,9 +49,9 @@ need is in `filesDir/cantino-areas/`.
 
 | What | Code | Cantino API |
 | --- | --- | --- |
-| One store, one thread, reopened after a refresh | `StoreWorker.withStore` | `OsmStore.open`, `AreaMetadata.workId` |
+| One store, one thread, reopened after a refresh | `CafeStore.withStore` | `AsyncOsmStore`, `AreaMetadata.workId` |
 | All `amenity=cafe` in the area, paged by 500 | `CafeLoader.load` | `Query(tags, bbox, after, limit)`, `TagFilter.Equals` |
-| A map point for ways and relations (an anchor, not exact geometry) | `CafeLoader.representativePoint` | `store.representativePoint` |
+| A map point for ways and relations (an anchor, not exact geometry) | `CafeLoader` marker helper | `wayCoordinates`, batch `get` |
 | Dots on the map (GeoJSON source), nearby list sorted by distance | `MapScreen.applyFilters`, `MapScreen.geoJson` | |
 
 Result on the Salt Lake City area: 136 cafés (120 nodes, 16 ways).

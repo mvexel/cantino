@@ -18,7 +18,6 @@ import lol.osm.cantino.AreaState
 import lol.osm.cantino.Bbox
 import lol.osm.cantino.BasemapPhase
 import lol.osm.cantino.BasemapSource
-import lol.osm.cantino.ProtomapsBuilds
 import java.io.IOException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -32,7 +31,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 /**
- * Entry point and first-run flow (TODO.md §6, Martijn's flow):
+ * Entry point and first-run flow:
  *
  *   location permission → current location (LocationManager)
  *     → offer "download ~10×10 km around you (map data + basemap)?"

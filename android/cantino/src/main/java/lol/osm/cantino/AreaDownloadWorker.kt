@@ -24,7 +24,7 @@ import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
-import kotlin.coroutines.coroutineContext
+import kotlinx.coroutines.currentCoroutineContext
 import org.json.JSONObject
 
 /**
@@ -82,23 +82,30 @@ internal class AreaDownloadWorker(context: Context, parameters: WorkerParameters
         val config = request.config
         val storage = AreaStorage(applicationContext)
         val http = SliceHttp(config.connectTimeoutMillis, config.readTimeoutMillis)
-        foreground = config.foreground?.takeIf { foregroundAllowed(request.areaId) }?.let { Foreground(it, request) }
-        foreground?.update(this, PHASE_SUBMITTING, force = true)
-        storage.prepare(request.areaId)
-        // A commit of this very run may have passed its commit point before
-        // the process died: then the area is published and the run is done.
-        storage.published(request.areaId)?.metadata?.takeIf { it.workId == id }?.let { metadata ->
-            storage.clearCheckpoint(request.areaId, id)
-            return Result.success(workDataOf(KEY_METADATA to metadata.toJson().toString()))
-        }
         val staging = storage.stagingFile(request.areaId, id)
-        storage.deleteStaleStaging(request.areaId, keep = staging)
-        storage.prepareStaging(request.areaId, id)
+        fun retryOrFail(message: String?, reason: FailureReason): Result =
+            if (runAttemptCount + 1 < DownloadTuning.current.maxRunAttempts) {
+                Result.retry()
+            } else {
+                storage.clearCheckpoint(request.areaId, id)
+                failed(message, retryable = true, reason)
+            }
         try {
+            foreground = config.foreground?.takeIf { foregroundAllowed(request.areaId) }?.let { Foreground(it, request) }
+            foreground?.update(this, PHASE_SUBMITTING, force = true)
+            storage.prepare(request.areaId)
+            // A run killed after its commit point recovers the complete area
+            // and succeeds without downloading it again.
+            storage.published(request.areaId)?.metadata?.takeIf { it.workId == id }?.let { metadata ->
+                storage.clearCheckpoint(request.areaId, id)
+                return Result.success(workDataOf(KEY_METADATA to metadata.toJson().toString()))
+            }
+            storage.deleteStaleStaging(request.areaId, keep = staging)
+            storage.prepareStaging(request.areaId, id)
             val (job, progress) = sliceJob(request, storage, http)
 
             report(PHASE_DOWNLOADING, bytes = 0, total = progress.sizeBytes)
-            val bytes = retryingInline(config) {
+            val bytes = retryingInline {
                 http.download(job.downloadUrl, staging, onProgress = throttled { bytes, total ->
                     report(PHASE_DOWNLOADING, bytes = bytes, total = total ?: progress.sizeBytes)
                 })
@@ -126,13 +133,13 @@ internal class AreaDownloadWorker(context: Context, parameters: WorkerParameters
             }
             AreaTestHooks.afterImport?.invoke()
             staging.delete() // free the PBF's space before the basemap download
-            coroutineContext.ensureActive() // a cancel during the import ends the run here
+            currentCoroutineContext().ensureActive() // a cancel during the import ends the run here
 
             val basemap = basemap(request, storage, http)
             val metadata = AreaMetadata(
                 request.bbox,
                 request.name,
-                progress.timestamp,
+                AreaMetadata.parseSnapshotTimestamp(progress.timestamp),
                 System.currentTimeMillis(),
                 importReport,
                 basemap,
@@ -151,17 +158,22 @@ internal class AreaDownloadWorker(context: Context, parameters: WorkerParameters
             // storage-not-low, a constraint of every download request). A job whose file vanished (JobGone from the download) must
             // not be resumed: drop the checkpoint so the next run resubmits.
             if (failure is DownloadFailure.JobGone) storage.clearCheckpoint(request.areaId, id)
-            return if (runAttemptCount + 1 < config.maxRunAttempts) {
-                Result.retry()
-            } else {
-                storage.clearCheckpoint(request.areaId, id)
-                failed(failure.message, retryable = true, failure.reason)
-            }
+            return retryOrFail(failure.message, failure.reason)
+        } catch (error: java.io.IOException) {
+            // Recovery and sidecar writes also touch storage. A pending
+            // journal stays intact so the next attempt can finish publication.
+            return retryOrFail(error.message, FailureReason.STORAGE)
         } finally {
             // Also runs on cancellation. A killed process skips this; the next
             // run's deleteStaleStaging / prepareStaging cover that.
             staging.delete()
-            storage.discardStaging(request.areaId, id)
+            try {
+                storage.discardStaging(request.areaId, id)
+            } catch (error: java.io.IOException) {
+                // An unreadable journal may own the staging files. Leave
+                // them for recovery, without hiding the original failure.
+                Log.w(TAG, "cannot discard staging for ${request.areaId}", error)
+            }
         }
     }
 
@@ -172,7 +184,7 @@ internal class AreaDownloadWorker(context: Context, parameters: WorkerParameters
      * published sidecar's work ID and reports Ready).
      */
     private suspend fun publish(request: DownloadRequest, storage: AreaStorage, hasBasemap: Boolean) {
-        val job = coroutineContext[Job]
+        val job = currentCoroutineContext()[Job]
         val workManager = WorkManager.getInstance(applicationContext)
         // NonCancellable: once the commit point has passed, a cancel must not
         // turn the return from this block into a CancellationException (the
@@ -203,12 +215,11 @@ internal class AreaDownloadWorker(context: Context, parameters: WorkerParameters
      */
     private suspend fun basemap(request: DownloadRequest, storage: AreaStorage, http: SliceHttp): BasemapMetadata? {
         val output = storage.stagedBasemap(request.areaId, id)
-        val config = request.config
         return when (val source = request.basemap) {
             BasemapSource.None -> null
             is BasemapSource.Url -> {
                 report(PHASE_BASEMAP, bytes = 0, basemapPhase = BasemapPhase.DOWNLOAD)
-                val bytes = retryingInline(config) {
+                val bytes = retryingInline {
                     // A 404 here is permanent (wrong URL), not a vanished SliceOSM job.
                     http.download(source.url, output, goneOn404 = false, onProgress = throttled { bytes, total ->
                         report(PHASE_BASEMAP, bytes = bytes, total = total, basemapPhase = BasemapPhase.DOWNLOAD)
@@ -225,7 +236,7 @@ internal class AreaDownloadWorker(context: Context, parameters: WorkerParameters
             }
             is BasemapSource.Extract -> {
                 report(PHASE_BASEMAP, bytes = 0, basemapPhase = BasemapPhase.DIRECTORIES)
-                val stats = BasemapExtract(http, config, storage.downloadDir(request.areaId)).run(
+                val stats = BasemapExtract(http, storage.downloadDir(request.areaId)).run(
                     source.planetUrl,
                     request.bbox,
                     source.maxZoom,
@@ -297,14 +308,14 @@ internal class AreaDownloadWorker(context: Context, parameters: WorkerParameters
         repeat(2) {
             if (job == null) {
                 val submit = protocol { SliceProtocol.jobRequest(base, request.bbox, request.name) }
-                val response = retryingInline(config) { http.postJson(submit.url, submit.body) }
+                val response = retryingInline { http.postJson(submit.url, submit.body) }
                 // An unparseable answer (an HTML error page, say) is a server
                 // fault, not a bad request: transient.
                 job = protocol(transient = true) { SliceProtocol.job(base, response) }
                 storage.writeCheckpoint(request.areaId, id, base, job!!.id)
             }
             try {
-                return job!! to awaitSlice(job!!, http, config)
+                return job!! to awaitSlice(job!!, http)
             } catch (gone: DownloadFailure.JobGone) {
                 // Expired or unknown job (e.g. a checkpoint from long ago): start over.
                 job = null
@@ -316,21 +327,20 @@ internal class AreaDownloadWorker(context: Context, parameters: WorkerParameters
     private suspend fun awaitSlice(
         job: SliceProtocol.Job,
         http: SliceHttp,
-        config: AreaConfig,
     ): SliceProtocol.Progress {
         val started = SystemClock.elapsedRealtime()
         while (true) {
-            val status = retryingInline(config) { http.getText(job.statusUrl) }
+            val status = retryingInline { http.getText(job.statusUrl) }
             val progress = protocol(transient = true) { SliceProtocol.progress(status) }
             report(PHASE_SLICING, fraction = progress.fraction)
             if (progress.complete) return progress
-            if (SystemClock.elapsedRealtime() - started > config.maxSliceWaitMillis) {
+            if (SystemClock.elapsedRealtime() - started > DownloadTuning.current.maxSliceWaitMillis) {
                 throw DownloadFailure.Transient(
-                    "SliceOSM job ${job.id} still running after ${config.maxSliceWaitMillis} ms",
+                    "SliceOSM job ${job.id} still running after ${DownloadTuning.current.maxSliceWaitMillis} ms",
                     FailureReason.SERVER,
                 )
             }
-            delay(config.pollIntervalMillis)
+            delay(DownloadTuning.current.pollIntervalMillis)
         }
     }
 
@@ -518,22 +528,15 @@ internal class AreaDownloadWorker(context: Context, parameters: WorkerParameters
             .putString(KEY_BBOX, bbox.toJson().toString())
             .putString(KEY_NAME, name)
             .putString("base", config.sliceBaseUrl)
-            .putLong("poll", config.pollIntervalMillis)
-            .putLong("max_slice_wait", config.maxSliceWaitMillis)
             .putInt("connect_timeout", config.connectTimeoutMillis)
             .putInt("read_timeout", config.readTimeoutMillis)
-            .putInt("inline_retries", config.inlineRetries)
-            .putLong("inline_retry_delay", config.inlineRetryDelayMillis)
-            .putInt("max_runs", config.maxRunAttempts)
-            .putLong("backoff", config.backoffDelayMillis)
             .putBoolean("preserve_untagged_metadata", config.importOptions.preserveUntaggedMetadata)
             .putInt("cache_mb", config.importOptions.cacheMiB)
             // Small (a few hundred bytes for typical profiles); WorkManager caps Data at 10 KB.
             .putString("import_profile", config.importOptions.profile?.toJson()?.toString())
-            .putInt("basemap_parallelism", config.basemapParallelism)
+            .putBoolean("fg", config.foreground != null)
             .apply {
                 config.foreground?.let { foreground ->
-                    putBoolean("fg", true)
                     putString("fg_channel_id", foreground.channelId)
                     putString("fg_channel_name", foreground.channelName)
                     putString("fg_title", foreground.title)
@@ -555,34 +558,25 @@ internal class AreaDownloadWorker(context: Context, parameters: WorkerParameters
 
         companion object {
             fun fromData(data: Data): DownloadRequest {
-                val defaults = AreaConfig()
                 return DownloadRequest(
                     areaId = requireNotNull(data.getString(KEY_AREA)),
                     bbox = Bbox.fromJson(JSONObject(requireNotNull(data.getString(KEY_BBOX)))),
                     name = requireNotNull(data.getString(KEY_NAME)),
                     config = AreaConfig(
-                        sliceBaseUrl = data.getString("base") ?: defaults.sliceBaseUrl,
-                        pollIntervalMillis = data.getLong("poll", defaults.pollIntervalMillis),
-                        maxSliceWaitMillis = data.getLong("max_slice_wait", defaults.maxSliceWaitMillis),
-                        connectTimeoutMillis = data.getInt("connect_timeout", defaults.connectTimeoutMillis),
-                        readTimeoutMillis = data.getInt("read_timeout", defaults.readTimeoutMillis),
-                        inlineRetries = data.getInt("inline_retries", defaults.inlineRetries),
-                        inlineRetryDelayMillis = data.getLong("inline_retry_delay", defaults.inlineRetryDelayMillis),
-                        maxRunAttempts = data.getInt("max_runs", defaults.maxRunAttempts),
-                        backoffDelayMillis = data.getLong("backoff", defaults.backoffDelayMillis),
+                        sliceBaseUrl = requireNotNull(data.getString("base")),
+                        connectTimeoutMillis = requireNotNull(data.keyValueMap["connect_timeout"] as? Int),
+                        readTimeoutMillis = requireNotNull(data.keyValueMap["read_timeout"] as? Int),
                         importOptions = ImportOptions(
-                            data.getBoolean("preserve_untagged_metadata", false),
-                            data.getInt("cache_mb", ImportOptions().cacheMiB),
+                            requireNotNull(data.keyValueMap["preserve_untagged_metadata"] as? Boolean),
+                            requireNotNull(data.keyValueMap["cache_mb"] as? Int),
                             data.getString("import_profile")?.let { ImportProfile.fromJson(JSONObject(it)) },
                         ),
-                        basemapParallelism = data.getInt("basemap_parallelism", defaults.basemapParallelism),
                         // smallIcon is resolved from foregroundIcon at run time; the ID here is unused.
-                        foreground = if (data.getBoolean("fg", false)) {
-                            val fallback = ForegroundConfig()
+                        foreground = if (requireNotNull(data.keyValueMap["fg"] as? Boolean)) {
                             ForegroundConfig(
-                                channelId = data.getString("fg_channel_id") ?: fallback.channelId,
-                                channelName = data.getString("fg_channel_name") ?: fallback.channelName,
-                                title = data.getString("fg_title") ?: fallback.title,
+                                channelId = requireNotNull(data.getString("fg_channel_id")),
+                                channelName = requireNotNull(data.getString("fg_channel_name")),
+                                title = requireNotNull(data.getString("fg_title")),
                                 cancelLabel = data.getString("fg_cancel_label"),
                             )
                         } else {
@@ -593,10 +587,11 @@ internal class AreaDownloadWorker(context: Context, parameters: WorkerParameters
                         "url" -> BasemapSource.Url(requireNotNull(data.getString("basemap_url")))
                         "extract" -> BasemapSource.Extract(
                             requireNotNull(data.getString("basemap_url")),
-                            data.getInt("basemap_max_zoom", 15),
-                            data.getDouble("basemap_overfetch", 0.05),
+                            requireNotNull(data.keyValueMap["basemap_max_zoom"] as? Int),
+                            requireNotNull(data.keyValueMap["basemap_overfetch"] as? Double),
                         )
-                        else -> BasemapSource.None
+                        "none" -> BasemapSource.None
+                        else -> error("missing or invalid basemap kind")
                     },
                     foregroundIcon = data.getString("fg_icon"),
                 )

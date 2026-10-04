@@ -67,10 +67,9 @@ pub enum Error {
 pub type Result<T> = std::result::Result<T, Error>;
 
 /// Stable category of an [`Error`], carried across the C ABI as an integer
-/// code (`cantino_last_error_code`, `CANTINO_ERROR_*` in
+/// negative status code (`-CANTINO_ERROR_*` in
 /// `include/cantino.h`) and across JNI as the Kotlin `CantinoException`
-/// subclass. The numeric values are part of the ABI: never renumber, only
-/// append.
+/// subclass.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[repr(i32)]
 pub enum ErrorKind {
