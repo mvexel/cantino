@@ -73,11 +73,10 @@ time). Show it to users as the data's age. The data never changes after
 that; to get newer data you <strong>refresh</strong>.</p>
 <h2 id="refresh--full-replace">Refresh = full replace</h2>
 <p>A refresh is just another <code>AreaManager.download(id, …)</code>
-for the same ID. There are no incremental updates in 0.3.0: every part
-(data and basemap) is downloaded and built again, then swapped in.
-Requesting <code>BasemapSource.None</code> on a refresh removes an
-earlier basemap, because the published area always describes one
-download.</p>
+for the same ID. There are no incremental updates: every part (data and
+basemap) is downloaded and built again, then swapped in. Requesting
+<code>BasemapSource.None</code> on a refresh removes an earlier basemap,
+because the published area always describes one download.</p>
 <h2 id="atomic-publish">Atomic publish</h2>
 <pre class="text"><code>download ──&gt; staging dir (.staging/&lt;areaId&gt;/&lt;run&gt;/)   nothing visible yet
                    │ data imported, basemap built
@@ -102,11 +101,61 @@ practical rule: remember <code>AreaMetadata.workId</code> (it changes
 with every refresh) and reopen when it differs. The café app's <a
 href="https://github.com/mvexel/cantino/blob/main/android/cafe-app/src/main/java/lol/osm/cantino/cafe/CafeStore.kt"><code>CafeStore</code></a>
 does exactly that.</p>
+<h2 id="capabilities">Capabilities</h2>
+<p>Cantino aims to provide composable capabilities for apps that work
+with OSM data offline. Today they ship together, one library per
+platform; each is a separate layer in the code:</p>
+<table>
+<thead>
+<tr>
+<th>Capability</th>
+<th>Core (Rust)</th>
+<th>C ABI</th>
+<th>Android / iOS</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Snapshot store and queries</td>
+<td><code>store</code>, <code>schema</code>, <code>encoding</code>,
+<code>import</code></td>
+<td><code>cantino_open</code>, <code>get</code>, <code>get_many</code>,
+<code>query</code>, <code>way_coordinates</code>,
+<code>import</code></td>
+<td><code>OsmStore</code>, <code>AsyncOsmStore</code></td>
+</tr>
+<tr>
+<td>Area acquisition</td>
+<td><code>slice</code>, <code>area_storage</code>,
+<code>failure</code></td>
+<td><code>cantino_slice_*</code>, <code>cantino_area_*</code>,
+<code>cantino_classify_failure</code></td>
+<td><code>AreaManager</code> (WorkManager / URLSession)</td>
+</tr>
+<tr>
+<td>Basemap acquisition</td>
+<td><code>basemap</code></td>
+<td><code>cantino_basemap_*</code></td>
+<td><code>BasemapSource</code>, <code>PmtilesInfo</code></td>
+</tr>
+<tr>
+<td>Rendering</td>
+<td>—</td>
+<td>—</td>
+<td>your app, with MapLibre Native and the basemap</td>
+</tr>
+</tbody>
+</table>
+<p>Acquisition and basemap code does not depend on the store, so these
+layers can later become separate build options without a rewrite.
+Editing is outside the current implementation: an editor keeps its own
+edit layer and uses a snapshot as base data (<a
+href="editing-apps.html">Editing apps</a>).</p>
 <h2 id="what-cantino-is-not">What Cantino is not</h2>
 <ul>
 <li>Not a renderer: draw the basemap with MapLibre Native and your own
 data on top (GeoJSON sources, for example).</li>
-<li>Not an editor: 0.3.0 is read-only.</li>
+<li>Not an editor (yet): the current implementation is read-only.</li>
 <li>Not exact geometry: bbox queries return <strong>candidates</strong>
 (see <a href="querying.html">Querying</a>).</li>
 <li>Not an interpreter of tags: <code>opening_hours</code>,

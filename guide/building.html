@@ -36,6 +36,8 @@ include/cantino.h    C ABI header, the contract for every platform adapter
 android/cantino      Kotlin library (AAR): OsmStore, AreaManager, models
 android/cafe-app     reference app
 android/sample-app   offline basemap demo
+swift/               Swift package (OsmStore, AsyncOsmStore, AreaManager, models), for iOS and macOS; store API also on Linux
+ios/cafe-app         iOS reference app (SwiftUI, Xcode project, uses ../../swift)
 scripts/             build, check, bench, basemap assets, publishing</code></pre>
 <h2 id="toolchain">Toolchain</h2>
 <table>
@@ -50,12 +52,23 @@ scripts/             build, check, bench, basemap assets, publishing</code></pre
 <tr>
 <td>Rust</td>
 <td>1.99.0 (pinned in <code>rust-toolchain.toml</code>)</td>
-<td><code>rustup target add aarch64-linux-android x86_64-linux-android --toolchain 1.99.0</code></td>
+<td><code>rustup target add aarch64-linux-android x86_64-linux-android --toolchain 1.99.0</code>;
+for iOS also
+<code>aarch64-apple-ios aarch64-apple-ios-sim aarch64-apple-darwin</code></td>
 </tr>
 <tr>
 <td>Android NDK</td>
 <td>r29 (<code>29.0.14206865</code>), SDK-managed</td>
-<td>Cross-compiles the Rust library; Gradle also uses it to strip</td>
+<td>Cross-compiles the Rust library; Gradle also uses it to strip. Linux
+or macOS host; without the SDK command-line tools, unpack
+<code>android-ndk-r29-&lt;host&gt;.zip</code> from
+<code>dl.google.com/android/repository/</code> into
+<code>&lt;sdk&gt;/ndk/29.0.14206865</code></td>
+</tr>
+<tr>
+<td>Xcode</td>
+<td>27 (Swift 6.4), macOS only</td>
+<td>xcframework, Swift tests on the simulator, iOS café app</td>
 </tr>
 <tr>
 <td>Android SDK</td>
@@ -86,8 +99,13 @@ scripts/             build, check, bench, basemap assets, publishing</code></pre
 <span id="cb2-6"><a href="#cb2-6" aria-hidden="true" tabindex="-1"></a><span class="ex">mise</span> exec <span class="at">--</span> ./gradlew :cantino:dokkaGeneratePublicationHtml            <span class="co"># API reference → cantino/build/dokka/html</span></span>
 <span id="cb2-7"><a href="#cb2-7" aria-hidden="true" tabindex="-1"></a><span class="ex">mise</span> exec <span class="at">--</span> ./gradlew :cantino:testDebugUnitTest :cafe-app:testDebugUnitTest</span>
 <span id="cb2-8"><a href="#cb2-8" aria-hidden="true" tabindex="-1"></a><span class="va">ANDROID_SERIAL</span><span class="op">=&lt;</span>device<span class="op">&gt;</span> mise <span class="bu">exec</span> <span class="at">--</span> ./gradlew :cantino:connectedDebugAndroidTest :cafe-app:connectedDebugAndroidTest</span></code></pre></div>
-<p>Run the instrumented suites on an arm64 phone and an x86_64 emulator.
-For download/persistence changes also run
+<p>Run the instrumented suites on an arm64 phone and an emulator (x86_64
+on an x86_64 host, arm64 on Apple silicon). The scripts default to the
+SDK in <code>~/Android/Sdk</code> (Linux) or
+<code>~/Library/Android/sdk</code> (macOS); set
+<code>ANDROID_HOME</code> otherwise. What runs on both platforms: <a
+href="platform-parity.html">Android and iOS parity</a>. For
+download/persistence changes also run
 <code>ANDROID_SERIAL=&lt;device&gt; scripts/kill-test-android.sh</code>
 from the repository root on each device.</p>
 <p>Live service tests are opt-in. Pass
@@ -109,14 +127,52 @@ href="https://pandoc.org/installing.html">pandoc</a> 3.x on the
 the browser). To check only the guide:
 <code>scripts/publish-pages.sh --guide-only --out build/pages</code>,
 then open <code>build/pages/guide/index.html</code>.</p>
+<h2 id="swift-host-macos-or-linux">Swift (host: macOS or Linux)</h2>
+<p>The Swift adapter in <code>swift/</code> is tested natively on macOS
+(Xcode's Swift) and in Docker on Linux:</p>
+<div class="sourceCode" id="cb3"><pre class="sourceCode sh"><code class="sourceCode bash"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="ex">scripts/swift-test.sh</span>                              <span class="co"># build the core, then `swift test`</span></span>
+<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a><span class="va">SIMULATOR</span><span class="op">=</span><span class="st">&quot;iPhone 18 Pro&quot;</span> <span class="ex">scripts/swift-test.sh</span>    <span class="co"># macOS: the same tests on an iOS simulator</span></span>
+<span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a><span class="ex">scripts/build-xcframework.sh</span>                       <span class="co"># macOS: only build swift/Artifacts/CCantino.xcframework</span></span></code></pre></div>
+<p>It needs cargo, plus Docker on Linux, or on macOS Xcode and the Rust
+targets <code>aarch64-apple-ios</code>,
+<code>aarch64-apple-ios-sim</code> and
+<code>aarch64-apple-darwin</code>. On Apple platforms Package.swift uses
+the binary target <code>CCantino.xcframework</code> (iOS device, iOS
+simulator and macOS arm64 slices; git-ignored, rebuilt by the script).
+On Linux the script copies only <code>libcantino.a</code> to
+<code>target/swift/libcantino_core.a</code>, which Package.swift links
+statically. SwiftPM's build products go to
+<code>target/swift-build</code>. On Linux the container's glibc must be
+at least the host's (<code>SWIFT_IMAGE</code> selects another image).
+Not part of <code>scripts/check.sh</code>, which needs only cargo.
+Details and the deviations from the Kotlin API: <a
+href="https://github.com/mvexel/cantino/blob/main/swift/README.md"><code>swift/README.md</code></a>.</p>
 <p>Sample apps need the offline style assets first:</p>
-<div class="sourceCode" id="cb3"><pre class="sourceCode sh"><code class="sourceCode bash"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="ex">scripts/basemap-assets.sh</span>      <span class="co"># → android/sample-app/build-assets (needs curl, git, node/npm)</span></span>
-<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a><span class="bu">cd</span> android <span class="kw">&amp;&amp;</span> <span class="ex">mise</span> exec <span class="at">--</span> ./gradlew :cafe-app:assembleDebug :sample-app:assembleDebug</span></code></pre></div>
+<div class="sourceCode" id="cb4"><pre class="sourceCode sh"><code class="sourceCode bash"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a><span class="ex">scripts/basemap-assets.sh</span>      <span class="co"># → android/sample-app/build-assets (needs curl, git, node/npm)</span></span>
+<span id="cb4-2"><a href="#cb4-2" aria-hidden="true" tabindex="-1"></a><span class="bu">cd</span> android <span class="kw">&amp;&amp;</span> <span class="ex">mise</span> exec <span class="at">--</span> ./gradlew :cafe-app:assembleDebug :sample-app:assembleDebug</span></code></pre></div>
+<h2 id="ios-café-app-host-macos">iOS café app (host: macOS)</h2>
+<p><a
+href="https://github.com/mvexel/cantino/blob/main/ios/cafe-app"><code>ios/cafe-app</code></a>
+is a hand-written Xcode project (no generator): file-system-synchronized
+groups, the local <code>swift/</code> package and MapLibre Native 6.31.0
+from SwiftPM (fetched from github.com on the first build). A build phase
+copies style, glyphs and sprites from
+<code>android/sample-app/build-assets</code>, so run
+<code>scripts/basemap-assets.sh</code> first.</p>
+<div class="sourceCode" id="cb5"><pre class="sourceCode sh"><code class="sourceCode bash"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a><span class="ex">scripts/build-ios-cafe.sh</span>            <span class="co"># xcframework, then xcodebuild build for the simulator</span></span>
+<span id="cb5-2"><a href="#cb5-2" aria-hidden="true" tabindex="-1"></a><span class="ex">scripts/build-ios-cafe.sh</span> test       <span class="co"># + the example&#39;s unit tests (opening hours, Protomaps builds, café logic)</span></span>
+<span id="cb5-3"><a href="#cb5-3" aria-hidden="true" tabindex="-1"></a><span class="ex">scripts/build-ios-cafe.sh</span> install    <span class="co"># + install on the booted simulator</span></span>
+<span id="cb5-4"><a href="#cb5-4" aria-hidden="true" tabindex="-1"></a><span class="va">SIMULATOR</span><span class="op">=</span><span class="st">&quot;iPhone 18 Pro&quot;</span> <span class="ex">scripts/build-ios-cafe.sh</span> test</span></code></pre></div>
+<p>By hand, from the repository root:</p>
+<div class="sourceCode" id="cb6"><pre class="sourceCode sh"><code class="sourceCode bash"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a><span class="ex">scripts/build-xcframework.sh</span></span>
+<span id="cb6-2"><a href="#cb6-2" aria-hidden="true" tabindex="-1"></a><span class="ex">xcodebuild</span> test <span class="at">-project</span> ios/cafe-app/CafeApp.xcodeproj <span class="at">-scheme</span> CafeApp <span class="dt">\</span></span>
+<span id="cb6-3"><a href="#cb6-3" aria-hidden="true" tabindex="-1"></a>    <span class="at">-destination</span> <span class="st">&quot;platform=iOS Simulator,name=iPhone 18 Pro&quot;</span> <span class="dt">\</span></span>
+<span id="cb6-4"><a href="#cb6-4" aria-hidden="true" tabindex="-1"></a>    <span class="at">-derivedDataPath</span> target/ios-cafe/derived <span class="at">-clonedSourcePackagesDirPath</span> target/ios-cafe/packages</span></code></pre></div>
 <h2 id="desktop-tools">Desktop tools</h2>
-<div class="sourceCode" id="cb4"><pre class="sourceCode sh"><code class="sourceCode bash"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a><span class="ex">cargo</span> run <span class="at">--release</span> <span class="at">--example</span> offline <span class="at">--</span> import INPUT.osm.pbf AREA.sqlite</span>
-<span id="cb4-2"><a href="#cb4-2" aria-hidden="true" tabindex="-1"></a><span class="ex">cargo</span> run <span class="at">--release</span> <span class="at">--example</span> offline <span class="at">--</span> cafes AREA.sqlite</span>
-<span id="cb4-3"><a href="#cb4-3" aria-hidden="true" tabindex="-1"></a><span class="ex">cargo</span> run <span class="at">--release</span> <span class="at">--example</span> offline <span class="at">--</span> get AREA.sqlite way 1</span>
-<span id="cb4-4"><a href="#cb4-4" aria-hidden="true" tabindex="-1"></a><span class="va">ANDROID_SERIAL</span><span class="op">=&lt;</span>device<span class="op">&gt;</span> scripts/bench-android.sh <span class="ex">CITY.osm.pbf</span>   <span class="co"># city benchmark JSON from a device</span></span></code></pre></div>
+<div class="sourceCode" id="cb7"><pre class="sourceCode sh"><code class="sourceCode bash"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a><span class="ex">cargo</span> run <span class="at">--release</span> <span class="at">--example</span> offline <span class="at">--</span> import INPUT.osm.pbf AREA.sqlite</span>
+<span id="cb7-2"><a href="#cb7-2" aria-hidden="true" tabindex="-1"></a><span class="ex">cargo</span> run <span class="at">--release</span> <span class="at">--example</span> offline <span class="at">--</span> cafes AREA.sqlite</span>
+<span id="cb7-3"><a href="#cb7-3" aria-hidden="true" tabindex="-1"></a><span class="ex">cargo</span> run <span class="at">--release</span> <span class="at">--example</span> offline <span class="at">--</span> get AREA.sqlite way 1</span>
+<span id="cb7-4"><a href="#cb7-4" aria-hidden="true" tabindex="-1"></a><span class="va">ANDROID_SERIAL</span><span class="op">=&lt;</span>device<span class="op">&gt;</span> scripts/bench-android.sh <span class="ex">CITY.osm.pbf</span>   <span class="co"># city benchmark JSON from a device</span></span></code></pre></div>
 <p>Area files are portable between desktop and device (same format,
 <code>application_id</code> "CNTN"; see <code>FORMAT_VERSION</code> in
 <code>src/schema.rs</code>).</p>
@@ -128,7 +184,7 @@ consumers yet: the API, ABI and file format may change without
 compatibility layers. Re-import development data after an incompatible
 format change.</p>
 <h2 id="publishing-maintainers">Publishing (maintainers)</h2>
-<div class="sourceCode" id="cb5"><pre class="sourceCode sh"><code class="sourceCode bash"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a><span class="ex">scripts/publish-pages.sh</span> <span class="at">--worktree</span>   <span class="co"># Maven repo + API docs + landing page → build/pages, synced to build/gh-pages</span></span></code></pre></div>
+<div class="sourceCode" id="cb8"><pre class="sourceCode sh"><code class="sourceCode bash"><span id="cb8-1"><a href="#cb8-1" aria-hidden="true" tabindex="-1"></a><span class="ex">scripts/publish-pages.sh</span> <span class="at">--worktree</span>   <span class="co"># Maven repo + API docs + landing page → build/pages, synced to build/gh-pages</span></span></code></pre></div>
 <p>The script builds native libraries, the release AAR with its POM, and
 the Dokka HTML, lays them out for GitHub Pages (<code>/maven/…</code>,
 <code>/api/…</code>, <code>/index.html</code>), and prints the commands

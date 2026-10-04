@@ -28,13 +28,14 @@
 <p><a
 href="https://github.com/mvexel/cantino/blob/main/include/cantino.h"><code>include/cantino.h</code></a>
 is the contract between the Rust core and every platform adapter.
-Android's JNI layer wraps these functions; the iOS Swift adapter
-(planned) will call them directly; any language with a C FFI can too
-(<code>scripts/mobile-api-smoke.py</code> drives it from Python
-<code>ctypes</code>). The header is hand-written and documents every
-function.</p>
-<pre class="text"><code>Kotlin (OsmStore, AreaManager)      Swift (planned)      Python ctypes (tests)
-        │ JNI (src/android.rs)          │                       │
+Android's JNI layer wraps these functions; the Swift adapter (<a
+href="https://github.com/mvexel/cantino/blob/main/swift/README.md"><code>swift/</code></a>,
+platform-neutral so far, tested on Linux) calls them directly; any
+language with a C FFI can too (<code>scripts/mobile-api-smoke.py</code>
+drives it from Python <code>ctypes</code>). The header is hand-written
+and documents every function.</p>
+<pre class="text"><code>Kotlin (OsmStore, AreaManager)  Swift (OsmStore, swift/)  Python ctypes (tests)
+        │ JNI (src/android.rs)          │ CCantino module        │
         └─────────── C ABI: include/cantino.h, JSON in and out ─┘
                                  │
                        Rust core (src/), SQLite</code></pre>
@@ -49,9 +50,12 @@ function.</p>
 <tbody>
 <tr>
 <td>Return codes</td>
-<td><code>0</code> success, <code>1</code> not found
-(<code>cantino_get</code>, <code>cantino_way_coordinates</code>),
-<code>-CANTINO_ERROR_*</code> status on failure</td>
+<td><code>0</code> success, <code>1</code> nothing to return
+(<code>cantino_get</code>, <code>cantino_way_coordinates</code>: not
+found; <code>cantino_area_published</code>: no area;
+<code>cantino_classify_failure</code>: not a failure) or aborted
+(<code>cantino_area_commit</code>), <code>-CANTINO_ERROR_*</code> status
+on failure</td>
 </tr>
 <tr>
 <td>Strings</td>
@@ -129,6 +133,24 @@ thread</td>
 <td>PMTiles info</td>
 <td><code>cantino_basemap_info(path)</code></td>
 <td>Any thread</td>
+</tr>
+<tr>
+<td>Area store</td>
+<td><code>cantino_area_validate_id</code>,
+<code>cantino_area_layout</code>,
+<code>cantino_area_prepare_staging</code>,
+<code>cantino_area_discard_staging</code>,
+<code>cantino_area_write_staged_metadata</code>,
+<code>cantino_area_commit</code>, <code>cantino_area_recover</code>,
+<code>cantino_area_published</code></td>
+<td>No handles, any thread; calls on one area serialize on the area
+lock. See <a href="#area-store">Area store</a></td>
+</tr>
+<tr>
+<td>Failure classification</td>
+<td><code>cantino_classify_failure(input)</code></td>
+<td>Pure function, any thread. See <a href="#download-failures">Download
+failures</a></td>
 </tr>
 </tbody>
 </table>
@@ -263,6 +285,147 @@ requested length; a wrong id or length is rejected without changing
 state (re-fetch and feed again). The Kotlin driver
 (<code>BasemapExtract</code> in <code>Basemap.kt</code>) is a reference
 implementation: 4 parallel requests, tile ranges streamed to files.</p>
+<h2 id="area-store">Area store</h2>
+<p><em>Unreleased.</em> The on-disk layout of an app's downloaded areas
+and the crash-safe replacement of one, implemented once in the core
+(<code>src/area_storage.rs</code>) so every adapter behaves the same.
+The adapter chooses one root directory (Android:
+<code>filesDir/cantino-areas</code>) and passes it on every call; there
+are no handles and no in-memory state.</p>
+<pre class="text"><code>&lt;root&gt;/&lt;area_id&gt;.sqlite      published OSM data
+&lt;root&gt;/&lt;area_id&gt;.pmtiles     published basemap (only when the version has one)
+&lt;root&gt;/&lt;area_id&gt;.json        metadata sidecar
+&lt;root&gt;/&lt;area_id&gt;.commit      commit journal {&quot;work_id&quot;:&quot;&lt;uuid&gt;&quot;,&quot;basemap&quot;:true|false}, only while publishing
+&lt;root&gt;/&lt;area_id&gt;.lock        lock file (empty, never deleted)
+&lt;root&gt;/.staging/&lt;area_id&gt;/&lt;work_id&gt;/area.sqlite, basemap.pmtiles, area.json</code></pre>
+<p>This is Cantino 0.2.0's layout plus the lock file, byte for byte
+(same names, journal text and sidecar JSON), so areas written by 0.2.0
+are read and recovered unchanged. <code>area_id</code> is 1 to 64
+characters from <code>[A-Za-z0-9_-]</code>; <code>work_id</code> is a
+UUID (either case, lower case in paths). Invalid IDs are
+<code>CANTINO_ERROR_INVALID_ARGUMENT</code>, file system failures
+<code>CANTINO_ERROR_IO</code>.</p>
+<p>One download run, as the Android worker drives it:</p>
+<pre class="text"><code>prepare_staging(root, area, run)          rolls a pending commit forward, deletes other runs&#39; staging,
+                                          creates this run&#39;s; writes the layout (staged_data, ...)
+  import into staged_data, basemap into staged_basemap
+write_staged_metadata(root, area, run, sidecar JSON)
+commit(root, area, run, has_basemap, hook, context)
+  ├ hook(context, BEFORE_COMMIT)          under the lock; non-zero = abort, nothing changed (returns 1)
+  ├ journal written atomically            ← the commit point
+  ├ hook(context, AFTER_COMMIT_POINT)     answer ignored
+  └ rename basemap (or delete the old one), data, sidecar; fsync; delete journal and staging
+discard_staging(root, area, run)          always at the end of a run; keeps a pending commit&#39;s staging</code></pre>
+<p>Readers call <code>cantino_area_published</code> (it rolls a pending
+commit forward, then reads under the lock) and get
+<code>{"data","basemap","metadata"}</code> or <code>1</code>.
+<code>cantino_area_recover</code> finishes an interrupted commit without
+reading. After a kill at any point, the next <code>recover</code>,
+<code>published</code> or <code>prepare_staging</code> yields the
+complete old area (killed before the journal was in place) or the
+complete new one (after), never a mix: tested by killing a commit after
+every step and recovery after every roll-forward step
+(<code>src/area_storage/tests.rs</code>).</p>
+<p><strong>The sidecar.</strong> <code>write_staged_metadata</code>
+writes the JSON text verbatim after checking its shape:
+<code>{"bbox":{"west","south","east","north"}, "name", "snapshot_timestamp" (string|null), "imported_at_millis", "report": {"counts":{"nodes","ways","relations"},"database_bytes"}, "basemap": null | {"kind":"url"|"extract","source_url","bytes","addressed_tiles","min_zoom", "max_zoom","requests","transferred_bytes"}, "work_id" (UUID|null)}</code>
+(extra keys are ignored). <code>published</code> returns it as
+<code>metadata</code> only if <code>report.database_bytes</code> equals
+the data file's size and <code>basemap.bytes</code> the basemap file's
+(or both are absent); otherwise <code>metadata</code> is
+<code>null</code> ("unknown", never wrong).</p>
+<p><strong>Locking.</strong> Every operation that touches published
+files holds the area lock: an in-process lock (always) plus an exclusive
+<code>flock</code> on <code>&lt;area_id&gt;.lock</code> for other
+processes of the app (best effort: skipped if the file cannot be
+opened). A reader never sees a half-published area; it waits
+milliseconds for a commit in progress. The commit hook runs under the
+lock on the calling thread and must not call <code>cantino_area_*</code>
+for the same area.</p>
+<h2 id="download-failures">Download failures</h2>
+<p><em>Unreleased.</em> <code>cantino_classify_failure</code> is the
+table the download worker uses to decide what a failure means, so every
+platform retries and reports identically. Input is one of:</p>
+<table>
+<thead>
+<tr>
+<th>Input</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>{"http":status,"context":"job"}</code></td>
+<td>A SliceOSM job status or file GET (404 = the job is gone)</td>
+</tr>
+<tr>
+<td><code>{"http":status,"context":"request"}</code></td>
+<td>Any other request: job submit, basemap URL</td>
+</tr>
+<tr>
+<td><code>{"http":status,"context":"range"}</code></td>
+<td>A basemap range request (only 206 succeeds)</td>
+</tr>
+<tr>
+<td><code>{"io":"network"}</code> / <code>{"io":"storage"}</code></td>
+<td>An I/O error reading the network / writing a local file</td>
+</tr>
+<tr>
+<td><code>{"native":code,"context":c}</code></td>
+<td>A core error (<code>CANTINO_ERROR_*</code> 1..5) from the import or
+PMTiles validation (<code>default</code>), the basemap extract engine
+(<code>engine</code>), building (<code>protocol_request</code>) or
+reading (<code>protocol_response</code>) a SliceOSM message</td>
+</tr>
+</tbody>
+</table>
+<p>Output:
+<code>{"class","reason","inline_retry","scheduler_retry"}</code>, or
+<code>1</code> when the input is not a failure (a 2xx; 206 for
+<code>range</code>).</p>
+<table>
+<thead>
+<tr>
+<th>Class</th>
+<th>Inline retry</th>
+<th>Scheduler retry</th>
+<th>Examples</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>transient</code></td>
+<td>yes</td>
+<td>yes</td>
+<td>network I/O; HTTP 408, 429, 5xx; a SliceOSM answer that does not
+parse</td>
+</tr>
+<tr>
+<td><code>storage</code></td>
+<td><strong>no</strong></td>
+<td>yes (the next run waits for storage-not-low)</td>
+<td>local write failed; <code>CANTINO_ERROR_IO</code> from the
+import</td>
+</tr>
+<tr>
+<td><code>job_gone</code></td>
+<td>no</td>
+<td>yes, resubmitting the job</td>
+<td>404 on a job status or file</td>
+</tr>
+<tr>
+<td><code>permanent</code></td>
+<td>no</td>
+<td>no</td>
+<td>other 4xx; range 200/416; <code>CANTINO_ERROR_INVALID_FILE</code>
+from the import; any engine error</td>
+</tr>
+</tbody>
+</table>
+<p><code>reason</code> is the app-facing <code>FailureReason</code> in
+lower case: <code>network</code>, <code>server</code>,
+<code>invalid_request</code>, <code>storage</code>,
+<code>invalid_data</code>, <code>unknown</code>.</p>
 <h2 id="stability">Stability</h2>
 <p>The API and ABI are under development and may change freely. The area
 file format has a separate <code>FORMAT_VERSION</code> in

@@ -27,10 +27,10 @@
 <h1 id="café-app-walkthrough">Café app walkthrough</h1>
 <p><a
 href="https://github.com/mvexel/cantino/blob/main/android/cafe-app"><code>android/cafe-app</code></a>
-is the reference app for Cantino 0.3.0: find cafés near you, with no
-network after the first download. Plain Android views, MapLibre Native
-13.6.1, no Play Services. It passed this acceptance scenario on a Pixel
-8 (2026-10-03, downtown Salt Lake City):</p>
+is the reference app for Cantino: find cafés near you, with no network
+after the first download. Plain Android views, MapLibre Native 13.6.1,
+no Play Services. It passed this acceptance scenario on a Pixel 8
+(2026-10-03, downtown Salt Lake City):</p>
 <table>
 <thead>
 <tr>
@@ -264,6 +264,109 @@ missing</td>
 This is correct for the default flow because the area is downloaded
 around the user, but wrong when an area is used in another time zone;
 the area zone is not yet stored.</p>
+<h2 id="ios">iOS</h2>
+<p><a
+href="https://github.com/mvexel/cantino/blob/main/ios/cafe-app"><code>ios/cafe-app</code></a>
+is the same app in SwiftUI with MapLibre Native 6.31.0 (iOS 17+),
+feature for feature, on the Swift adapter. On the iPhone 18 Pro
+simulator (iOS 27, 2026-10-04, downtown Salt Lake City) a live download
+and a refresh each took about 11 s (61 MB database, 6.5 MB basemap); the
+map showed 136 cafés (45 / 27 / 64 outdoor seating yes / no / unknown,
+32 with unknown hours), as on Android.</p>
+<table>
+<thead>
+<tr>
+<th>Download</th>
+<th>Map, no network used</th>
+<th>Filters</th>
+<th>Object detail</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><img src="../screenshots/2026-10-04-ios-cafe-progress.png"
+alt="progress" /></td>
+<td><img src="../screenshots/2026-10-04-ios-cafe-map-offline.png"
+alt="map" /></td>
+<td><img src="../screenshots/2026-10-04-ios-cafe-list-outdoor-yes.png"
+alt="filter" /></td>
+<td><img src="../screenshots/2026-10-04-ios-cafe-detail-way.png"
+alt="way" /></td>
+</tr>
+</tbody>
+</table>
+<p>Paths are relative to <code>ios/cafe-app/CafeApp/</code>; each file
+names its Android counterpart.</p>
+<table>
+<thead>
+<tr>
+<th>Android</th>
+<th>iOS</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>MainActivity</code> (flow, progress, failure, refresh)</td>
+<td><code>AppModel.swift</code>, <code>FirstRunViews.swift</code></td>
+<td>The offer is a screen, not a dialog. Refresh downloads the published
+<code>AreaMetadata.bbox</code> itself</td>
+</tr>
+<tr>
+<td><code>Location.kt</code> (<code>LocationManager</code>, debug
+extras)</td>
+<td><code>Location.swift</code> (<code>CLLocationManager</code>, one
+fix, 30 s)</td>
+<td>Debug override: launch arguments, see below</td>
+</tr>
+<tr>
+<td><code>CafeStore.kt</code> (<code>Mutex</code>)</td>
+<td><code>CafeStore.swift</code> (actor + FIFO gate)</td>
+<td>Same reopen-by-<code>workId</code> rule; the gate holds
+select–open–read, since actors are reentrant</td>
+</tr>
+<tr>
+<td><code>Cafes.kt</code>, <code>RelationDetail.kt</code>,
+<code>OpeningHours.kt</code>, <code>ProtomapsBuilds.kt</code></td>
+<td><code>Cafes.swift</code>, <code>OpeningHours.swift</code>,
+<code>ProtomapsBuilds.swift</code></td>
+<td>Straight ports; relation markers use one batch <code>get</code></td>
+</tr>
+<tr>
+<td><code>MapScreen.kt</code> (radio groups)</td>
+<td><code>MapScreen.swift</code> (chips with counts)</td>
+<td>Style copied into the bundle by <code>copy-basemap-assets.sh</code>
+(the <code>copyBasemapStyleAssets</code> counterpart);
+<code>asset://</code> resolves to the bundle</td>
+</tr>
+<tr>
+<td><code>DetailActivity</code></td>
+<td><code>DetailView.swift</code></td>
+<td>Way nodes resolved with one batch <code>get</code></td>
+</tr>
+<tr>
+<td>JVM + instrumented tests</td>
+<td><code>CafeAppTests/</code> (24 Swift Testing tests, hosted on the
+simulator)</td>
+<td>Opening hours (all Kotlin cases), Protomaps builds (URLProtocol
+stub), relation café, paging past 500, refresh race</td>
+</tr>
+</tbody>
+</table>
+<p>Airplane mode cannot be switched on for a simulator alone, so the
+closest honest check was used: after the download, a cold launch with
+the map, filters and inspector open had no internet sockets
+(<code>lsof -a -i -p &lt;pid&gt;</code> empty), while the same check
+during a refresh showed the SliceOSM and tile-host connections. The
+style references only <code>asset://</code> and the area's
+<code>pmtiles://file://</code> archive.</p>
+<div class="sourceCode" id="cb2"><pre class="sourceCode sh"><code class="sourceCode bash"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="ex">scripts/basemap-assets.sh</span> <span class="kw">&amp;&amp;</span> <span class="ex">scripts/build-ios-cafe.sh</span> install</span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a><span class="co"># Debug builds only; never real GPS in automated runs. -lat/-lon is sticky (-clear_debug_location YES).</span></span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a><span class="ex">xcrun</span> simctl launch booted lol.osm.cantino.cafe <span class="at">-lat</span> 40.7608 <span class="at">-lon</span> <span class="at">-111.8910</span> <span class="at">-auto_download</span> YES</span>
+<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a><span class="co"># simctl cannot tap: these stand in for taps (DebugLaunch.swift)</span></span>
+<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a><span class="ex">xcrun</span> simctl launch booted lol.osm.cantino.cafe <span class="at">-list</span> YES <span class="at">-outdoor</span> yes <span class="at">-now</span> open</span>
+<span id="cb2-6"><a href="#cb2-6" aria-hidden="true" tabindex="-1"></a><span class="ex">xcrun</span> simctl launch booted lol.osm.cantino.cafe <span class="at">-object</span> way/292007606</span>
+<span id="cb2-7"><a href="#cb2-7" aria-hidden="true" tabindex="-1"></a><span class="ex">xcrun</span> simctl launch booted lol.osm.cantino.cafe <span class="at">-refresh</span> YES [-cancel_after 4]</span></code></pre></div>
 </main>
 </body>
 </html>

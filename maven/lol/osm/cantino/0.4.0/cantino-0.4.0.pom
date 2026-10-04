@@ -9,7 +9,7 @@
   <modelVersion>4.0.0</modelVersion>
   <groupId>lol.osm</groupId>
   <artifactId>cantino</artifactId>
-  <version>0.3.0</version>
+  <version>0.4.0</version>
   <packaging>aar</packaging>
   <name>Cantino</name>
   <description>Cantino, an offline OpenStreetMap SDK for Android: downloads OpenStreetMap data and an optional PMTiles basemap for an app-chosen area and queries it offline.</description>

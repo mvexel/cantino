@@ -3,7 +3,7 @@
   "component": {
     "group": "lol.osm",
     "module": "cantino",
-    "version": "0.3.0",
+    "version": "0.4.0",
     "attributes": {
       "org.gradle.status": "release"
     }
@@ -40,13 +40,13 @@
       ],
       "files": [
         {
-          "name": "cantino-0.3.0.aar",
-          "url": "cantino-0.3.0.aar",
-          "size": 3628757,
-          "sha512": "1927324e4da9845511fe0a41db0c3dc12f905d807d4b69d4b841959d48f709eb4bfb3b8947312ee99a6d16f0c6ac4c466baa47919604ef9282b4fae4009eefeb",
-          "sha256": "54dbddb155aaf3e6e1a71386286ea115ea154e56f3331f8e22fdcd9deec36752",
-          "sha1": "5575750248a7ed068eb357a8fd3bb081064607f0",
-          "md5": "12438d5a4ecd183fff35e46123a17656"
+          "name": "cantino-0.4.0.aar",
+          "url": "cantino-0.4.0.aar",
+          "size": 3725585,
+          "sha512": "d488c0a19790d5e86ec943f0b273b225d6a4ed666f45a9f64f4d7c60c4efa3f8794a664fbc58e33d6987897a6496623f9248295a971daa4b87b59f29bd7ebf56",
+          "sha256": "a2780fddb3a9539d1c10458323937628fd279e1448c3f5ce43055f784809d8d7",
+          "sha1": "e5cf51e5abf15990336de1984a05ee4c1e2cfd10",
+          "md5": "d79854f0444f2443d17801e083c65163"
         }
       ]
     },
@@ -83,13 +83,13 @@
       ],
       "files": [
         {
-          "name": "cantino-0.3.0.aar",
-          "url": "cantino-0.3.0.aar",
-          "size": 3628757,
-          "sha512": "1927324e4da9845511fe0a41db0c3dc12f905d807d4b69d4b841959d48f709eb4bfb3b8947312ee99a6d16f0c6ac4c466baa47919604ef9282b4fae4009eefeb",
-          "sha256": "54dbddb155aaf3e6e1a71386286ea115ea154e56f3331f8e22fdcd9deec36752",
-          "sha1": "5575750248a7ed068eb357a8fd3bb081064607f0",
-          "md5": "12438d5a4ecd183fff35e46123a17656"
+          "name": "cantino-0.4.0.aar",
+          "url": "cantino-0.4.0.aar",
+          "size": 3725585,
+          "sha512": "d488c0a19790d5e86ec943f0b273b225d6a4ed666f45a9f64f4d7c60c4efa3f8794a664fbc58e33d6987897a6496623f9248295a971daa4b87b59f29bd7ebf56",
+          "sha256": "a2780fddb3a9539d1c10458323937628fd279e1448c3f5ce43055f784809d8d7",
+          "sha1": "e5cf51e5abf15990336de1984a05ee4c1e2cfd10",
+          "md5": "d79854f0444f2443d17801e083c65163"
         }
       ]
     },
@@ -103,13 +103,13 @@
       },
       "files": [
         {
-          "name": "cantino-0.3.0-sources.jar",
-          "url": "cantino-0.3.0-sources.jar",
-          "size": 53693,
-          "sha512": "07bf9dd54ca16e7cf0e579aea3f4c60269af22199b4626d4563f562b749a036d7180c8bd352747e605561f0af3d943d7817a77fac051aabd6506137109939f37",
-          "sha256": "9cab27198a047dab2bdd4062868133fe0a6fdd001af66f12e99f0cd79885e1eb",
-          "sha1": "323a6d2644b5efc5d2a29b5b124dd025776fdde0",
-          "md5": "c470dd53c2d5a04ba26cb2bd3e5b773e"
+          "name": "cantino-0.4.0-sources.jar",
+          "url": "cantino-0.4.0-sources.jar",
+          "size": 55052,
+          "sha512": "502453d61f7f3d59a2d28eb45fe862dfa68c8d672880243575cf8b8025eb5637372805287b3e4b3f35532223866d5fb6e948500f220a5ff51e4325490a28c859",
+          "sha256": "24813c4284fd577d881fbe8d273802372a5295368021a4a369122591e632eccb",
+          "sha1": "26405c17b2af727665f167e4867d3e509a3feb71",
+          "md5": "1eaf27c2039bfb09d6a509058a1fbbfd"
         }
       ]
     }

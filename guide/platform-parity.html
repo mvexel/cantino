@@ -1,0 +1,191 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Android and iOS parity - Cantino guide</title>
+<style>
+  :root { color-scheme: light dark; --fg: #1d1d1f; --muted: #5f6368; --bg: #fbfaf7; --code: #efede8; --link: #0b57d0; --line: #d9d6cf; }
+  @media (prefers-color-scheme: dark) { :root { --fg: #e8e6e3; --muted: #a8a49c; --bg: #161616; --code: #262624; --link: #8ab4f8; --line: #3a3a37; } }
+  body { margin: 0; background: var(--bg); color: var(--fg); font: 16px/1.55 system-ui, sans-serif; }
+  nav { max-width: 48rem; margin: 0 auto; padding: 1rem 16px 0; font-size: .9rem; color: var(--muted); }
+  main { max-width: 48rem; margin: 0 auto; padding: 1rem 16px 3rem; }
+  a { color: var(--link); }
+  img { max-width: 100%; height: auto; }
+  pre { background: var(--code); padding: .8rem 1rem; border-radius: 6px; overflow-x: auto; font-size: .88rem; }
+  code { background: var(--code); padding: .05em .3em; border-radius: 4px; font-size: .92em; }
+  pre code { background: none; padding: 0; }
+  pre.mermaid { background: none; text-align: center; }
+  table { border-collapse: collapse; display: block; overflow-x: auto; }
+  th, td { border: 1px solid var(--line); padding: .35rem .6rem; vertical-align: top; text-align: left; }
+  blockquote { margin-left: 0; padding-left: 1rem; border-left: 3px solid var(--line); color: var(--muted); }
+</style>
+</head>
+<body>
+<nav><a href="../">Cantino</a> / <a href="index.html">Guide</a> / <a href="../api/">API reference</a></nav>
+<main>
+<h1 id="android-and-ios-parity">Android and iOS parity</h1>
+<p>Both adapters wrap the same Rust core and C ABI, so behaviour that
+matters (import, queries, the SliceOSM protocol, the basemap engine,
+staging, publication, recovery, failure classification) is implemented
+once. Parity is checked two ways:</p>
+<ol type="1">
+<li><strong>The parity corpus</strong> (<a
+href="https://github.com/mvexel/cantino/blob/main/tests/parity/README.md"><code>tests/parity</code></a>):
+243 calls whose canonical output every runner must reproduce byte for
+byte. Rust runs all of them through the C ABI; Kotlin
+(<code>ParityTest</code>, instrumented) and Swift
+(<code>ParityTests</code>) run the 219 that a typed API can
+express.</li>
+<li><strong>The same behavioural tests on both platforms</strong>,
+listed below. A Swift test has the Kotlin test's name unless noted.</li>
+</ol>
+<p>Verified 2026-10-04: Android on the Pixel 8 emulator (Android 17,
+arm64), iOS on the iPhone 18 Pro simulator (iOS 27) and natively on
+macOS. The café acceptance flow (download, airplane-mode relaunch,
+force-quit during a download and resume) passed on a physical iPhone 15
+Pro Max (iOS 27).</p>
+<h2 id="sdk">SDK</h2>
+<table>
+<thead>
+<tr>
+<th>Android (Kotlin)</th>
+<th>iOS (Swift)</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>ParityTest</code> (2)</td>
+<td><code>ParityTests</code>, <code>CanonicalTests</code></td>
+<td>corpus byte for byte; canonical form</td>
+</tr>
+<tr>
+<td><code>OsmStoreTest</code> (10)</td>
+<td><code>OsmStoreTests</code></td>
+<td>same ten cases</td>
+</tr>
+<tr>
+<td><code>AsyncOsmStoreTest</code> (2)</td>
+<td><code>AsyncOsmStoreTests</code> (+
+<code>concurrentCloseIsSafe</code>)</td>
+<td>Kotlin <code>Dispatcher</code> → Swift task</td>
+</tr>
+<tr>
+<td><code>BboxAroundTest</code> (6, JVM)</td>
+<td><code>BboxAroundTests</code></td>
+<td>same six cases</td>
+</tr>
+<tr>
+<td><code>ImportProfileTest</code> (4)</td>
+<td><code>ImportProfileTests</code> (+ wire form),
+<code>profileSurvivesTheStoredRequest</code></td>
+<td>WorkManager input data → stored <code>request.json</code></td>
+</tr>
+<tr>
+<td><code>AreaStorageTest</code> (2)</td>
+<td><code>AreaStorageTests</code></td>
+<td>thin wrappers; the commit protocol itself is tested in the core
+(<code>src/area_storage/tests.rs</code>)</td>
+</tr>
+<tr>
+<td><code>AreaManagerTest</code> (14 shared)</td>
+<td><code>AreaManagerTests</code></td>
+<td>same scenarios against a fake SliceOSM (MockWebServer /
+URLProtocol)</td>
+</tr>
+<tr>
+<td><code>AreaManagerTest.snapshotTimestamp…</code></td>
+<td><code>snapshotTimestampParsesRfc3339AndToleratesGarbage</code></td>
+<td></td>
+</tr>
+<tr>
+<td><code>ProcessDeathTest</code> +
+<code>scripts/kill-test-android.sh</code></td>
+<td><code>aRunKilledWhileDownloadingIsResumedWithItsJob</code>,
+<code>aRunKilledAfterItsCommitPointSucceedsWithoutDownloading</code>,
+<code>aCancelledRunIsNotResumed</code></td>
+<td>Android kills the process; Swift recreates a killed process's files
+(downloads run in the app's process, resumed by the next
+<code>AreaManager</code>)</td>
+</tr>
+<tr>
+<td>—</td>
+<td><code>downloadsReportProgressWhileTransferring</code>,
+<code>userAgentVersionMatchesTheCrate</code>,
+<code>invalidAreaIdsAndBasemapSourcesAreRejected</code></td>
+<td>Swift-only checks of Swift-only code</td>
+</tr>
+<tr>
+<td><code>ModelOwnershipTest</code> (JVM)</td>
+<td>—</td>
+<td>Kotlin collections; Swift models are value types</td>
+</tr>
+<tr>
+<td><code>AreaManagerTest</code>: two <code>foregroundMode…</code>
+tests, <code>manifestCheckFindsTheOptInForegroundEntries</code></td>
+<td>—</td>
+<td>Android foreground services; no iOS equivalent</td>
+</tr>
+<tr>
+<td><code>liveDownload…</code> (2), <code>CityBenchmark</code></td>
+<td>—</td>
+<td>opt-in (live service, benchmark); not ported</td>
+</tr>
+</tbody>
+</table>
+<h2 id="café-app">Café app</h2>
+<table>
+<thead>
+<tr>
+<th>Android</th>
+<th>iOS</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>OpeningHoursTest</code> (14, JVM)</td>
+<td><code>OpeningHoursTests</code> (+
+<code>localTimeFromADate</code>)</td>
+<td>same cases</td>
+</tr>
+<tr>
+<td><code>ProtomapsBuildsTest</code> (2, JVM)</td>
+<td><code>ProtomapsBuildsTests</code></td>
+<td></td>
+</tr>
+<tr>
+<td><code>RelationCafeTest</code>, <code>CafeStoreTest</code></td>
+<td><code>CafeTests</code> (+ paging, filters, location input, debug
+location)</td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<h2 id="running-both">Running both</h2>
+<div class="sourceCode" id="cb1"><pre class="sourceCode sh"><code class="sourceCode bash"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="ex">scripts/check.sh</span>                                   <span class="co"># Rust, C ABI smoke, Rust parity runner</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a><span class="va">SIMULATOR</span><span class="op">=</span><span class="st">&quot;iPhone 18 Pro&quot;</span> <span class="ex">scripts/swift-test.sh</span>    <span class="co"># Swift SDK on the simulator (omit SIMULATOR: macOS)</span></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a><span class="va">SIMULATOR</span><span class="op">=</span><span class="st">&quot;iPhone 18 Pro&quot;</span> <span class="ex">scripts/build-ios-cafe.sh</span> test</span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a><span class="ex">scripts/build-android.sh</span></span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a><span class="bu">cd</span> android <span class="kw">&amp;&amp;</span> <span class="va">ANDROID_SERIAL</span><span class="op">=&lt;</span>device<span class="op">&gt;</span> mise <span class="bu">exec</span> <span class="at">--</span> ./gradlew <span class="dt">\</span></span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a>    :cantino:testDebugUnitTest :cafe-app:testDebugUnitTest <span class="dt">\</span></span>
+<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a>    :cantino:connectedDebugAndroidTest :cafe-app:connectedDebugAndroidTest</span>
+<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a><span class="va">ANDROID_SERIAL</span><span class="op">=&lt;</span>device<span class="op">&gt;</span> scripts/kill-test-android.sh   <span class="co"># from the repository root</span></span></code></pre></div>
+<h2 id="known-differences">Known differences</h2>
+<p>Listed with reasons in the <a
+href="https://github.com/mvexel/cantino/blob/main/swift/README.md#deviations-from-the-kotlin-api">Swift
+adapter README</a>. The ones that change behaviour:</p>
+<ul>
+<li><strong>Background work.</strong> Android downloads run in
+WorkManager and survive the app being killed; iOS downloads run in the
+app's process and resume the next time the app creates an
+<code>AreaManager</code>.</li>
+<li><strong>Final states</strong> are kept by WorkManager for about a
+day; on iOS they live in memory, so after a restart a finished run reads
+as idle with the published area.</li>
+<li><strong>Foreground mode</strong> exists on Android only.</li>
+</ul>
+</main>
+</body>
+</html>
