@@ -81,6 +81,7 @@ class MapScreen(
     private val countAll = activity.button("Count all") { countAll() }
     private val footer = activity.horizontal(loadMore, countAll)
     private val panel = LinearLayout(activity)
+    private val panelHeight = (activity.resources.displayMetrics.heightPixels * 0.42).toInt()
 
     private var map: MapLibreMap? = null
     private var style: Style? = null
@@ -149,8 +150,7 @@ class MapScreen(
         ).apply { gravity = Gravity.CENTER_VERTICAL }
         val content = FrameLayout(activity).apply {
             addView(mapView, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
-            val height = (activity.resources.displayMetrics.heightPixels * 0.42).toInt()
-            addView(panel, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, height, Gravity.BOTTOM))
+            addView(panel, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, panelHeight, Gravity.BOTTOM))
         }
         view = LinearLayout(activity).apply {
             orientation = LinearLayout.VERTICAL
@@ -187,8 +187,10 @@ class MapScreen(
         val center = debug.tap ?: bbox?.let(Geo::center) ?: LatLon(0.0, 0.0)
         mapView.getMapAsync { map ->
             this.map = map
+            // The bottom panel covers part of the map: centre the camera in the part above it.
             map.cameraPosition = CameraPosition.Builder().target(LatLng(center.lat, center.lon))
-                .zoom(debug.zoom ?: if (debug.tap != null) 18.0 else 15.0).build()
+                .zoom(debug.zoom ?: if (debug.tap != null) 18.0 else 15.0)
+                .padding(0.0, 0.0, 0.0, panelHeight.toDouble()).build()
             bbox?.let {
                 // The basemap covers only the area: keep the camera over it.
                 map.setLatLngBoundsForCameraTarget(LatLngBounds.from(it.north, it.east, it.south, it.west))

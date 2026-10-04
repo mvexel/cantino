@@ -63,7 +63,8 @@ object About {
             if (basemap == null) {
                 appendLine("Basemap    none")
             } else {
-                appendLine("Basemap    ${basemap.kind.name.lowercase()} of ${basemap.sourceUrl}")
+                appendLine("Basemap    ${basemap.kind.name.lowercase()} of")
+                appendLine("           ${basemap.sourceUrl}")
                 appendLine("           z${basemap.minZoom}–${basemap.maxZoom}, ${formatCount(basemap.addressedTiles)} tiles, ${formatBytes(basemap.fileBytes)}")
                 appendLine("           ${formatCount(basemap.requests)} requests, ${formatBytes(basemap.transferredBytes)} transferred")
             }
@@ -71,9 +72,10 @@ object About {
         if (info != null) {
             appendLine("PMTiles    v${info.specVersion}, z${info.minZoom}–${info.maxZoom}, ${formatCount(info.addressedTiles)} tiles")
             appendLine("           ${formatCount(info.tileEntries)} entries, ${formatCount(info.tileContents)} contents, ${formatBytes(info.fileBytes)}")
-            appendLine("           clustered ${info.clustered}, tile type ${info.tileType}, compression ${info.tileCompression}")
+            appendLine("           clustered ${info.clustered}, tile type ${info.tileType}")
+            appendLine("           compression ${info.tileCompression}")
             val b = info.bounds
-            append(String.format(Locale.ROOT, "           bounds W %.4f S %.4f E %.4f N %.4f", b.west, b.south, b.east, b.north))
+            append(String.format(Locale.ROOT, "           bounds W %.4f S %.4f\n                  E %.4f N %.4f", b.west, b.south, b.east, b.north))
         } else if (area.basemapFile != null) {
             append("PMTiles    could not be read")
         }
