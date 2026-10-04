@@ -28,49 +28,59 @@ Verify each `[x]` against the repo before trusting it.
 
 ## Next up (in priority order; each item = one agent-sized slice)
 
-1. ~~**0.2 API polish**~~ DONE 2026-10-03 (merged on `main`; publish
-   pending, see Status). Was: (details in §7 "0.2 API candidates"). Done when: every
-   candidate is decided (do / won't), the "do" ones ship with KDoc + tests,
-   the quickstart drops its `dropWhile` workaround, CHANGELOG has a 0.2.0
-   section. Must-haves: run identity in `AreaState` (or `state(runId)`),
-   coroutines as an `api` dependency, `Bbox` around a point, a store
-   owner-thread wrapper, **§9 geometry helpers** (way coordinates,
-   representative point, batch get), and typed errors (§13; breaking). The
-   ⚡ quick wins from §10–§13 ride along as one slice in this release.
-   If `osm.lol` checks out, the `lol.osm.cantino` namespace rename (§12)
-   lands in 0.2 too, as the last sweep before the release build.
-2. **Download reliability** (§5). Done when: an instrumented test kills the
-   process mid-download (`am kill`/`Process.killProcess`) and mid-commit and
-   the next run resumes or rolls forward with the old area intact; decision
-   recorded on byte-range resume (do it or document why not); basemap fetched
-   in parallel with SliceOSM slicing if it is cheap.
-3. **Import performance & memory** (§2b follow-ups). Done when: cause of
-   in-app 8.2 s vs plain-binary 5.7 s is known (measure on the Pixel, not
-   guessed) and fixed or documented; import peak memory bounded (chunked
-   writes) with a bench showing it stays flat as area grows; decision on
-   dropping `node_way`/`member_rel` (keep if editing needs them — see 6).
-4. **Café app fixes** (§6): opening hours in the area's time zone (tz lookup
-   at download time); exercise relation-café/member UI with a fixture.
-5. **iOS** (§3). Decided 2026-10-03: no Xcode SDK on Linux (xtool needs
-   Xcode.xip; Martijn: not on Linux). Done when (Martijn): iOS and Android
-   behave identically (same output on same input via the parity corpus),
-   tests pass, café demo compiles. Linux part in progress: parity corpus +
-   Rust runner (`ios/parity-corpus`), Swift package tested on Linux in
-   Docker (`ios/swift-package`). Next: Kotlin + Swift parity runners;
-   journal/recovery/failure classification into Rust; download state
-   machine as a Rust reducer (design in-session first). iOS builds, XCTest
-   on the simulator and the café app need macOS: GitHub Actions macOS
-   runner (Martijn pushes the workflow) or a Mac; iPhone available for
-   on-device checks.
+Reprioritized 2026-10-03 (Martijn): spend in proportion to the problem.
+Work that helps the shipped Android SDK now goes before Linux-only iOS work
+that no iOS device or simulator has run yet.
+
+0. **Publish 0.2.0** (Martijn): push `gh-pages`, tag `v0.2.0`. Everything
+   below lands after it, as 0.2.x / 0.3.
+1. **Download reliability** (§5). Done when: an instrumented test kills the
+   process (`am kill` / `Process.killProcess`) mid-download and mid-commit,
+   and the next run resumes or rolls forward with the old area intact,
+   green on Pixel 8 + emulator. Byte-range resume and fetching the basemap
+   while SliceOSM slices: measure what a retry costs at 10×10 km (≈ 8 MB
+   PBF + 7 MB basemap) and document "not now" unless it is cheap. These
+   kill scenarios become the behaviour the iOS port must match (3).
+2. **Café app: relation path** (§6). Done when: a fixture with a café
+   mapped as a relation and a "not in this area" member exercises the
+   relation detail UI in a test. The opening-hours time zone bug is
+   documented as a known limitation instead of fixed: the default flow
+   downloads the area around the user, so area zone = phone zone; a tz
+   lookup needs a boundary dataset and is not worth it yet.
+3. **iOS** (§3). Done when (Martijn): iOS and Android behave identically,
+   tests pass, café demo compiles. Steps, each verified on iOS before the
+   next:
+   a. macOS CI (GitHub Actions; Martijn pushes the workflow): xcframework
+      (device arm64 + simulator arm64) and the existing Swift tests,
+      parity runner included, green on the simulator.
+   b. Swift download orchestration as a straight port of
+      `AreaDownloadWorker` over URLSession, using the Rust area store,
+      journal and failure classification already in the core. Same
+      behaviour shown by shared scenarios (`AreaManagerTest` cases + the
+      kill tests from 1) against the same fake SliceOSM, not shared code.
+      No Rust download reducer (dropped 2026-10-03: the parts whose
+      divergence corrupts data are already in Rust; the rest is ~150 lines
+      of pipeline).
+   c. Café demo builds for iOS.
+   Linux part done: parity corpus + Rust, Kotlin and Swift runners
+   (240 calls byte-identical), Swift package tested on Linux.
+4. **Import profiles** (§11) — both dev reviewers; ~75 MB per 10×10 km of
+   city is most apps' biggest cost. Done when: profile model decided,
+   recorded in area metadata, size savings measured on SLC.
+5. **Large-area evidence** (§14 bench, absorbs the old "import performance
+   & memory", §2b follow-ups). Done when: a 50×50 km rural area is benched
+   on the Pixel (disk, peak memory, time) and a size guidance table is
+   published. Fix import memory (chunked writes) only if the bench shows
+   it fails; the in-app 8.2 s vs 5.7 s gap stays unexplained until then
+   (3.2 s for 10×10 km bothers nobody).
 6. **Offline editing + upload** — needs a scope change in `CLAUDE.md` first
    (currently out of scope). Design notes: edits overlay db ATTACHed to the
    read-only base (`docs/research/2026-10-03-prebaked-dataset-format.md`),
    versions are stored for every object.
 7. **Offline routing research** (§8) — not started; research before any code.
-8. **Dev-review backlog** (§10–§17, in priority order; §9 and the ⚡ items
-   are part of 1): new features from two persona reviews of 0.1.0
-   (2026-10-03). Each still needs scoping and a done-criterion before it
-   becomes a slice; several need a `CLAUDE.md` scope change first (marked).
+8. **Dev-review backlog** (§10, §12, §13, §15–§17): each still needs
+   scoping and a done-criterion before it becomes a slice; several need a
+   `CLAUDE.md` scope change first (marked).
 
 ## Parked
 - Server-side pre-baked area files (proposal in `docs/research/`); only if
@@ -119,6 +129,8 @@ Verify each `[x]` against the repo before trusting it.
 - [ ] Inspect Mac (Xcode, toolchain)
 - [ ] xcframework: device arm64 + simulator arm64
 - [ ] Swift wrapper + XCTest on simulator (import, get, query)
+- [x] Linux part (2026-10-03, branch `ios/main`): parity corpus `tests/parity` + Rust runner; Swift package (OsmStore, AsyncOsmStore, models, AreaStorage, Failures) tested on Linux; Kotlin and Swift parity runners, 240 calls byte-identical; area store, commit journal, recovery and failure classification moved into the Rust core
+- Dropped 2026-10-03: download state machine as a Rust reducer (overengineering; see Next up 3b)
 
 ## 4. Basemap
 - [x] Decision record: separate PMTiles basemap for the area bbox (CLAUDE.md scope)
