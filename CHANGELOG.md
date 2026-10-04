@@ -3,9 +3,10 @@
 Cantino is under development with no external consumers. API, ABI and file
 formats may change without compatibility layers. See the [guide](docs/guide/README.md).
 
-## Unreleased
+## 0.4.0 — unreleased
 
-iOS groundwork, merged onto 0.3.0.
+iOS and Android at parity: the same SDK on both platforms, tested against the
+same corpus and scenarios ([parity](docs/guide/platform-parity.md)).
 
 - **Area store in the Rust core** (`src/area_storage.rs`, C ABI
   `cantino_area_*`): layout, staging, the roll-forward commit journal,

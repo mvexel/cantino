@@ -140,7 +140,7 @@ android {
 }
 
 dependencies {
-    implementation("lol.osm:cantino:0.3.0")
+    implementation("lol.osm:cantino:0.4.0")
     // Only to show the offline basemap.
     implementation("org.maplibre.gl:android-sdk:13.6.1")
 }

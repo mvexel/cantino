@@ -26,8 +26,8 @@ repeated work across apps and has a consumer. Rationale and phases:
 in 0.3.0 (2026-10-04); bug fixes, docs and iOS work remain allowed. There are no external consumers: API, ABI and file
 formats may change without backward compatibility machinery. Preserve examples,
 developer experience and runtime reliability. The freeze ends when iOS and
-Android pass the same tests, the café demo works on iOS, and 0.3.0 is
-released. First work after the freeze: basemap-only acquisition (an area
+Android pass the same tests, the café demo works on iOS, and the parity
+release (0.4.0; 0.3.0 stays the Android-only release) is out. First work after the freeze: basemap-only acquisition (an area
 with a basemap and no OSM data) in both adapters.
 
 ## In scope

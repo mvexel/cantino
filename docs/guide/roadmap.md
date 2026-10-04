@@ -7,9 +7,14 @@ belong in [GitHub issues](https://github.com/mvexel/cantino/issues).
 There are no external consumers yet. API, ABI and file formats may change
 without compatibility layers. Re-import development data after a format change.
 
-The 0.3.0 simplification is complete. Next is iOS: xcframework, Swift adapter, area downloads and the café demo,
-validated on macOS and against the same behavior as Android. No new features
-until that work is complete. The examples and guide stay supported throughout.
+0.3.0 simplified the SDK; 0.4.0 brings iOS to parity with Android (Swift
+adapter, xcframework, area downloads, the café demo), checked by the
+[parity tests](platform-parity.md). No new features until 0.4.0 is released.
+The examples and guide stay supported throughout.
 
-Editing, routing, overlapping areas, incremental refresh and on-device vector
-tile generation are out of scope. Dated research notes are ideas, not a backlog.
+Next: basemap-only acquisition (a basemap without the OSM data), in both
+adapters. Cantino's direction is composable capabilities for apps that work
+with OSM data offline ([assessment](../research/2026-10-04-modular-sdk-assessment.md)).
+Editing is outside the current implementation and upload is not planned;
+routing, overlapping areas, incremental refresh and on-device vector tile
+generation are out of scope. Dated research notes are ideas, not a backlog.

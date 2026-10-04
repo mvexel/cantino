@@ -30,7 +30,7 @@ never changes after that; to get newer data you **refresh**.
 ## Refresh = full replace
 
 A refresh is just another `AreaManager.download(id, …)` for the same ID.
-There are no incremental updates in 0.3.0: every part (data and basemap) is
+There are no incremental updates: every part (data and basemap) is
 downloaded and built again, then swapped in. Requesting `BasemapSource.None`
 on a refresh removes an earlier basemap, because the published area always
 describes one download.

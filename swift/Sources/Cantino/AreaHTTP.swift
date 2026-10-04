@@ -80,7 +80,7 @@ extension Failures {
 }
 
 /// The crate version (Cargo.toml), for the User-Agent. A test keeps it in step.
-let cantinoVersion = "0.3.0"
+let cantinoVersion = "0.4.0"
 
 /// A local file operation failed: storage, not network.
 private struct LocalStorageError: Error {
