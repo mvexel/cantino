@@ -9,11 +9,10 @@ without compatibility layers. Re-import development data after a format change.
 
 0.3.0 simplified the SDK; 0.4.0 brings iOS to parity with Android (Swift
 adapter, xcframework, area downloads, the café demo), checked by the
-[parity tests](platform-parity.md). No new features until 0.4.0 is released.
-The examples and guide stay supported throughout.
+[parity tests](platform-parity.md). Features land on both platforms with
+tests on both. The examples and guide stay supported throughout.
 
-Next: basemap-only acquisition (a basemap without the OSM data), in both
-adapters. Cantino's direction is composable capabilities for apps that work
+Unreleased: basemap-only acquisition (`downloadBasemap`). Cantino's direction is composable capabilities for apps that work
 with OSM data offline ([assessment](../research/2026-10-04-modular-sdk-assessment.md)).
 Editing is outside the current implementation and upload is not planned;
 routing, overlapping areas, incremental refresh and on-device vector tile

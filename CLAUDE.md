@@ -37,7 +37,8 @@ parity: a feature lands on both platforms, with tests on both.
 - Area download lifecycle: submit, poll, download, cancel, staged import.
   One area per app. Refresh = full replace.
 - Offline basemap: a **separate PMTiles basemap extract** for the same bbox,
-  rendered with MapLibre Native. The framework does not generate vector tiles.
+  rendered with MapLibre Native, with or without OSM data (`downloadBasemap`).
+  The framework does not generate vector tiles.
 - Café reference app proving the airplane-mode acceptance scenario.
 
 ## Outside the current implementation (needs a scope change and a design note)
@@ -58,8 +59,10 @@ parity: a feature lands on both platforms, with tests on both.
 
 ## Plan
 
-Next (P2 of the modular-SDK assessment): basemap-only acquisition, an area
-with a basemap and no OSM data, in both adapters. Outward-facing steps
+Done on branch `basemap-only` (P2 of the modular-SDK assessment):
+basemap-only acquisition (`downloadBasemap`) in both adapters. Next: decided
+by Martijn (a second demo or explorer mode is being proposed in
+`docs/research/2026-10-04-second-demo-app-proposal.md`). Outward-facing steps
 (pushing, tagging, publishing, GitHub settings) are done by Martijn; agents
 prepare them and print the commands.
 

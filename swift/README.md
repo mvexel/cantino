@@ -179,6 +179,10 @@ adapter, never `expected.json`.
 
 ## Area downloads
 
+`download(areaId:bbox:name:basemap:)` fetches OSM data (and optionally a
+basemap); `downloadBasemap(areaId:bbox:basemap:)` fetches only a basemap
+(`AreaInfo.dataURL` nil), as on Android.
+
 `AreaManager(directory:config:)` keeps published areas in
 `<directory>/cantino-areas` (the core's layout, identical to Android's) and
 requests, checkpoints and partial downloads in

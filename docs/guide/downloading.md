@@ -19,6 +19,7 @@ areas.cancel("city")                                   // keeps the published ar
 | Method | Thread | Notes |
 | --- | --- | --- |
 | `download(areaId, bbox, name, basemap)` | any | Replaces a running download of the same ID. Returns the WorkManager run ID |
+| `downloadBasemap(areaId, bbox, basemap)` | any | The same for a [basemap-only area](basemaps.md#basemap-only-areas): no OSM data, no SliceOSM job |
 | `cancel(areaId)` | any | No-op if nothing runs |
 | `state(areaId)` | any (collect in a coroutine) | Current state first, then every change |
 | `publishedArea(areaId)` | **background** | Read the disk; may wait a few ms for a commit in progress |

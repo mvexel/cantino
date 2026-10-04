@@ -37,7 +37,7 @@ mode: offline basemap, cafés from a tag + bbox query, and the raw object.*
 | Snapshot store and queries (lookup, tags, bbox candidates) | Available, Android and iOS |
 | Area acquisition (download, import, refresh, crash-safe publication) | Available, Android and iOS |
 | Basemap acquisition (PMTiles file or on-device extract), with an area | Available, Android and iOS |
-| Basemap-only acquisition (a map without the OSM data) | Planned next |
+| Basemap-only acquisition (a map without the OSM data) | Available, Android and iOS (`downloadBasemap`) |
 | Editing (local edit layer over a snapshot) | Outside the current implementation; see [Editing apps](docs/guide/editing-apps.md) |
 | Upload to the OSM API | Not planned |
 

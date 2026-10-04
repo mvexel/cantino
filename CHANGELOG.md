@@ -3,6 +3,17 @@
 Cantino is under heavy development. API, ABI and file
 formats may change without compatibility layers. See the [guide](docs/guide/README.md).
 
+## Unreleased
+
+- **Basemap-only areas:** `AreaManager.downloadBasemap(areaId, bbox,
+  basemap)` on Android and iOS downloads a basemap without OSM data (no
+  SliceOSM job, no import). `AreaInfo.dataFile` / `dataURL` and
+  `AreaMetadata.report` are now nullable; an area is still replaced as a
+  whole, so a basemap-only refresh removes earlier OSM data.
+- C ABI: `cantino_area_commit` takes `CANTINO_AREA_PART_*` bits instead of
+  `has_basemap`; `cantino_area_published` returns `"data": null` for a
+  basemap-only area; the sidecar's `report` is null without data.
+
 ## 0.4.0 — 2026-10-04
 
 iOS and Android at parity: the same SDK on both platforms, tested against the

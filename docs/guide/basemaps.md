@@ -18,6 +18,27 @@ The basemap is part of the area: `Ready` means data **and** basemap are
 published, a refresh replaces both, and a refresh with `None` removes the old
 basemap. Size for 10×10 km at z0–15: about 6.5 MB.
 
+## Basemap-only areas
+
+An app that only shows an offline map does not need the OSM data. Download
+just the basemap:
+
+```kotlin
+val runId = areas.downloadBasemap("city", bbox, BasemapSource.Extract(planetUrl, maxZoom = 15))
+```
+
+```swift
+let runId = try areas.downloadBasemap(areaId: "city", bbox: bbox,
+                                      basemap: try .extract(planetUrl: planetUrl, maxZoom: 15))
+```
+
+The run skips SliceOSM and the import (Submitting → Basemap → Ready); states,
+cancellation, resume and publication work as for `download`. The published
+area has a basemap and no data: `AreaInfo.dataFile` / `dataURL` and
+`AreaMetadata.report` are null. An area is one version, replaced as a whole:
+`downloadBasemap` on an area that had OSM data removes that data, and a later
+`download` brings it back. `BasemapSource.None` is rejected.
+
 ## Hosting: demo vs production
 
 The café example owns its demo discovery helper:
