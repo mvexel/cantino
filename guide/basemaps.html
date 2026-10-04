@@ -67,13 +67,18 @@ its piece</td>
 a refresh with <code>None</code> removes the old basemap. Size for 10×10
 km at z0–15: about 6.5 MB.</p>
 <h2 id="hosting-demo-vs-production">Hosting: demo vs production</h2>
+<p>The café example owns its demo discovery helper: <a
+href="https://github.com/mvexel/cantino/blob/main/android/cafe-app/src/main/java/lol/osm/cantino/cafe/ProtomapsBuilds.kt"><code>ProtomapsBuilds.kt</code></a>.
+Copy that file into your app for experimentation, then call:</p>
 <div class="sourceCode" id="cb1"><pre
-class="sourceCode kotlin"><code class="sourceCode kotlin"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="co">// Demo only: HEADs build.protomaps.com for today&#39;s build, then up to 7 days back.</span></span>
-<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a><span class="kw">val</span> <span class="va">planet</span> <span class="op">=</span> ProtomapsBuilds<span class="op">.</span>latestUrl<span class="op">()</span> <span class="co">// suspend; throws IOException if none</span></span></code></pre></div>
-<p><code>ProtomapsBuilds.latestUrl()</code> is for demos and tests.
-Protomaps' daily builds expire after about a week and Protomaps asks
-apps not to hotlink them. For production, <strong>mirror a
-build</strong> to storage you control and pass its URL:</p>
+class="sourceCode kotlin"><code class="sourceCode kotlin"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="kw">val</span> <span class="va">planet</span> <span class="op">=</span> ProtomapsBuilds<span class="op">.</span>latestUrl<span class="op">()</span> <span class="co">// example helper, not an SDK API</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a><span class="kw">val</span> <span class="va">runId</span> <span class="op">=</span> areas<span class="op">.</span>download<span class="op">(</span><span class="st">&quot;city&quot;</span><span class="op">,</span> bbox<span class="op">,</span> basemap <span class="op">=</span> BasemapSource<span class="op">.</span>Extract<span class="op">(</span>planet<span class="op">))</span></span></code></pre></div>
+<p>The <a
+href="https://github.com/mvexel/cantino/blob/main/README.md#quickstart">quickstart</a>
+includes a standalone version. Protomaps' daily builds expire after
+about a week and Protomaps asks apps not to hotlink them. For
+production, <strong>mirror a build</strong> to storage you control and
+pass its URL:</p>
 <ol type="1">
 <li>Download a build once
 (<code>https://build.protomaps.com/YYYYMMDD.pmtiles</code>, over 100 GB

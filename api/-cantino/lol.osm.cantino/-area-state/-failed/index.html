@@ -43,7 +43,7 @@
         </button>
         <div class="navigation-controls--break ui-kit_mobile-only"></div>
         <div class="library-version" id="library-version">
-0.2.0        </div>
+0.3.0        </div>
         <div class="navigation-controls">
         <ul class="filter-section filter-section_loading" id="filter-section" aria-label="Target filter">
                 <button class="platform-tag platform-selector jvm-like" data-active="" aria-pressed="true"
@@ -107,11 +107,30 @@
   <div class="breadcrumbs"><a href="../../../../index.html">Cantino</a><span class="delimiter">/</span><a href="../../index.html">lol.osm.cantino</a><span class="delimiter">/</span><a href="../index.html">AreaState</a><span class="delimiter">/</span><span class="current">Failed</span></div>
   <div class="cover ">
     <h1 class="cover"><span><span>Failed</span></span></h1>
-    <div class="platform-hinted " data-platform-hinted="data-platform-hinted"><div class="content sourceset-dependent-content" data-active="" data-togglable=":cantino/release"><div class="symbol monospace"><span class="token keyword">class </span><a href="index.html">Failed</a> : <a href="../index.html">AreaState</a><span class="source-link-wrapper"><span class="source-link" data-element-type="source-link">(<a href="https://github.com/mvexel/cantino/blob/v0.2.0/android/cantino/src/main/java/lol/osm/cantino/AreaModels.kt#L582">source</a>)</span></span></div><p class="paragraph">Gave up. <span data-unresolved-link="lol.osm.cantino/AreaState.Failed//#java.util.UUID#kotlin.String#kotlin.Boolean#lol.osm.cantino.FailureReason/PointingToCallableParameters(3)/">reason</span> says why, by what the app can do about it (branch on it, e.g. to tell the user to free space or check the connection); <span data-unresolved-link="lol.osm.cantino/AreaState.Failed//#java.util.UUID#kotlin.String#kotlin.Boolean#lol.osm.cantino.FailureReason/PointingToCallableParameters(1)/">message</span> is a developer-facing description (not localized, not for parsing). <span data-unresolved-link="lol.osm.cantino/AreaState.Failed//#java.util.UUID#kotlin.String#kotlin.Boolean#lol.osm.cantino.FailureReason/PointingToCallableParameters(2)/">retryable</span> is true for transient causes (network, server) that exhausted their retries: calling <a href="../../-area-manager/download.html">AreaManager.download</a> again later may succeed as is. False means the same request fails again until something changes: the request (<a href="../../-failure-reason/-i-n-v-a-l-i-d_-r-e-q-u-e-s-t/index.html">FailureReason.INVALID_REQUEST</a>) or the source data (<a href="../../-failure-reason/-i-n-v-a-l-i-d_-d-a-t-a/index.html">FailureReason.INVALID_DATA</a>).</p></div></div>
+    <div class="platform-hinted " data-platform-hinted="data-platform-hinted"><div class="content sourceset-dependent-content" data-active="" data-togglable=":cantino/release"><div class="symbol monospace"><span class="token keyword">data </span><span class="token keyword">class </span><a href="index.html">Failed</a><span class="token punctuation">(</span><span class="parameters "><span class="parameter "><span class="token keyword">val </span>runId<span class="token operator">: </span><a href="https://developer.android.com/reference/kotlin/java/util/UUID.html">UUID</a><span class="token punctuation">, </span></span><span class="parameter "><span class="token keyword">val </span>message<span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-string/index.html">String</a><span class="token punctuation">, </span></span><span class="parameter "><span class="token keyword">val </span>retryable<span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-boolean/index.html">Boolean</a><span class="token punctuation">, </span></span><span class="parameter "><span class="token keyword">val </span>reason<span class="token operator">: </span><a href="../../-failure-reason/index.html">FailureReason</a></span></span><span class="token punctuation">)</span> : <a href="../index.html">AreaState</a><span class="source-link-wrapper"><span class="source-link" data-element-type="source-link">(<a href="https://github.com/mvexel/cantino/blob/v0.3.0/android/cantino/src/main/java/lol/osm/cantino/AreaModels.kt#L487">source</a>)</span></span></div><p class="paragraph">Gave up. <span data-unresolved-link="lol.osm.cantino/AreaState.Failed//#java.util.UUID#kotlin.String#kotlin.Boolean#lol.osm.cantino.FailureReason/PointingToCallableParameters(3)/">reason</span> says why, by what the app can do about it (branch on it, e.g. to tell the user to free space or check the connection); <span data-unresolved-link="lol.osm.cantino/AreaState.Failed//#java.util.UUID#kotlin.String#kotlin.Boolean#lol.osm.cantino.FailureReason/PointingToCallableParameters(1)/">message</span> is a developer-facing description (not localized, not for parsing). <span data-unresolved-link="lol.osm.cantino/AreaState.Failed//#java.util.UUID#kotlin.String#kotlin.Boolean#lol.osm.cantino.FailureReason/PointingToCallableParameters(2)/">retryable</span> is true for transient causes (network, server) that exhausted their retries: calling <a href="../../-area-manager/download.html">AreaManager.download</a> again later may succeed as is. False means the same request fails again until something changes: the request (<a href="../../-failure-reason/-i-n-v-a-l-i-d_-r-e-q-u-e-s-t/index.html">FailureReason.INVALID_REQUEST</a>) or the source data (<a href="../../-failure-reason/-i-n-v-a-l-i-d_-d-a-t-a/index.html">FailureReason.INVALID_DATA</a>).</p></div></div>
   </div>
   <div class="tabbedcontent">
     <div class="tabs-section" tabs-section="tabs-section"><button class="section-tab" data-active="" data-togglable="CONSTRUCTOR,TYPE,PROPERTY,FUNCTION">Members</button></div>
     <div class="tabs-section-body">
+      <div data-togglable="CONSTRUCTOR">
+        <h2 class="tableheader">Constructors</h2>
+        <div class="table"><a data-name="1601354422%2FConstructors%2F703280004" anchor-label="Failed" id="1601354422%2FConstructors%2F703280004" data-filterable-set=":cantino/release"></a>
+          <div class="table-row table-row_content" data-togglable="CONSTRUCTOR" data-filterable-current=":cantino/release" data-filterable-set=":cantino/release">
+            <div class="main-subrow keyValue ">
+              <div class=""><span class="inline-flex">
+                  <div><a href="-failed.html"><span><span>Failed</span></span></a></div>
+<span class="anchor-wrapper"><span class="anchor-icon" pointing-to="1601354422%2FConstructors%2F703280004"></span>
+                    <div class="copy-popup-wrapper "><span class="copy-popup-icon"></span><span>Link copied to clipboard</span></div>
+                  </span></span></div>
+              <div>
+                <div class="title">
+                  <div class="platform-hinted " data-platform-hinted="data-platform-hinted"><div class="content sourceset-dependent-content" data-active="" data-togglable=":cantino/release"><div class="symbol monospace"><span class="token keyword">constructor</span><span class="token punctuation">(</span><span class="parameters "><span class="parameter ">runId<span class="token operator">: </span><a href="https://developer.android.com/reference/kotlin/java/util/UUID.html">UUID</a><span class="token punctuation">, </span></span><span class="parameter ">message<span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-string/index.html">String</a><span class="token punctuation">, </span></span><span class="parameter ">retryable<span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-boolean/index.html">Boolean</a><span class="token punctuation">, </span></span><span class="parameter ">reason<span class="token operator">: </span><a href="../../-failure-reason/index.html">FailureReason</a></span></span><span class="token punctuation">)</span></div></div></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
       <div data-togglable="PROPERTY">
         <h2 class="tableheader">Properties</h2>
         <div class="table"><a data-name="926457081%2FProperties%2F703280004" anchor-label="isTerminal" id="926457081%2FProperties%2F703280004" data-filterable-set=":cantino/release"></a>
@@ -154,7 +173,7 @@
                   </span></span></div>
               <div>
                 <div class="title">
-                  <div class="platform-hinted " data-platform-hinted="data-platform-hinted"><div class="content sourceset-dependent-content" data-active="" data-togglable=":cantino/release"><div class="symbol monospace"><span class="token keyword">val </span><a href="reason.html">reason</a><span class="token operator">: </span><a href="../../-failure-reason/index.html">FailureReason</a></div><div class="brief "><p class="paragraph">Category of the failure; <a href="../../-failure-reason/-u-n-k-n-o-w-n/index.html">FailureReason.UNKNOWN</a> only for unexpected errors and failures recorded before Cantino 0.2.</p></div></div></div>
+                  <div class="platform-hinted " data-platform-hinted="data-platform-hinted"><div class="content sourceset-dependent-content" data-active="" data-togglable=":cantino/release"><div class="symbol monospace"><span class="token keyword">val </span><a href="reason.html">reason</a><span class="token operator">: </span><a href="../../-failure-reason/index.html">FailureReason</a></div><div class="brief "><p class="paragraph">Category of the failure; <a href="../../-failure-reason/-u-n-k-n-o-w-n/index.html">FailureReason.UNKNOWN</a> only for unexpected errors.</p></div></div></div>
                 </div>
               </div>
             </div>
@@ -191,55 +210,6 @@
           </div>
         </div>
       </div>
-      <div data-togglable="FUNCTION">
-        <h2 class="tableheader">Functions</h2>
-        <div class="table"><a data-name="55463929%2FFunctions%2F703280004" anchor-label="equals" id="55463929%2FFunctions%2F703280004" data-filterable-set=":cantino/release"></a>
-          <div class="table-row table-row_content" data-filterable-current=":cantino/release" data-filterable-set=":cantino/release">
-            <div class="main-subrow keyValue ">
-              <div class=""><span class="inline-flex">
-                  <div><a href="equals.html"><span><span>equals</span></span></a></div>
-<span class="anchor-wrapper"><span class="anchor-icon" pointing-to="55463929%2FFunctions%2F703280004"></span>
-                    <div class="copy-popup-wrapper "><span class="copy-popup-icon"></span><span>Link copied to clipboard</span></div>
-                  </span></span></div>
-              <div>
-                <div class="title">
-                  <div class="platform-hinted " data-platform-hinted="data-platform-hinted"><div class="content sourceset-dependent-content" data-active="" data-togglable=":cantino/release"><div class="symbol monospace"><span class="token keyword">open </span><span class="token keyword">operator override </span><span class="token keyword">fun </span><a href="equals.html"><span class="token function">equals</span></a><span class="token punctuation">(</span><span class="parameters "><span class="parameter ">other<span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-any/index.html">Any</a><span class="token operator">?</span></span></span><span class="token punctuation">)</span><span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-boolean/index.html">Boolean</a></div></div></div>
-                </div>
-              </div>
-            </div>
-          </div>
-<a data-name="58870989%2FFunctions%2F703280004" anchor-label="hashCode" id="58870989%2FFunctions%2F703280004" data-filterable-set=":cantino/release"></a>
-          <div class="table-row table-row_content" data-filterable-current=":cantino/release" data-filterable-set=":cantino/release">
-            <div class="main-subrow keyValue ">
-              <div class=""><span class="inline-flex">
-                  <div><a href="hash-code.html"><span>hash</span><wbr></wbr><span><span>Code</span></span></a></div>
-<span class="anchor-wrapper"><span class="anchor-icon" pointing-to="58870989%2FFunctions%2F703280004"></span>
-                    <div class="copy-popup-wrapper "><span class="copy-popup-icon"></span><span>Link copied to clipboard</span></div>
-                  </span></span></div>
-              <div>
-                <div class="title">
-                  <div class="platform-hinted " data-platform-hinted="data-platform-hinted"><div class="content sourceset-dependent-content" data-active="" data-togglable=":cantino/release"><div class="symbol monospace"><span class="token keyword">open </span><span class="token keyword">override </span><span class="token keyword">fun </span><a href="hash-code.html"><span class="token function">hashCode</span></a><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-int/index.html">Int</a></div></div></div>
-                </div>
-              </div>
-            </div>
-          </div>
-<a data-name="-119295076%2FFunctions%2F703280004" anchor-label="toString" id="-119295076%2FFunctions%2F703280004" data-filterable-set=":cantino/release"></a>
-          <div class="table-row table-row_content" data-filterable-current=":cantino/release" data-filterable-set=":cantino/release">
-            <div class="main-subrow keyValue ">
-              <div class=""><span class="inline-flex">
-                  <div><a href="to-string.html"><span>to</span><wbr></wbr><span><span>String</span></span></a></div>
-<span class="anchor-wrapper"><span class="anchor-icon" pointing-to="-119295076%2FFunctions%2F703280004"></span>
-                    <div class="copy-popup-wrapper "><span class="copy-popup-icon"></span><span>Link copied to clipboard</span></div>
-                  </span></span></div>
-              <div>
-                <div class="title">
-                  <div class="platform-hinted " data-platform-hinted="data-platform-hinted"><div class="content sourceset-dependent-content" data-active="" data-togglable=":cantino/release"><div class="symbol monospace"><span class="token keyword">open </span><span class="token keyword">override </span><span class="token keyword">fun </span><a href="to-string.html"><span class="token function">toString</span></a><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-string/index.html">String</a></div></div></div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
     </div>
   </div>
 </div>
@@ -252,7 +222,7 @@
                     <a class="footer--link footer--link_external" href="https://github.com/Kotlin/dokka">
                         Dokka
                     </a>
-                    <div>Cantino 0.2.0. Map data © OpenStreetMap contributors (ODbL).</div>
+                    <div>Cantino 0.3.0. Map data © OpenStreetMap contributors (ODbL).</div>
                 </div>
             </div>
         </div>

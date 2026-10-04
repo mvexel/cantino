@@ -43,7 +43,7 @@
         </button>
         <div class="navigation-controls--break ui-kit_mobile-only"></div>
         <div class="library-version" id="library-version">
-0.2.0        </div>
+0.3.0        </div>
         <div class="navigation-controls">
         <ul class="filter-section filter-section_loading" id="filter-section" aria-label="Target filter">
                 <button class="platform-tag platform-selector jvm-like" data-active="" aria-pressed="true"
@@ -107,11 +107,30 @@
   <div class="breadcrumbs"><a href="../../../../index.html">Cantino</a><span class="delimiter">/</span><a href="../../index.html">lol.osm.cantino</a><span class="delimiter">/</span><a href="../index.html">AreaState</a><span class="delimiter">/</span><span class="current">Basemap</span></div>
   <div class="cover ">
     <h1 class="cover"><span><span>Basemap</span></span></h1>
-    <div class="platform-hinted " data-platform-hinted="data-platform-hinted"><div class="content sourceset-dependent-content" data-active="" data-togglable=":cantino/release"><div class="symbol monospace"><span class="token keyword">class </span><a href="index.html">Basemap</a> : <a href="../index.html">AreaState</a><span class="source-link-wrapper"><span class="source-link" data-element-type="source-link">(<a href="https://github.com/mvexel/cantino/blob/v0.2.0/android/cantino/src/main/java/lol/osm/cantino/AreaModels.kt#L539">source</a>)</span></span></div><p class="paragraph">Downloading the basemap (<a href="../../-basemap-source/-url/index.html">BasemapSource.Url</a> or <a href="../../-basemap-source/-extract/index.html">BasemapSource.Extract</a>) after the OSM data was imported (staged, not yet published). <span data-unresolved-link="lol.osm.cantino/AreaState.Basemap//#java.util.UUID#lol.osm.cantino.BasemapPhase#kotlin.Long#kotlin.Long?/PointingToCallableParameters(2)/">bytes</span> is the progress in <span data-unresolved-link="lol.osm.cantino/AreaState.Basemap//#java.util.UUID#lol.osm.cantino.BasemapPhase#kotlin.Long#kotlin.Long?/PointingToCallableParameters(1)/">phase</span>; <span data-unresolved-link="lol.osm.cantino/AreaState.Basemap//#java.util.UUID#lol.osm.cantino.BasemapPhase#kotlin.Long#kotlin.Long?/PointingToCallableParameters(3)/">totalBytes</span> is null while unknown (directory phase, or a server sending no length).</p></div></div>
+    <div class="platform-hinted " data-platform-hinted="data-platform-hinted"><div class="content sourceset-dependent-content" data-active="" data-togglable=":cantino/release"><div class="symbol monospace"><span class="token keyword">data </span><span class="token keyword">class </span><a href="index.html">Basemap</a><span class="token punctuation">(</span><span class="parameters "><span class="parameter "><span class="token keyword">val </span>runId<span class="token operator">: </span><a href="https://developer.android.com/reference/kotlin/java/util/UUID.html">UUID</a><span class="token punctuation">, </span></span><span class="parameter "><span class="token keyword">val </span>phase<span class="token operator">: </span><a href="../../-basemap-phase/index.html">BasemapPhase</a><span class="token punctuation">, </span></span><span class="parameter "><span class="token keyword">val </span>bytes<span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-long/index.html">Long</a><span class="token punctuation">, </span></span><span class="parameter "><span class="token keyword">val </span>totalBytes<span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-long/index.html">Long</a><span class="token operator">?</span></span></span><span class="token punctuation">)</span> : <a href="../index.html">AreaState</a><span class="source-link-wrapper"><span class="source-link" data-element-type="source-link">(<a href="https://github.com/mvexel/cantino/blob/v0.3.0/android/cantino/src/main/java/lol/osm/cantino/AreaModels.kt#L454">source</a>)</span></span></div><p class="paragraph">Downloading the basemap (<a href="../../-basemap-source/-url/index.html">BasemapSource.Url</a> or <a href="../../-basemap-source/-extract/index.html">BasemapSource.Extract</a>) after the OSM data was imported (staged, not yet published). <span data-unresolved-link="lol.osm.cantino/AreaState.Basemap//#java.util.UUID#lol.osm.cantino.BasemapPhase#kotlin.Long#kotlin.Long?/PointingToCallableParameters(2)/">bytes</span> is the progress in <span data-unresolved-link="lol.osm.cantino/AreaState.Basemap//#java.util.UUID#lol.osm.cantino.BasemapPhase#kotlin.Long#kotlin.Long?/PointingToCallableParameters(1)/">phase</span>; <span data-unresolved-link="lol.osm.cantino/AreaState.Basemap//#java.util.UUID#lol.osm.cantino.BasemapPhase#kotlin.Long#kotlin.Long?/PointingToCallableParameters(3)/">totalBytes</span> is null while unknown (directory phase, or a server sending no length).</p></div></div>
   </div>
   <div class="tabbedcontent">
     <div class="tabs-section" tabs-section="tabs-section"><button class="section-tab" data-active="" data-togglable="CONSTRUCTOR,TYPE,PROPERTY,FUNCTION">Members</button></div>
     <div class="tabs-section-body">
+      <div data-togglable="CONSTRUCTOR">
+        <h2 class="tableheader">Constructors</h2>
+        <div class="table"><a data-name="1471407690%2FConstructors%2F703280004" anchor-label="Basemap" id="1471407690%2FConstructors%2F703280004" data-filterable-set=":cantino/release"></a>
+          <div class="table-row table-row_content" data-togglable="CONSTRUCTOR" data-filterable-current=":cantino/release" data-filterable-set=":cantino/release">
+            <div class="main-subrow keyValue ">
+              <div class=""><span class="inline-flex">
+                  <div><a href="-basemap.html"><span><span>Basemap</span></span></a></div>
+<span class="anchor-wrapper"><span class="anchor-icon" pointing-to="1471407690%2FConstructors%2F703280004"></span>
+                    <div class="copy-popup-wrapper "><span class="copy-popup-icon"></span><span>Link copied to clipboard</span></div>
+                  </span></span></div>
+              <div>
+                <div class="title">
+                  <div class="platform-hinted " data-platform-hinted="data-platform-hinted"><div class="content sourceset-dependent-content" data-active="" data-togglable=":cantino/release"><div class="symbol monospace"><span class="token keyword">constructor</span><span class="token punctuation">(</span><span class="parameters "><span class="parameter ">runId<span class="token operator">: </span><a href="https://developer.android.com/reference/kotlin/java/util/UUID.html">UUID</a><span class="token punctuation">, </span></span><span class="parameter ">phase<span class="token operator">: </span><a href="../../-basemap-phase/index.html">BasemapPhase</a><span class="token punctuation">, </span></span><span class="parameter ">bytes<span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-long/index.html">Long</a><span class="token punctuation">, </span></span><span class="parameter ">totalBytes<span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-long/index.html">Long</a><span class="token operator">?</span></span></span><span class="token punctuation">)</span></div></div></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
       <div data-togglable="PROPERTY">
         <h2 class="tableheader">Properties</h2>
         <div class="table"><a data-name="-1117596493%2FProperties%2F703280004" anchor-label="bytes" id="-1117596493%2FProperties%2F703280004" data-filterable-set=":cantino/release"></a>
@@ -191,55 +210,6 @@
           </div>
         </div>
       </div>
-      <div data-togglable="FUNCTION">
-        <h2 class="tableheader">Functions</h2>
-        <div class="table"><a data-name="257713637%2FFunctions%2F703280004" anchor-label="equals" id="257713637%2FFunctions%2F703280004" data-filterable-set=":cantino/release"></a>
-          <div class="table-row table-row_content" data-filterable-current=":cantino/release" data-filterable-set=":cantino/release">
-            <div class="main-subrow keyValue ">
-              <div class=""><span class="inline-flex">
-                  <div><a href="equals.html"><span><span>equals</span></span></a></div>
-<span class="anchor-wrapper"><span class="anchor-icon" pointing-to="257713637%2FFunctions%2F703280004"></span>
-                    <div class="copy-popup-wrapper "><span class="copy-popup-icon"></span><span>Link copied to clipboard</span></div>
-                  </span></span></div>
-              <div>
-                <div class="title">
-                  <div class="platform-hinted " data-platform-hinted="data-platform-hinted"><div class="content sourceset-dependent-content" data-active="" data-togglable=":cantino/release"><div class="symbol monospace"><span class="token keyword">open </span><span class="token keyword">operator override </span><span class="token keyword">fun </span><a href="equals.html"><span class="token function">equals</span></a><span class="token punctuation">(</span><span class="parameters "><span class="parameter ">other<span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-any/index.html">Any</a><span class="token operator">?</span></span></span><span class="token punctuation">)</span><span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-boolean/index.html">Boolean</a></div></div></div>
-                </div>
-              </div>
-            </div>
-          </div>
-<a data-name="1382260065%2FFunctions%2F703280004" anchor-label="hashCode" id="1382260065%2FFunctions%2F703280004" data-filterable-set=":cantino/release"></a>
-          <div class="table-row table-row_content" data-filterable-current=":cantino/release" data-filterable-set=":cantino/release">
-            <div class="main-subrow keyValue ">
-              <div class=""><span class="inline-flex">
-                  <div><a href="hash-code.html"><span>hash</span><wbr></wbr><span><span>Code</span></span></a></div>
-<span class="anchor-wrapper"><span class="anchor-icon" pointing-to="1382260065%2FFunctions%2F703280004"></span>
-                    <div class="copy-popup-wrapper "><span class="copy-popup-icon"></span><span>Link copied to clipboard</span></div>
-                  </span></span></div>
-              <div>
-                <div class="title">
-                  <div class="platform-hinted " data-platform-hinted="data-platform-hinted"><div class="content sourceset-dependent-content" data-active="" data-togglable=":cantino/release"><div class="symbol monospace"><span class="token keyword">open </span><span class="token keyword">override </span><span class="token keyword">fun </span><a href="hash-code.html"><span class="token function">hashCode</span></a><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-int/index.html">Int</a></div></div></div>
-                </div>
-              </div>
-            </div>
-          </div>
-<a data-name="1204094000%2FFunctions%2F703280004" anchor-label="toString" id="1204094000%2FFunctions%2F703280004" data-filterable-set=":cantino/release"></a>
-          <div class="table-row table-row_content" data-filterable-current=":cantino/release" data-filterable-set=":cantino/release">
-            <div class="main-subrow keyValue ">
-              <div class=""><span class="inline-flex">
-                  <div><a href="to-string.html"><span>to</span><wbr></wbr><span><span>String</span></span></a></div>
-<span class="anchor-wrapper"><span class="anchor-icon" pointing-to="1204094000%2FFunctions%2F703280004"></span>
-                    <div class="copy-popup-wrapper "><span class="copy-popup-icon"></span><span>Link copied to clipboard</span></div>
-                  </span></span></div>
-              <div>
-                <div class="title">
-                  <div class="platform-hinted " data-platform-hinted="data-platform-hinted"><div class="content sourceset-dependent-content" data-active="" data-togglable=":cantino/release"><div class="symbol monospace"><span class="token keyword">open </span><span class="token keyword">override </span><span class="token keyword">fun </span><a href="to-string.html"><span class="token function">toString</span></a><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-string/index.html">String</a></div></div></div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
     </div>
   </div>
 </div>
@@ -252,7 +222,7 @@
                     <a class="footer--link footer--link_external" href="https://github.com/Kotlin/dokka">
                         Dokka
                     </a>
-                    <div>Cantino 0.2.0. Map data © OpenStreetMap contributors (ODbL).</div>
+                    <div>Cantino 0.3.0. Map data © OpenStreetMap contributors (ODbL).</div>
                 </div>
             </div>
         </div>

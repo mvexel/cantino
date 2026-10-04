@@ -50,8 +50,8 @@ function.</p>
 <tr>
 <td>Return codes</td>
 <td><code>0</code> success, <code>1</code> not found
-(<code>cantino_get</code>, <code>cantino_way_coordinates</code>,
-<code>cantino_representative_point</code>), <code>-1</code> error</td>
+(<code>cantino_get</code>, <code>cantino_way_coordinates</code>),
+<code>-CANTINO_ERROR_*</code> status on failure</td>
 </tr>
 <tr>
 <td>Strings</td>
@@ -68,19 +68,19 @@ alongside a failure. <code>cantino_free(NULL)</code> is a no-op</td>
 <td>Handles</td>
 <td><code>CantinoStore*</code>, <code>CantinoBasemapPlan*</code>,
 <code>CantinoBasemapAssembler*</code> belong to the thread that created
-them. Calls from another thread return <code>-1</code> with an error and
-leave the handle untouched</td>
+them. Calls from another thread return
+<code>-CANTINO_ERROR_WRONG_THREAD</code> with an error and leave the
+handle untouched</td>
 </tr>
 <tr>
 <td>Error category</td>
-<td>After a <code>-1</code>, <code>cantino_last_error_code()</code> on
-the same thread returns the failure's <code>CANTINO_ERROR_*</code> code
-(see <a href="#errors">Errors</a>); <code>0</code> after a success</td>
+<td>The failing call returns its <code>-CANTINO_ERROR_*</code> code
+directly (see <a href="#errors">Errors</a>)</td>
 </tr>
 <tr>
 <td>Panics</td>
-<td>Never unwind across the ABI; they become <code>-1</code> + error,
-category <code>CANTINO_ERROR_INTERNAL</code></td>
+<td>Never unwind across the ABI; they become
+<code>-CANTINO_ERROR_INTERNAL</code> + error</td>
 </tr>
 <tr>
 <td>Returned data</td>
@@ -102,9 +102,7 @@ category <code>CANTINO_ERROR_INTERNAL</code></td>
 <td>Store</td>
 <td><code>cantino_open</code>, <code>cantino_get</code>,
 <code>cantino_get_many</code>, <code>cantino_query</code>,
-<code>cantino_way_coordinates</code>,
-<code>cantino_representative_point</code>,
-<code>cantino_close</code></td>
+<code>cantino_way_coordinates</code>, <code>cantino_close</code></td>
 <td>Owner thread</td>
 </tr>
 <tr>
@@ -137,11 +135,11 @@ thread</td>
 <h2 id="example-open-and-query">Example: open and query</h2>
 <div class="sourceCode" id="cb2"><pre class="sourceCode c"><code class="sourceCode c"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a>CantinoStore <span class="op">*</span>store <span class="op">=</span> NULL<span class="op">;</span></span>
 <span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a><span class="dt">char</span> <span class="op">*</span>json <span class="op">=</span> NULL<span class="op">,</span> <span class="op">*</span>error <span class="op">=</span> NULL<span class="op">;</span></span>
-<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a><span class="cf">if</span> <span class="op">(</span>cantino_open<span class="op">(</span><span class="st">&quot;/path/city.sqlite&quot;</span><span class="op">,</span> <span class="op">&amp;</span>store<span class="op">,</span> <span class="op">&amp;</span>error<span class="op">)</span> <span class="op">!=</span> <span class="dv">0</span><span class="op">)</span> <span class="op">{</span></span>
-<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a>    <span class="dt">int32_t</span> code <span class="op">=</span> cantino_last_error_code<span class="op">();</span>   <span class="co">/* read before the next call */</span></span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a><span class="dt">int32_t</span> code <span class="op">=</span> cantino_open<span class="op">(</span><span class="st">&quot;/path/city.sqlite&quot;</span><span class="op">,</span> <span class="op">&amp;</span>store<span class="op">,</span> <span class="op">&amp;</span>error<span class="op">);</span></span>
+<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a><span class="cf">if</span> <span class="op">(</span>code <span class="op">!=</span> <span class="dv">0</span><span class="op">)</span> <span class="op">{</span></span>
 <span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a>    fprintf<span class="op">(</span>stderr<span class="op">,</span> <span class="st">&quot;</span><span class="sc">%s</span><span class="st"> (category </span><span class="sc">%d</span><span class="st">)</span><span class="sc">\n</span><span class="st">&quot;</span><span class="op">,</span> error<span class="op">,</span> code<span class="op">);</span></span>
 <span id="cb2-6"><a href="#cb2-6" aria-hidden="true" tabindex="-1"></a>    cantino_free<span class="op">(</span>error<span class="op">);</span></span>
-<span id="cb2-7"><a href="#cb2-7" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> <span class="op">(</span>code <span class="op">==</span> CANTINO_ERROR_INVALID_FILE<span class="op">)</span> <span class="op">{</span> <span class="co">/* not an area, or old format: re-import */</span> <span class="op">}</span></span>
+<span id="cb2-7"><a href="#cb2-7" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> <span class="op">(</span>code <span class="op">==</span> <span class="op">-</span>CANTINO_ERROR_INVALID_FILE<span class="op">)</span> <span class="op">{</span> <span class="co">/* not an area, or old format: re-import */</span> <span class="op">}</span></span>
 <span id="cb2-8"><a href="#cb2-8" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span><span class="op">;</span></span>
 <span id="cb2-9"><a href="#cb2-9" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span>
 <span id="cb2-10"><a href="#cb2-10" aria-hidden="true" tabindex="-1"></a><span class="dt">const</span> <span class="dt">char</span> <span class="op">*</span>q <span class="op">=</span> <span class="st">&quot;{</span><span class="sc">\&quot;</span><span class="st">tags</span><span class="sc">\&quot;</span><span class="st">:[{</span><span class="sc">\&quot;</span><span class="st">Equals</span><span class="sc">\&quot;</span><span class="st">:[</span><span class="sc">\&quot;</span><span class="st">amenity</span><span class="sc">\&quot;</span><span class="st">,</span><span class="sc">\&quot;</span><span class="st">cafe</span><span class="sc">\&quot;</span><span class="st">]}],&quot;</span></span>
@@ -161,8 +159,9 @@ thread</td>
 <code>{"type":"node","id":123}</code>, <code>limit</code> 1..10000,
 optional <code>max_candidates</code>. <code>NotExists</code> never
 drives a query: a query whose only filters are <code>NotExists</code>
-and that has no <code>bbox</code> returns <code>-1</code>. Semantics are
-the same as the Kotlin <code>Query</code> (<a
+and that has no <code>bbox</code> returns
+<code>-CANTINO_ERROR_INVALID_ARGUMENT</code>. Semantics are the same as
+the Kotlin <code>Query</code> (<a
 href="querying.html">Querying</a>).</p>
 <h2 id="geometry-and-batch-lookups">Geometry and batch lookups</h2>
 <table>
@@ -190,45 +189,25 @@ href="querying.html">Querying</a>).</p>
 kept), <code>null,null</code> for a node outside the area.
 <code>1</code> when the way is not in the area</td>
 </tr>
-<tr>
-<td><code>cantino_representative_point(store, kind, id, json, error)</code></td>
-<td>Kind code and ID, as for <code>cantino_get</code></td>
-<td><code>{"lat_e7":...,"lon_e7":...}</code>, or <code>1</code> when the
-object or all of its geometry is outside the area</td>
-</tr>
 </tbody>
 </table>
-<p>The representative point is a label/anchor point,
-<strong>not</strong> a guaranteed point-on-surface: node = its
-coordinate; closed way = mean of its distinct in-area vertices; open way
-= point at half the polyline length over its in-area nodes; relation =
-mean of its distinct in-area members' points (nested relations followed
-up to 8 levels, cycles skipped). See <a
-href="querying.html#geometry-helpers">Querying</a>.</p>
 <h2 id="errors">Errors</h2>
-<p>Every failing call returns <code>-1</code> and writes a
-developer-facing message to <code>*error</code> (free it). Its
-<strong>category</strong> is not in the message: call
-<code>cantino_last_error_code()</code> on the same thread right after
-the failure. The code is kept per thread (like <code>errno</code>),
-overwritten by every ABI call and <code>0</code> after a success. Branch
-on the code, never on the message text.</p>
+<p>Every failing call returns a negative category code and writes a
+developer-facing message to <code>*error</code> (free it). The category
+constants are positive; compare a failure status to their negative, e.g.
+<code>status == -CANTINO_ERROR_IO</code>. Branch on the returned code,
+never on message text.</p>
 <table>
 <thead>
 <tr>
-<th>Code</th>
-<th>Name</th>
+<th>Return code</th>
+<th>Category constant</th>
 <th>When</th>
 </tr>
 </thead>
 <tbody>
 <tr>
-<td>0</td>
-<td><code>CANTINO_ERROR_NONE</code></td>
-<td>The last call succeeded</td>
-</tr>
-<tr>
-<td>1</td>
+<td>-1</td>
 <td><code>CANTINO_ERROR_INVALID_ARGUMENT</code></td>
 <td>Bad query (limit, only <code>NotExists</code> filters without bbox),
 invalid bbox, too many spatial candidates, batch over 10 000 IDs,
@@ -237,7 +216,7 @@ SliceOSM response the adapter passed on), a basemap response of the
 wrong id or length</td>
 </tr>
 <tr>
-<td>2</td>
+<td>-2</td>
 <td><code>CANTINO_ERROR_INVALID_FILE</code></td>
 <td>Not an area database, an area of another format version (re-import),
 a corrupt/truncated/unreadable PBF or XML input or one breaking the
@@ -245,34 +224,30 @@ snapshot rules (unsorted or duplicate IDs), a malformed or unsupported
 PMTiles archive</td>
 </tr>
 <tr>
-<td>3</td>
+<td>-3</td>
 <td><code>CANTINO_ERROR_IO</code></td>
 <td>Missing file, permission denied, disk full, I/O error, out of
 memory, a database locked by another process</td>
 </tr>
 <tr>
-<td>4</td>
+<td>-4</td>
 <td><code>CANTINO_ERROR_WRONG_THREAD</code></td>
 <td>A store, plan or assembler handle used from a non-owner thread (the
 handle is untouched)</td>
 </tr>
 <tr>
-<td>5</td>
+<td>-5</td>
 <td><code>CANTINO_ERROR_INTERNAL</code></td>
 <td>A bug in the core or a caught panic: report it</td>
 </tr>
 </tbody>
 </table>
-<p>The values are stable ABI (new categories are only appended). In the
-Rust core they are <code>ErrorKind</code> (<code>Error::kind()</code>);
-every <code>Error</code> variant, and every SQLite result code, maps to
-exactly one of them. The Android adapter turns them into
-<code>CantinoException.InvalidArgument</code> / <code>InvalidFile</code>
-/ <code>Io</code> / <code>WrongThread</code> (and
-<code>IllegalStateException</code> for internal errors).</p>
-<p>Compatibility: added in 0.2.0 without changing any signature or
-return value; a 0.1 caller that only checks for <code>-1</code> keeps
-working.</p>
+<p>In the Rust core the categories are <code>ErrorKind</code>
+(<code>Error::kind()</code>); every <code>Error</code> variant, and
+every SQLite result code, maps to exactly one of them. The Android
+adapter turns them into <code>CantinoException.InvalidArgument</code> /
+<code>InvalidFile</code> / <code>Io</code> / <code>WrongThread</code>
+(and <code>IllegalStateException</code> for internal errors).</p>
 <h2 id="basemap-extract-flow">Basemap extract flow</h2>
 <p>The extract engine never does I/O; the adapter fetches byte ranges
 with whatever HTTP stack the platform has:</p>
@@ -289,10 +264,9 @@ state (re-fetch and feed again). The Kotlin driver
 (<code>BasemapExtract</code> in <code>Basemap.kt</code>) is a reference
 implementation: 4 parallel requests, tile ranges streamed to files.</p>
 <h2 id="stability">Stability</h2>
-<p>The ABI is versioned with the crate (0.2.0). Before 1.0 it may change
-in a minor version, like the Kotlin API; the area file format is
-versioned separately (<code>FORMAT_VERSION</code> in
-<code>src/schema.rs</code>).</p>
+<p>The API and ABI are under development and may change freely. The area
+file format has a separate <code>FORMAT_VERSION</code> in
+<code>src/schema.rs</code>; re-import data when it changes.</p>
 </main>
 </body>
 </html>

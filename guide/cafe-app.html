@@ -27,7 +27,7 @@
 <h1 id="café-app-walkthrough">Café app walkthrough</h1>
 <p><a
 href="https://github.com/mvexel/cantino/blob/main/android/cafe-app"><code>android/cafe-app</code></a>
-is the reference app for Cantino 0.2.0: find cafés near you, with no
+is the reference app for Cantino 0.3.0: find cafés near you, with no
 network after the first download. Plain Android views, MapLibre Native
 13.6.1, no Play Services. It passed this acceptance scenario on a Pixel
 8 (2026-10-03, downtown Salt Lake City):</p>
@@ -87,7 +87,7 @@ the tile host)</td>
 <tr>
 <td>Find a basemap build (demo) and start the download</td>
 <td><code>MainActivity.startDownload</code></td>
-<td><code>ProtomapsBuilds.latestUrl()</code>,
+<td>Example-local <code>ProtomapsBuilds.latestUrl()</code>,
 <code>AreaManager.download(…, BasemapSource.Extract(planet, maxZoom = 15))</code></td>
 </tr>
 <tr>
@@ -157,8 +157,8 @@ Gradle task) with the area's PMTiles URL substituted</td>
 <tbody>
 <tr>
 <td>One store, one thread, reopened after a refresh</td>
-<td><code>StoreWorker.withStore</code></td>
-<td><code>OsmStore.open</code>, <code>AreaMetadata.workId</code></td>
+<td><code>CafeStore.withStore</code></td>
+<td><code>AsyncOsmStore</code>, <code>AreaMetadata.workId</code></td>
 </tr>
 <tr>
 <td>All <code>amenity=cafe</code> in the area, paged by 500</td>
@@ -169,8 +169,8 @@ Gradle task) with the area's PMTiles URL substituted</td>
 <tr>
 <td>A map point for ways and relations (an anchor, not exact
 geometry)</td>
-<td><code>CafeLoader.representativePoint</code></td>
-<td><code>store.representativePoint</code></td>
+<td><code>CafeLoader</code> marker helper</td>
+<td><code>wayCoordinates</code>, batch <code>get</code></td>
 </tr>
 <tr>
 <td>Dots on the map (GeoJSON source), nearby list sorted by
@@ -260,9 +260,10 @@ missing</td>
 <span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a><span class="bu">cd</span> android <span class="kw">&amp;&amp;</span> <span class="ex">mise</span> exec <span class="at">--</span> ./gradlew :cafe-app:installDebug</span>
 <span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a><span class="co"># Automated runs: never send a real location; use the debug override (debuggable builds only)</span></span>
 <span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a><span class="ex">adb</span> shell am start <span class="at">-S</span> <span class="at">-n</span> lol.osm.cantino.cafe/.MainActivity <span class="at">--ef</span> lat 40.7608 <span class="at">--ef</span> lon <span class="at">-111.8910</span></span></code></pre></div>
-<p>Known limits: opening hours use the device's time zone, not the
-café's; the relation-café path has not run on a device (no café relation
-in the test area).</p>
+<p>Known limit: opening hours are evaluated in the phone's time zone.
+This is correct for the default flow because the area is downloaded
+around the user, but wrong when an area is used in another time zone;
+the area zone is not yet stored.</p>
 </main>
 </body>
 </html>

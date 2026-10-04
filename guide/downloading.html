@@ -65,10 +65,14 @@ run ID</td>
 <td>Current state first, then every change</td>
 </tr>
 <tr>
-<td><code>publishedArea(areaId)</code>, <code>dataFile</code>,
-<code>basemapFile</code></td>
+<td><code>publishedArea(areaId)</code></td>
 <td><strong>background</strong></td>
 <td>Read the disk; may wait a few ms for a commit in progress</td>
+</tr>
+<tr>
+<td><code>loadPublishedArea(areaId)</code></td>
+<td>any coroutine</td>
+<td>Same result, with disk reads dispatched off the caller’s thread</td>
 </tr>
 </tbody>
 </table>
@@ -200,11 +204,11 @@ class="sourceCode kotlin"><code class="sourceCode kotlin"><span id="cb3-1"><a hr
 <p>Plain <code>state(areaId)</code> collection (a progress UI) needs no
 matching: it shows whatever run the area is on, and <code>runId</code>
 changes when a new run starts.</p>
-<p>The blocking disk reads <code>dataFile</code>,
-<code>basemapFile</code> and <code>publishedArea</code> have main-safe
-suspend counterparts: <code>loadDataFile</code>,
-<code>loadBasemapFile</code> and <code>loadPublishedArea</code> (they
-run on <code>Dispatchers.IO</code>).</p>
+<p>Use <code>loadPublishedArea(areaId)</code> from a coroutine, or
+<code>publishedArea(areaId)</code> on a worker thread. The returned
+<code>AreaInfo</code> contains both <code>dataFile</code> and
+<code>basemapFile</code>; the suspend method performs disk reads on
+<code>Dispatchers.IO</code>.</p>
 <h2 id="cancellation">Cancellation</h2>
 <p><code>cancel(areaId)</code> stops a queued or running download; the
 state becomes <code>Cancelled</code> shortly after. It is honored up to
@@ -233,7 +237,7 @@ exhausted: <code>Failed(retryable = true)</code></td>
 </tr>
 <tr>
 <td>HTTP 5xx / 408 / 429, a vanished SliceOSM job, an unparseable server
-answer, a job still slicing after <code>maxSliceWaitMillis</code></td>
+answer, a job still slicing after the internal wait limit</td>
 <td>As above (transient)</td>
 <td><code>SERVER</code></td>
 </tr>
@@ -268,8 +272,7 @@ that is not a valid PMTiles v3 archive</td>
 <td><code>STORAGE</code></td>
 </tr>
 <tr>
-<td>An unexpected error (a bug), or a failure recorded by Cantino
-0.1</td>
+<td>An unexpected error (a bug)</td>
 <td><code>Failed(retryable = false)</code></td>
 <td><code>UNKNOWN</code></td>
 </tr>
@@ -280,9 +283,17 @@ recovers (WorkManager constraint)</td>
 <td></td>
 </tr>
 <tr>
+<td>Recovery cannot finish because storage is unavailable</td>
+<td>Area reads throw <code>IOException</code> rather than expose a
+partial publication; the journal remains for retry</td>
+<td><code>STORAGE</code></td>
+</tr>
+<tr>
 <td>Process killed</td>
-<td>WorkManager reruns the work; a run killed after its commit point is
-completed on the next access</td>
+<td>WorkManager reruns the work, resuming the same SliceOSM job; a run
+killed after its commit point is completed on the next access. Both are
+tested with a real <code>kill -9</code>
+(<code>scripts/kill-test-android.sh</code>)</td>
 <td></td>
 </tr>
 </tbody>
@@ -297,12 +308,11 @@ class="sourceCode kotlin"><code class="sourceCode kotlin"><span id="cb4-1"><a hr
 <span id="cb4-4"><a href="#cb4-4" aria-hidden="true" tabindex="-1"></a>    FailureReason<span class="op">.</span>INVALID_REQUEST <span class="op">-&gt;</span> <span class="st">&quot;This area cannot be downloaded.&quot;</span>   <span class="co">// e.g. too large for SliceOSM</span></span>
 <span id="cb4-5"><a href="#cb4-5" aria-hidden="true" tabindex="-1"></a>    FailureReason<span class="op">.</span>SERVER<span class="op">,</span> FailureReason<span class="op">.</span>INVALID_DATA<span class="op">,</span> FailureReason<span class="op">.</span>UNKNOWN <span class="op">-&gt;</span> <span class="st">&quot;Download failed. Try again later.&quot;</span></span>
 <span id="cb4-6"><a href="#cb4-6" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
-<p>All of these knobs are in <code>AreaConfig</code>
-(<code>inlineRetries</code>, <code>maxRunAttempts</code>,
-<code>backoffDelayMillis</code>, timeouts, <code>sliceBaseUrl</code>).
-Most apps pass <code>AreaConfig()</code> or only set
-<code>foreground</code>. Downloads restart from byte 0 on a retry (no
-byte-range resume in 0.2.0).</p>
+<p><code>AreaConfig</code> exposes <code>sliceBaseUrl</code>,
+<code>importOptions</code>, <code>foreground</code>,
+<code>connectTimeoutMillis</code> and <code>readTimeoutMillis</code>.
+Polling, retries and basemap parallelism use internal defaults.
+Downloads restart from byte 0 on retry.</p>
 <h2 id="foreground-mode">Foreground mode</h2>
 <p>WorkManager stops an ordinary background run after about 10 minutes.
 A 10×10 km city area takes well under a minute, so most apps never need
@@ -410,6 +420,72 @@ services, 2026-10-03):</p>
 <p>A refresh of the same area took 14.0 s. Slicing time depends on
 SliceOSM's load. More numbers: <a href="performance.html">Performance
 and sizes</a>.</p>
+<h3 id="keep-only-what-you-need-import-profiles">Keep only what you
+need: import profiles</h3>
+<p>Most of an area file is buildings, way vertices and other objects a
+given app never reads. The basemap draws all of that anyway, so a POI
+app can keep just its POIs:</p>
+<div class="sourceCode" id="cb7"><pre
+class="sourceCode kotlin"><code class="sourceCode kotlin"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a><span class="kw">val</span> <span class="va">poi</span> <span class="op">=</span> ImportProfile<span class="op">(</span></span>
+<span id="cb7-2"><a href="#cb7-2" aria-hidden="true" tabindex="-1"></a>    listOf<span class="op">(</span><span class="st">&quot;amenity&quot;</span><span class="op">,</span> <span class="st">&quot;shop&quot;</span><span class="op">,</span> <span class="st">&quot;tourism&quot;</span><span class="op">,</span> <span class="st">&quot;leisure&quot;</span><span class="op">,</span> <span class="st">&quot;craft&quot;</span><span class="op">,</span> <span class="st">&quot;office&quot;</span><span class="op">,</span> <span class="st">&quot;healthcare&quot;</span><span class="op">,</span> <span class="st">&quot;historic&quot;</span><span class="op">)</span></span>
+<span id="cb7-3"><a href="#cb7-3" aria-hidden="true" tabindex="-1"></a>        <span class="op">.</span>map <span class="op">{</span> KeepRule<span class="op">(</span>OsmKind<span class="op">.</span>entries<span class="op">.</span>toSet<span class="op">(),</span> it<span class="op">)</span> <span class="op">},</span></span>
+<span id="cb7-4"><a href="#cb7-4" aria-hidden="true" tabindex="-1"></a><span class="op">)</span></span>
+<span id="cb7-5"><a href="#cb7-5" aria-hidden="true" tabindex="-1"></a>AreaConfig<span class="op">(</span>importOptions <span class="op">=</span> ImportOptions<span class="op">(</span>profile <span class="op">=</span> poi<span class="op">))</span></span></code></pre></div>
+<p>An object is kept when any rule matches it
+(<code>KeepRule(kinds, key, values)</code>; <code>values = null</code>
+accepts any value). References are kept too, as
+<code>osmium tags-filter</code> does: a kept way keeps all its nodes, a
+kept relation keeps all its members (nested relations included), and
+those are stored whole, with all their tags. Object counts match
+osmium's on the extract below.</p>
+<p>Measured on the 30×15 km Salt Lake City extract (13 MB PBF), desktop
+import:</p>
+<table>
+<thead>
+<tr>
+<th>Profile</th>
+<th>Rules</th>
+<th>Area file</th>
+<th>Import</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>none</td>
+<td></td>
+<td>128.5 MB</td>
+<td>2.7 s</td>
+</tr>
+<tr>
+<td>outdoor</td>
+<td><code>highway</code>, <code>natural</code>, <code>waterway</code>,
+<code>landuse</code>, <code>leisure</code>, <code>tourism</code>,
+<code>amenity</code>, <code>place</code>, <code>boundary</code>; route
+relations</td>
+<td>61.6 MB (48%)</td>
+<td>1.8 s</td>
+</tr>
+<tr>
+<td>routing</td>
+<td><code>highway</code>; route and restriction relations</td>
+<td>41.4 MB (32%)</td>
+<td>1.4 s</td>
+</tr>
+<tr>
+<td>POI</td>
+<td>the eight keys above</td>
+<td>8.8 MB (7%)</td>
+<td>0.7 s</td>
+</tr>
+</tbody>
+</table>
+<p>The download itself does not shrink (SliceOSM always sends the full
+extract); the import reads it three times, which is still faster than
+storing everything. A missing object in a filtered area may be filtered
+out <em>or</em> outside the area:
+<code>AreaInfo.metadata.report.profile</code> (and
+<code>ImportReport.profile</code>) records the profile the file was
+built with. Changing the profile means downloading the area again.</p>
 <h2 id="privacy">Privacy</h2>
 <p>A download sends the <strong>bbox</strong> to SliceOSM
 (<code>slice.openstreetmap.us</code>, run by OpenStreetMap US) and, with

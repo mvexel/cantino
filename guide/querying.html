@@ -39,8 +39,8 @@ class="sourceCode kotlin"><code class="sourceCode kotlin"><span id="cb1-1"><a hr
 <h2 id="threading-rule">Threading rule</h2>
 <p><strong>An <code>OsmStore</code> belongs to the thread that opened
 it.</strong> Every call (<code>get</code>, <code>query</code>,
-<code>wayCoordinates</code>, <code>representativePoint</code>,
-<code>close</code>) must come from that thread; any other thread gets a
+<code>wayCoordinates</code>, <code>close</code>) must come from that
+thread; any other thread gets a
 <code>CantinoException.WrongThread</code>, never corrupted state. Calls
 are synchronous.</p>
 <table>
@@ -58,20 +58,20 @@ a block without suspension points runs on one thread</td>
 </tr>
 <tr>
 <td>Long-lived store (recommended for apps)</td>
-<td>A single-thread dispatcher that owns the store:
-<code>Executors.newSingleThreadExecutor().asCoroutineDispatcher()</code>,
-and every call goes through
-<code>withContext(thatDispatcher)</code></td>
+<td><code>AsyncOsmStore.open(file)</code> owns a dedicated thread; call
+its suspend <code>get</code>, <code>query</code>, <code>withStore</code>
+and <code>close</code> methods</td>
 </tr>
 </tbody>
 </table>
 <p>Do not hold a store across suspension points on
 <code>Dispatchers.IO</code>: the coroutine can resume on another thread.
 <code>open</code> loads dictionaries, so keep a long-lived store rather
-than opening one per query. Returned objects are plain immutable values:
-they outlive the store and can go to any thread.</p>
+than opening one per query. Returned objects are plain values with owned
+collection snapshots: they outlive the store and can go to any thread.
+Constructible data classes make app tests straightforward.</p>
 <p>The café app's <a
-href="https://github.com/mvexel/cantino/blob/main/android/cafe-app/src/main/java/lol/osm/cantino/cafe/StoreWorker.kt"><code>StoreWorker</code></a>
+href="https://github.com/mvexel/cantino/blob/main/android/cafe-app/src/main/java/lol/osm/cantino/cafe/CafeStore.kt"><code>CafeStore</code></a>
 is a complete long-lived pattern, including reopening after a
 refresh.</p>
 <h2 id="query-semantics">Query semantics</h2>
@@ -183,14 +183,13 @@ exact values.</li>
 <li><strong>Geometry</strong> is not assembled: a way is a list of node
 IDs; a multipolygon is a relation. The <a
 href="#geometry-helpers">geometry helpers</a> give you a way's
-coordinates and one anchor point per object; build anything else
-yourself.</li>
+coordinates; marker placement and assembled geometry belong in your
+app.</li>
 </ul>
 <h2 id="geometry-helpers">Geometry helpers</h2>
 <div class="sourceCode" id="cb4"><pre
 class="sourceCode kotlin"><code class="sourceCode kotlin"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a><span class="kw">val</span> <span class="va">line</span><span class="op">:</span> List<span class="op">&lt;</span>Coordinate<span class="op">?&gt;?</span> <span class="op">=</span> store<span class="op">.</span>wayCoordinates<span class="op">(</span>wayId<span class="op">)</span>        <span class="co">// null = way not in area</span></span>
-<span id="cb4-2"><a href="#cb4-2" aria-hidden="true" tabindex="-1"></a><span class="kw">val</span> <span class="va">anchor</span><span class="op">:</span> Coordinate<span class="op">?</span> <span class="op">=</span> store<span class="op">.</span>representativePoint<span class="op">(</span>cafe<span class="op">.</span>id<span class="op">)</span>      <span class="co">// null = nothing in area</span></span>
-<span id="cb4-3"><a href="#cb4-3" aria-hidden="true" tabindex="-1"></a><span class="kw">val</span> <span class="va">objects</span><span class="op">:</span> List<span class="op">&lt;</span>OsmObject<span class="op">?&gt;</span> <span class="op">=</span> store<span class="op">.</span><span class="kw">get</span><span class="op">(</span>listOf<span class="op">(</span>id1<span class="op">,</span> id2<span class="op">,</span> id3<span class="op">))</span>  <span class="co">// input order, null = missing</span></span></code></pre></div>
+<span id="cb4-2"><a href="#cb4-2" aria-hidden="true" tabindex="-1"></a><span class="kw">val</span> <span class="va">objects</span><span class="op">:</span> List<span class="op">&lt;</span>OsmObject<span class="op">?&gt;</span> <span class="op">=</span> store<span class="op">.</span><span class="kw">get</span><span class="op">(</span>listOf<span class="op">(</span>id1<span class="op">,</span> id2<span class="op">,</span> id3<span class="op">))</span>  <span class="co">// input order, null = missing</span></span></code></pre></div>
 <table>
 <thead>
 <tr>
@@ -207,11 +206,6 @@ node outside the area: do not draw across it. Null for a way not in the
 area</td>
 </tr>
 <tr>
-<td><code>representativePoint(id)</code></td>
-<td>One point for a marker, a label or a distance origin (see below).
-Null when the object, or all of its geometry, is outside the area</td>
-</tr>
-<tr>
 <td><code>get(ids)</code></td>
 <td>One entry per ID in input order, null where the object is not in the
 area. One JNI crossing for the list; at most
@@ -222,40 +216,9 @@ area. One JNI crossing for the list; at most
 </table>
 <p><code>Coordinate</code> holds <code>latE7</code>/<code>lonE7</code>
 (exact integers) and <code>lat</code>/<code>lon</code> in degrees.</p>
-<p><strong>The representative point is an anchor, not a guaranteed
-point-on-surface or a true centroid.</strong> For an L-shaped building
-it can lie outside the outline; for a multipolygon it can fall in a
-hole. It is computed in the core as:</p>
-<table>
-<thead>
-<tr>
-<th>Object</th>
-<th>Point</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>Node</td>
-<td>Its coordinate</td>
-</tr>
-<tr>
-<td>Closed way (first node = last node)</td>
-<td>Mean of its distinct vertices that are in the area</td>
-</tr>
-<tr>
-<td>Open way</td>
-<td>The point at half the length of the line through its in-area nodes
-(nodes outside the area are skipped, so the line joins across the
-gap)</td>
-</tr>
-<tr>
-<td>Relation</td>
-<td>Mean of the representative points of its distinct in-area members,
-each weighted equally; member relations followed up to 8 levels deep,
-cycles skipped</td>
-</tr>
-</tbody>
-</table>
+<p>The café example averages resolvable vertices for its markers. This
+is app policy and can place a marker outside a building; see <a
+href="cafe-app.html">the example</a>.</p>
 <h3 id="metadata">Metadata</h3>
 <p><code>ObjectMetadata</code> = <code>version</code>,
 <code>timestampSeconds</code>, <code>changeset</code>, <code>uid</code>,
@@ -343,9 +306,9 @@ class="sourceCode kotlin"><code class="sourceCode kotlin"><span id="cb5-1"><a hr
 <span id="cb5-7"><a href="#cb5-7" aria-hidden="true" tabindex="-1"></a>    showError<span class="op">(</span><span class="st">&quot;cannot read offline data: </span><span class="ss">${</span>e<span class="op">.</span>message<span class="ss">}</span><span class="st">&quot;</span><span class="op">)</span></span>
 <span id="cb5-8"><a href="#cb5-8" aria-hidden="true" tabindex="-1"></a>    <span class="kw">return</span></span>
 <span id="cb5-9"><a href="#cb5-9" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
-<p>The category comes from the native core
-(<code>cantino_last_error_code</code>, see <a href="c-abi.html#errors">C
-ABI</a>); the subtype is never inferred from the message.</p>
+<p>The category comes from the native core (negative return codes, see
+<a href="c-abi.html#errors">C ABI</a>); the subtype is never inferred
+from the message.</p>
 </main>
 </body>
 </html>

@@ -43,7 +43,7 @@
         </button>
         <div class="navigation-controls--break ui-kit_mobile-only"></div>
         <div class="library-version" id="library-version">
-0.2.0        </div>
+0.3.0        </div>
         <div class="navigation-controls">
         <ul class="filter-section filter-section_loading" id="filter-section" aria-label="Target filter">
                 <button class="platform-tag platform-selector jvm-like" data-active="" aria-pressed="true"
@@ -107,11 +107,30 @@
   <div class="breadcrumbs"><a href="../../../../index.html">Cantino</a><span class="delimiter">/</span><a href="../../index.html">lol.osm.cantino</a><span class="delimiter">/</span><a href="../index.html">OsmObject</a><span class="delimiter">/</span><span class="current">Relation</span></div>
   <div class="cover ">
     <h1 class="cover"><span><span>Relation</span></span></h1>
-    <div class="platform-hinted " data-platform-hinted="data-platform-hinted"><div class="content sourceset-dependent-content" data-active="" data-togglable=":cantino/release"><div class="symbol monospace"><span class="token keyword">class </span><a href="index.html">Relation</a> : <a href="../index.html">OsmObject</a><span class="source-link-wrapper"><span class="source-link" data-element-type="source-link">(<a href="https://github.com/mvexel/cantino/blob/v0.2.0/android/cantino/src/main/java/lol/osm/cantino/Models.kt#L191">source</a>)</span></span></div><p class="paragraph">A relation. <span data-unresolved-link="lol.osm.cantino/OsmObject.Relation//#lol.osm.cantino.OsmId#kotlin.collections.List[lol.osm.cantino.OsmObject.Member]#kotlin.collections.Map[kotlin.String,kotlin.String]#lol.osm.cantino.ObjectMetadata?/PointingToCallableParameters(1)/">members</span> are in order; the same member may appear more than once.</p></div></div>
+    <div class="platform-hinted " data-platform-hinted="data-platform-hinted"><div class="content sourceset-dependent-content" data-active="" data-togglable=":cantino/release"><div class="symbol monospace"><span class="token keyword">class </span><a href="index.html">Relation</a><span class="token punctuation">(</span><span class="parameters "><span class="parameter "><span class="token keyword">val </span>id<span class="token operator">: </span><a href="../../-osm-id/index.html">OsmId</a><span class="token punctuation">, </span></span><span class="parameter ">members<span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin.collections/-list/index.html">List</a><span class="token operator">&lt;</span><a href="../-member/index.html">OsmObject.Member</a><span class="token operator">&gt;</span><span class="token punctuation">, </span></span><span class="parameter ">tags<span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin.collections/-map/index.html">Map</a><span class="token operator">&lt;</span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-string/index.html">String</a><span class="token punctuation">, </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-string/index.html">String</a><span class="token operator">&gt;</span><span class="token punctuation">, </span></span><span class="parameter "><span class="token keyword">val </span>metadata<span class="token operator">: </span><a href="../../-object-metadata/index.html">ObjectMetadata</a><span class="token operator">?</span></span></span><span class="token punctuation">)</span> : <a href="../index.html">OsmObject</a><span class="source-link-wrapper"><span class="source-link" data-element-type="source-link">(<a href="https://github.com/mvexel/cantino/blob/v0.3.0/android/cantino/src/main/java/lol/osm/cantino/Models.kt#L174">source</a>)</span></span></div><p class="paragraph">A relation. <span data-unresolved-link="lol.osm.cantino/OsmObject.Relation//#lol.osm.cantino.OsmId#kotlin.collections.List[lol.osm.cantino.OsmObject.Member]#kotlin.collections.Map[kotlin.String,kotlin.String]#lol.osm.cantino.ObjectMetadata?/PointingToCallableParameters(1)/">members</span> are in order; the same member may appear more than once.</p></div></div>
   </div>
   <div class="tabbedcontent">
     <div class="tabs-section" tabs-section="tabs-section"><button class="section-tab" data-active="" data-togglable="CONSTRUCTOR,TYPE,PROPERTY,FUNCTION">Members</button></div>
     <div class="tabs-section-body">
+      <div data-togglable="CONSTRUCTOR">
+        <h2 class="tableheader">Constructors</h2>
+        <div class="table"><a data-name="-1888213427%2FConstructors%2F703280004" anchor-label="Relation" id="-1888213427%2FConstructors%2F703280004" data-filterable-set=":cantino/release"></a>
+          <div class="table-row table-row_content" data-togglable="CONSTRUCTOR" data-filterable-current=":cantino/release" data-filterable-set=":cantino/release">
+            <div class="main-subrow keyValue ">
+              <div class=""><span class="inline-flex">
+                  <div><a href="-relation.html"><span><span>Relation</span></span></a></div>
+<span class="anchor-wrapper"><span class="anchor-icon" pointing-to="-1888213427%2FConstructors%2F703280004"></span>
+                    <div class="copy-popup-wrapper "><span class="copy-popup-icon"></span><span>Link copied to clipboard</span></div>
+                  </span></span></div>
+              <div>
+                <div class="title">
+                  <div class="platform-hinted " data-platform-hinted="data-platform-hinted"><div class="content sourceset-dependent-content" data-active="" data-togglable=":cantino/release"><div class="symbol monospace"><span class="token keyword">constructor</span><span class="token punctuation">(</span><span class="parameters "><span class="parameter ">id<span class="token operator">: </span><a href="../../-osm-id/index.html">OsmId</a><span class="token punctuation">, </span></span><span class="parameter ">members<span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin.collections/-list/index.html">List</a><span class="token operator">&lt;</span><a href="../-member/index.html">OsmObject.Member</a><span class="token operator">&gt;</span><span class="token punctuation">, </span></span><span class="parameter ">tags<span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin.collections/-map/index.html">Map</a><span class="token operator">&lt;</span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-string/index.html">String</a><span class="token punctuation">, </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin/-string/index.html">String</a><span class="token operator">&gt;</span><span class="token punctuation">, </span></span><span class="parameter ">metadata<span class="token operator">: </span><a href="../../-object-metadata/index.html">ObjectMetadata</a><span class="token operator">?</span></span></span><span class="token punctuation">)</span></div></div></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
       <div data-togglable="PROPERTY">
         <h2 class="tableheader">Properties</h2>
         <div class="table"><a data-name="-70839064%2FProperties%2F703280004" anchor-label="id" id="-70839064%2FProperties%2F703280004" data-filterable-set=":cantino/release"></a>
@@ -139,7 +158,7 @@
                   </span></span></div>
               <div>
                 <div class="title">
-                  <div class="platform-hinted " data-platform-hinted="data-platform-hinted"><div class="content sourceset-dependent-content" data-active="" data-togglable=":cantino/release"><div class="symbol monospace"><span class="token keyword">val </span><a href="members.html">members</a><span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin.collections/-list/index.html">List</a><span class="token operator">&lt;</span><a href="../-member/index.html">OsmObject.Member</a><span class="token operator">&gt;</span></div><div class="brief "><p class="paragraph">Members in order.</p></div></div></div>
+                  <div class="platform-hinted " data-platform-hinted="data-platform-hinted"><div class="content sourceset-dependent-content" data-active="" data-togglable=":cantino/release"><div class="symbol monospace"><span class="token keyword">val </span><a href="members.html">members</a><span class="token operator">: </span><a href="https://kotlinlang.org/api/core/kotlin-stdlib/kotlin.collections/-list/index.html">List</a><span class="token operator">&lt;</span><a href="../-member/index.html">OsmObject.Member</a><span class="token operator">&gt;</span></div></div></div>
                 </div>
               </div>
             </div>
@@ -237,7 +256,7 @@
                     <a class="footer--link footer--link_external" href="https://github.com/Kotlin/dokka">
                         Dokka
                     </a>
-                    <div>Cantino 0.2.0. Map data © OpenStreetMap contributors (ODbL).</div>
+                    <div>Cantino 0.3.0. Map data © OpenStreetMap contributors (ODbL).</div>
                 </div>
             </div>
         </div>

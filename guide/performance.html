@@ -25,10 +25,49 @@
 <nav><a href="../">Cantino</a> / <a href="index.html">Guide</a> / <a href="../api/">API reference</a></nav>
 <main>
 <h1 id="performance-and-sizes">Performance and sizes</h1>
-<p>All numbers: Pixel 8 (Android 17, arm64), 2026-10-03, Cantino's
-SQLite core through the AAR (ART, JNI, JSON and Kotlin decoding
-included). Raw records in <a
+<p>Unless noted, historical numbers: Pixel 8 (Android 17, arm64),
+2026-10-03, Cantino's SQLite core through the AAR (ART, JNI, JSON and
+Kotlin decoding included). Raw records in <a
 href="https://github.com/mvexel/cantino/blob/main/docs/bench"><code>docs/bench/</code></a>.</p>
+<h2 id="removing-unused-indexes-desktop-comparison-2026-10-04">Removing
+unused indexes: desktop comparison, 2026-10-04</h2>
+<p>Default import of the same cached SLC PBF, Linux x86_64 release
+builds through Python ctypes; three runs per revision. Baseline
+<code>fb66a0c</code>, before removing <code>node_way</code> and
+<code>member_rel</code>; current format 2 after removal. <a
+href="https://github.com/mvexel/cantino/blob/main/docs/bench/2026-10-04-slc-reverse-index-removal-desktop.json">Raw
+samples</a>.</p>
+<table>
+<thead>
+<tr>
+<th>Measure</th>
+<th>Before</th>
+<th>After</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Database bytes</td>
+<td>128,503,808</td>
+<td>102,289,408 (20.4% smaller)</td>
+</tr>
+<tr>
+<td>Median process peak RSS</td>
+<td>135,848 KiB</td>
+<td>108,848 KiB (19.9% lower)</td>
+</tr>
+<tr>
+<td>Median import elapsed</td>
+<td>4.267 s</td>
+<td>3.206 s</td>
+</tr>
+</tbody>
+</table>
+<p>All retained table rows compare identically, with 1,437,753 nodes,
+207,076 ways and 1,473 relations. Elapsed times are directional:
+concurrent builds on the shared host prevent a controlled speed
+comparison. The device measurements below predate this change and remain
+historical evidence.</p>
 <h2 id="city-extract-salt-lake-city">City extract: Salt Lake City</h2>
 <p>SliceOSM bbox <code>-112.10,40.70,-111.80,40.85</code> (about 25×17
 km), 13.1 MB PBF, 1.44M nodes, 207k ways, 1,473 relations. Record: <a
@@ -106,19 +145,84 @@ decoding it (about 0.08 ms per object); the Rust core itself answers the
 </table>
 <p>A small area (0.01°×0.006°, a few blocks) is <code>Ready</code> in
 about 4 s without a basemap and 6 s with one (1 MB basemap).</p>
+<h2 id="large-areas-5050-km">Large areas: 50×50 km</h2>
+<p>Two 50×50 km boxes at opposite ends of mapping density, same phone,
+same day (SliceOSM snapshot 2026-10-04T03:48Z; basemap Protomaps build
+20261003, <code>Extract</code> z0–15). Records: <a
+href="https://github.com/mvexel/cantino/blob/main/docs/bench/2026-10-03-zion-50km-pixel8.json"><code>2026-10-03-zion-50km-pixel8.json</code></a>,
+<a
+href="https://github.com/mvexel/cantino/blob/main/docs/bench/2026-10-03-oberland-50km-pixel8.json"><code>2026-10-03-oberland-50km-pixel8.json</code></a>;
+the SLC row was re-run alongside them (<a
+href="https://github.com/mvexel/cantino/blob/main/docs/bench/2026-10-03-slc-0.2.0-pixel8.json"><code>2026-10-03-slc-0.2.0-pixel8.json</code></a>).</p>
+<table>
+<thead>
+<tr>
+<th>Area</th>
+<th>PBF</th>
+<th>Area file</th>
+<th>POI profile</th>
+<th>Basemap</th>
+<th>Import (in app)</th>
+<th>Peak memory above baseline</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Zion NP + towns, 50×50 km (sparse)</td>
+<td>2.9 MB, 0.5M nodes</td>
+<td>27.5 MB</td>
+<td>2.1 MB</td>
+<td>6.2 MB</td>
+<td>1.6 s</td>
+<td>68 MB</td>
+</tr>
+<tr>
+<td>Salt Lake City, ~25×17 km (city)</td>
+<td>13.1 MB, 1.4M nodes</td>
+<td>128.5 MB</td>
+<td>8.8 MB</td>
+<td>—</td>
+<td>8.2 s</td>
+<td>155 MB</td>
+</tr>
+<tr>
+<td>Bernese Oberland (Thun–Interlaken–Grindelwald), 50×50 km
+(dense)</td>
+<td>26.3 MB, 3.0M nodes</td>
+<td>208.7 MB</td>
+<td>8.3 MB</td>
+<td>35.2 MB</td>
+<td>13.4 s</td>
+<td>204 MB</td>
+</tr>
+</tbody>
+</table>
+<p>Bboxes: Zion <code>-113.333,37.075,-112.767,37.525</code>; Oberland
+<code>7.53,46.465,8.19,46.915</code>. SliceOSM sliced them in 11 s and
+63 s. Queries stay fast at this size (Oberland: <code>get</code> p95 0.1
+ms, bbox p95 0.2 ms, 116-café tag query p95 22 ms).</p>
+<p>Size depends on mapping density far more than on the box: the sparse
+50×50 km area is smaller than 10×10 km of downtown Salt Lake City.
+Import memory grows with node count (about 50–70 bytes per node on top
+of a ~50 MB floor), so a dense 50×50 km area is fine on current phones;
+country-scale areas are not a goal (see the roadmap).</p>
 <h2 id="app-size">App size</h2>
 <p>The AAR is 3.5 MB; each ABI's <code>libcantino.so</code> is about 3.3
 MB (stripped). The native library depends only on libc, libm and libdl.
 MapLibre Native adds about 13 MB per ABI if you use it. Ship only the
-ABIs you need (<code>arm64-v8a</code>, <code>armeabi-v7a</code>,
-<code>x86_64</code>) (<code>abiFilters</code>), or split per ABI with an
-App Bundle.</p>
+ABIs you need (<code>arm64-v8a</code>, <code>x86_64</code>)
+(<code>abiFilters</code>), or split per ABI with an App Bundle.</p>
 <h2 id="rules-of-thumb">Rules of thumb</h2>
 <ul>
 <li>Disk ≈ 10× the PBF size, and ≈ 75 MB per 10×10 km of dense city,
-plus ~6.5 MB of basemap at z15.</li>
-<li>Import memory grows with the area; city scale is fine, country scale
-is not a 0.x goal.</li>
+plus ~6.5 MB of basemap at z15. An <a
+href="downloading.html#keep-only-what-you-need-import-profiles">import
+profile</a> cuts that to ~7% for a POI app.</li>
+<li>Import memory grows with the node count: ~155 MB extra for a city,
+~205 MB for a densely mapped 50×50 km region; country scale is not a 0.x
+goal.</li>
+<li>Size follows mapping density, not area: 50×50 km is 27 MB in the
+Utah desert and 209 MB in the Swiss Alps (basemap 6–35 MB more).</li>
 <li>Keep one store open; <code>open</code> costs more than a query.</li>
 <li>Prefer a tag filter plus bbox over a bare bbox: tag filters are the
 most selective index.</li>

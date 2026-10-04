@@ -73,7 +73,7 @@ time). Show it to users as the data's age. The data never changes after
 that; to get newer data you <strong>refresh</strong>.</p>
 <h2 id="refresh--full-replace">Refresh = full replace</h2>
 <p>A refresh is just another <code>AreaManager.download(id, …)</code>
-for the same ID. There are no incremental updates in 0.2.0: every part
+for the same ID. There are no incremental updates in 0.3.0: every part
 (data and basemap) is downloaded and built again, then swapped in.
 Requesting <code>BasemapSource.None</code> on a refresh removes an
 earlier basemap, because the published area always describes one
@@ -100,13 +100,13 @@ publishes a new file, an already-open store keeps reading the old one
 store and open <code>publishedArea(id).dataFile</code> again. A
 practical rule: remember <code>AreaMetadata.workId</code> (it changes
 with every refresh) and reopen when it differs. The café app's <a
-href="https://github.com/mvexel/cantino/blob/main/android/cafe-app/src/main/java/lol/osm/cantino/cafe/StoreWorker.kt"><code>StoreWorker</code></a>
+href="https://github.com/mvexel/cantino/blob/main/android/cafe-app/src/main/java/lol/osm/cantino/cafe/CafeStore.kt"><code>CafeStore</code></a>
 does exactly that.</p>
 <h2 id="what-cantino-is-not">What Cantino is not</h2>
 <ul>
 <li>Not a renderer: draw the basemap with MapLibre Native and your own
 data on top (GeoJSON sources, for example).</li>
-<li>Not an editor: 0.2.0 is read-only.</li>
+<li>Not an editor: 0.3.0 is read-only.</li>
 <li>Not exact geometry: bbox queries return <strong>candidates</strong>
 (see <a href="querying.html">Querying</a>).</li>
 <li>Not an interpreter of tags: <code>opening_hours</code>,
