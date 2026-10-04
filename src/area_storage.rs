@@ -84,7 +84,7 @@
 //! fsynced before the journal is written, so a power loss right after the
 //! commit point cannot lose a staged file whose rename into staging was not
 //! yet durable (process kills were already safe without it).
-use crate::{Error, Result};
+use crate::{Error, ImportProfile, Result};
 use serde::Serialize;
 use serde_json::Value;
 use std::{
@@ -290,10 +290,15 @@ pub struct SidecarBbox {
 }
 
 /// The import report (same shape as [`crate::ImportReport`]).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct SidecarReport {
     pub counts: SidecarCounts,
     pub database_bytes: i64,
+    /// The import profile the data was filtered with (normalized), or none
+    /// for a full import. Written by the adapters since 0.3.0; absent from
+    /// 0.2.0 sidecars, and omitted when none, as the adapters write it.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub profile: Option<ImportProfile>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
@@ -372,6 +377,15 @@ impl Sidecar {
                         relations: counts.get("relations")?.as_i64()?,
                     },
                     database_bytes: report.get("database_bytes")?.as_i64()?,
+                    // Absent or null: a full import. Otherwise it must be a
+                    // valid profile ([`ImportProfile::normalized`] accepts
+                    // it); it is kept in normalized form.
+                    profile: optional(report.get("profile"), |profile| {
+                        serde_json::from_value::<ImportProfile>(profile.clone())
+                            .ok()?
+                            .normalized()
+                            .ok()
+                    })?,
                 })
             })?,
             basemap,

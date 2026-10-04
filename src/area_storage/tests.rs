@@ -652,6 +652,71 @@ fn sidecar_parsing_follows_kotlin_from_json() {
     assert!(Sidecar::parse(&text.replace(r#""name":"#, r#""nom":"#)).is_none());
 }
 
+/// The report's import profile (written by the adapters since 0.3.0) is
+/// parsed, normalized and serialized back, so `cantino_area_published`
+/// returns it; absent or null is a full import, a malformed one makes the
+/// metadata unknown (and is refused at staging).
+#[test]
+fn sidecar_report_keeps_the_import_profile() {
+    let version = Version::new(false);
+    let plain = version.sidecar();
+    let with_profile = |profile: &str| {
+        plain.replace(
+            r#""database_bytes":20}"#,
+            &format!(r#""database_bytes":20,"profile":{profile}}}"#),
+        )
+    };
+    assert_ne!(with_profile("null"), plain, "the fixture has this report");
+
+    // Round trip: parsed (kinds normalized) and serialized back in the report.
+    let parsed = Sidecar::parse(&with_profile(
+        r#"{"keep":[{"kinds":"rn","key":"amenity","values":["cafe"]},{"kinds":"w","key":"highway"}]}"#,
+    ))
+    .unwrap();
+    let profile = parsed.report.as_ref().unwrap().profile.as_ref().unwrap();
+    assert_eq!(profile.keep[0].kinds, "nr");
+    assert_eq!(profile.keep[1].values, None);
+    let json = serde_json::to_value(&parsed).unwrap();
+    assert_eq!(
+        json["report"]["profile"],
+        serde_json::json!({"keep":[{"kinds":"nr","key":"amenity","values":["cafe"]},{"kinds":"w","key":"highway"}]})
+    );
+    assert_eq!(
+        Sidecar::parse(&json.to_string()).as_ref(),
+        Some(&parsed),
+        "the serialized form parses to the same sidecar"
+    );
+
+    // Absent or null: a full import, and no key in the serialized report.
+    for text in [plain.clone(), with_profile("null")] {
+        let parsed = Sidecar::parse(&text).unwrap();
+        assert_eq!(parsed.report.as_ref().unwrap().profile, None);
+        let json = serde_json::to_value(&parsed).unwrap();
+        assert!(json["report"].get("profile").is_none(), "{json}");
+    }
+
+    // Malformed (wrong shape, or a profile the core would refuse): unknown
+    // metadata, and refused as staged metadata.
+    let directory = tempfile::tempdir().unwrap();
+    let storage = AreaStorage::new(directory.path());
+    for profile in [
+        r#""poi""#,
+        r#"{}"#,
+        r#"{"keep":[]}"#,
+        r#"{"keep":[{"kinds":"x","key":"amenity"}]}"#,
+        r#"{"keep":[{"kinds":"n","key":""}]}"#,
+        r#"{"keep":[{"kinds":"n","key":"amenity","values":[]}]}"#,
+        r#"{"keep":[{"kinds":"n","key":"amenity","values":"cafe"}]}"#,
+    ] {
+        let text = with_profile(profile);
+        assert!(Sidecar::parse(&text).is_none(), "{profile}");
+        assert!(matches!(
+            storage.write_staged_metadata(AREA, NEW_RUN, &text),
+            Err(Error::Invalid(_))
+        ));
+    }
+}
+
 /// A basemap-only version publishes without data and removes data an older
 /// version had; a later full version brings data back. The journal of a
 /// version with data keeps its 0.2.0 bytes; `data:false` appears otherwise.

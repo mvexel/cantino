@@ -123,9 +123,9 @@ fn reads_a_published_0_2_0_area() {
         Some("2026-10-03T20:30:01Z")
     );
     assert_eq!(metadata.imported_at_millis, 1_759_523_401_000);
-    assert_eq!(metadata.report.unwrap().counts.nodes, 15912);
+    assert_eq!(metadata.report.as_ref().unwrap().counts.nodes, 15912);
     assert_eq!(
-        metadata.report.unwrap().database_bytes,
+        metadata.report.as_ref().unwrap().database_bytes,
         OLD_DATA.len() as i64
     );
     let basemap = metadata.basemap.expect("basemap metadata");
