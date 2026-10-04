@@ -9,7 +9,7 @@ byte**.
 | Runner | Status | Drives |
 |---|---|---|
 | Rust, `tests/parity.rs` | done, part of `cargo test` (so `scripts/check.sh`) | the C ABI (`include/cantino.h`) as a foreign caller |
-| Kotlin, `android/cantino` instrumented test | planned (separate slice) | the public Kotlin API (`OsmStore`, ...) |
+| Kotlin, `ParityTest` in `android/cantino` androidTest | done (159 calls run, 18 `abi_only` skipped) | the public Kotlin API (`OsmStore`, `PmtilesInfo`), internal `SliceProtocol`/`NativeBridge` where none exists; `PmtilesInfo` now carries every `basemap_info` field |
 | Swift | planned (separate slice) | the public Swift API |
 
 The C ABI's own JSON, canonicalised, is the reference: `expected.json` is
