@@ -136,7 +136,7 @@ class OsmStoreTest {
             assertEquals(objects[0], objects[3])
             assertTrue(store.get(emptyList()).isEmpty())
             val tooMany = List(OsmStore.MAX_BATCH + 1) { OsmId(OsmKind.NODE, 1) }
-            assertThrows(CantinoException::class.java) { store.get(tooMany) }
+            assertThrows(CantinoException.InvalidArgument::class.java) { store.get(tooMany) }
             assertEquals(OsmStore.MAX_BATCH, store.get(tooMany.drop(1)).count { it != null })
         }
     }
@@ -153,7 +153,7 @@ class OsmStoreTest {
             assertTrue(
                 store.query(Query(tags = listOf(TagFilter.Exists("amenity"), TagFilter.NotExists("name")))).isEmpty(),
             )
-            val error = assertThrows(CantinoException::class.java) {
+            val error = assertThrows(CantinoException.InvalidArgument::class.java) {
                 store.query(Query(tags = listOf(TagFilter.NotExists("name"))))
             }
             assertTrue(error.message!!.contains("NotExists"))
@@ -166,9 +166,11 @@ class OsmStoreTest {
     @Test
     fun invalidQueryFailsAndStoreStaysUsable() = onWorker {
         OsmStore.open(importFixture().path).use { store ->
-            assertThrows(CantinoException::class.java) {
+            assertThrows(CantinoException.InvalidArgument::class.java) {
                 store.query(Query(bbox = Bbox(west = 10.0, south = 0.0, east = -10.0, north = 1.0)))
             }
+            assertThrows(CantinoException.InvalidArgument::class.java) { store.query(Query(limit = 0)) }
+            assertThrows(CantinoException.InvalidArgument::class.java) { store.get(OsmId(OsmKind.NODE, 0)) }
             assertEquals(OsmId(OsmKind.WAY, 1), store.get(OsmId(OsmKind.WAY, 1))!!.id)
         }
     }
@@ -182,13 +184,41 @@ class OsmStoreTest {
             val error = other.submit<Throwable?> {
                 runCatching { store.get(OsmId(OsmKind.NODE, 1)) }.exceptionOrNull()
             }.get()
-            assertTrue(error is CantinoException)
+            assertTrue("$error", error is CantinoException.WrongThread)
             assertTrue(error!!.message!!.contains("different thread"))
             owner.submit { store.close() }.get()
         } finally {
             owner.shutdown()
             other.shutdown()
         }
+    }
+
+    @Test
+    fun openFailuresAreTypedByCause() = onWorker {
+        val directory = File(target.cacheDir, "osm-open-${System.nanoTime()}").apply { mkdirs() }
+        // A path that does not exist: the environment (Io).
+        val missing = assertThrows(CantinoException.Io::class.java) { OsmStore.open(File(directory, "missing.sqlite")) }
+        assertTrue(missing.message!!.isNotEmpty())
+        // A file that exists but is no area (the OSM XML input): InvalidFile.
+        val xml = File(directory, "snapshot.osm")
+        context.assets.open("snapshot.osm").use { source -> xml.outputStream().use { source.copyTo(it) } }
+        assertThrows(CantinoException.InvalidFile::class.java) { OsmStore.open(xml) }
+        // An empty file: SQLite reads it as an empty database without the
+        // Cantino application id, also InvalidFile.
+        val empty = File(directory, "empty.sqlite").apply { writeBytes(ByteArray(0)) }
+        assertThrows(CantinoException.InvalidFile::class.java) { OsmStore.open(empty) }
+        // A corrupt import input is InvalidFile, a missing one Io.
+        val garbage = File(directory, "garbage.pbf").apply { writeBytes(ByteArray(64) { 0x5a }) }
+        assertThrows(CantinoException.InvalidFile::class.java) {
+            OsmStore.importArea(garbage, File(directory, "area.sqlite"))
+        }
+        assertThrows(CantinoException.Io::class.java) {
+            OsmStore.importArea(File(directory, "nope.pbf"), File(directory, "area.sqlite"))
+        }
+        // Not PMTiles: InvalidFile from the basemap validator.
+        assertThrows(CantinoException.InvalidFile::class.java) { PmtilesInfo.read(xml) }
+        // Every subtype is a CantinoException (one catch for all).
+        assertTrue(runCatching { OsmStore.open(empty) }.exceptionOrNull() is CantinoException)
     }
 
     @Test

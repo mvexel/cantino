@@ -10,8 +10,9 @@ import org.json.JSONObject
  * adapter gets exactly the same request bodies, URL layout and progress rules.
  *
  * All functions are pure and may be called from any thread. Invalid input
- * (bad bbox, non-UUID job response, non-JSON status) throws
- * [CantinoException].
+ * (bad bbox or base URL, non-UUID job response, non-JSON status) throws
+ * [CantinoException.InvalidArgument]; the worker decides from the call site
+ * whether that is the app's request or the server's answer.
  */
 internal object SliceProtocol {
     /** POST [body] (JSON) to [url]; the answer body is the job ID text. */
@@ -26,16 +27,16 @@ internal object SliceProtocol {
     data class Progress(val complete: Boolean, val fraction: Double?, val sizeBytes: Long?, val timestamp: String?)
 
     fun jobRequest(base: String?, bbox: Bbox, name: String): JobRequest =
-        JSONObject(native { NativeBridge.sliceJobRequest(base, bbox.toJson().toString(), name) })
+        JSONObject(NativeBridge.sliceJobRequest(base, bbox.toJson().toString(), name))
             .let { JobRequest(it.getString("url"), it.getString("body")) }
 
     /** Parses a submit response, or re-validates a persisted job ID. */
     fun job(base: String?, response: String): Job =
-        JSONObject(native { NativeBridge.sliceJob(base, response) })
+        JSONObject(NativeBridge.sliceJob(base, response))
             .let { Job(it.getString("job_id"), it.getString("status_url"), it.getString("download_url")) }
 
     fun progress(status: String): Progress =
-        JSONObject(native { NativeBridge.sliceProgress(status) }).let {
+        JSONObject(NativeBridge.sliceProgress(status)).let {
             Progress(
                 complete = it.getBoolean("complete"),
                 fraction = it.optNullableDouble("fraction"),

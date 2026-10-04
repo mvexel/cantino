@@ -234,8 +234,8 @@ internal fun osmObjectFromJson(json: JSONObject): OsmObject {
  *
  * The constructor does not validate. An invalid box (wrong order, outside
  * ±180/±90, not finite) is rejected where it is used: [OsmStore.query]
- * throws [CantinoException], [AreaManager.download] ends in a
- * non-retryable [AreaState.Failed].
+ * throws [CantinoException.InvalidArgument], [AreaManager.download] ends in a
+ * non-retryable [AreaState.Failed] with [FailureReason.INVALID_REQUEST].
  *
  * @property west Western edge, longitude in degrees (-180..180).
  * @property south Southern edge, latitude in degrees (-90..90).
@@ -318,8 +318,8 @@ public sealed interface TagFilter {
      * Absence has no index, so this filter never drives a query: it is
      * checked on the candidates another filter produces. A [Query] needs at
      * least one [Exists] or [Equals] filter, or a [Query.bbox], next to it; a
-     * query whose only filters are `NotExists` throws [CantinoException]
-     * instead of scanning the whole area.
+     * query whose only filters are `NotExists` throws
+     * [CantinoException.InvalidArgument] instead of scanning the whole area.
      *
      * @property key Tag key, raw (case-sensitive).
      */
@@ -352,7 +352,8 @@ internal fun TagFilter.toJson(): JSONObject = when (this) {
  * [limit] is the last one.
  *
  * [maxCandidates] bounds the spatial candidates a bbox-driven query collects
- * (all kinds together). Exceeding it throws [CantinoException]; results
+ * (all kinds together). Exceeding it throws
+ * [CantinoException.InvalidArgument]; results
  * are never silently truncated. Narrow the box or add a tag filter.
  *
  * @property tags Tag filters, all of which must match (AND). Empty: no tag condition.
@@ -361,7 +362,7 @@ internal fun TagFilter.toJson(): JSONObject = when (this) {
  *   (the last [OsmObject.id] of the previous page). Null for the first page.
  * @property limit Maximum objects per call, 1..10 000.
  * @property maxCandidates Maximum spatial candidates a bbox-driven query may
- *   collect before it fails with [CantinoException].
+ *   collect before it fails with [CantinoException.InvalidArgument].
  */
 public data class Query(
     val tags: List<TagFilter> = emptyList(),

@@ -4,6 +4,7 @@ import ctypes as c
 import json
 import pathlib
 import tempfile
+import threading
 import sys
 
 lib = c.CDLL(sys.argv[1])
@@ -21,6 +22,11 @@ lib.cantino_free.argtypes = [ptr]
 lib.cantino_slice_job_request.argtypes = [string,string,string,c.POINTER(ptr),c.POINTER(ptr)]
 lib.cantino_slice_job.argtypes = [string,string,c.POINTER(ptr),c.POINTER(ptr)]
 lib.cantino_slice_progress.argtypes = [string,c.POINTER(ptr),c.POINTER(ptr)]
+lib.cantino_last_error_code.argtypes = []
+lib.cantino_last_error_code.restype = c.c_int32
+# CANTINO_ERROR_* (include/cantino.h): the category of the last failed call
+# on the calling thread.
+NONE, INVALID_ARGUMENT, INVALID_FILE, IO, WRONG_THREAD, INTERNAL = range(6)
 
 def call(function, *args):
     result, error = ptr(), ptr()
@@ -44,6 +50,14 @@ with tempfile.TemporaryDirectory() as directory:
     options = b'{"map_size":1073741824,"sort_pairs":3,"preserve_untagged_metadata":true}'
     _, report = call(lib.cantino_import,str(fixture).encode(),area,options)
     assert report['database_bytes'] > 0
+    # Open failures: a missing file is IO, a file that is not an area (the
+    # XML fixture) is INVALID_FILE.
+    for path, expected in [(str(pathlib.Path(directory)/'missing.sqlite'), IO), (str(fixture), INVALID_FILE)]:
+        handle, error = ptr(), ptr()
+        assert lib.cantino_open(path.encode(),c.byref(handle),c.byref(error)) == -1
+        assert lib.cantino_last_error_code() == expected, (path, lib.cantino_last_error_code())
+        assert not handle.value
+        lib.cantino_free(error)
     handle, error = ptr(), ptr()
     assert lib.cantino_open(area,c.byref(handle),c.byref(error)) == 0
     assert not error.value
@@ -57,9 +71,23 @@ with tempfile.TemporaryDirectory() as directory:
             call(lib.cantino_query,handle,b'{malformed')
             raise AssertionError('expected query error')
         except RuntimeError:
-            pass
-        # A failed query leaves the store usable.
+            assert lib.cantino_last_error_code() == INVALID_ARGUMENT
+        # The handle is confined to this thread: another thread gets -1 and
+        # WRONG_THREAD (in its own thread-local code); the store is untouched.
+        seen = []
+        def foreign():
+            out, err = ptr(), ptr()
+            status = lib.cantino_get(handle,0,1,c.byref(out),c.byref(err))
+            seen.append((status, lib.cantino_last_error_code()))
+            lib.cantino_free(out)
+            lib.cantino_free(err)
+        worker = threading.Thread(target=foreign)
+        worker.start()
+        worker.join()
+        assert seen == [(-1, WRONG_THREAD)], seen
+        # A failed query leaves the store usable; a success resets the code.
         assert call(lib.cantino_get,handle,1,1)[1]['nodes'] == [1,2,1]
+        assert lib.cantino_last_error_code() == NONE
         # NotExists: a post-check that needs a driver.
         _, unnamed = call(lib.cantino_query,handle,b'{"tags":[{"Exists":"highway"},{"NotExists":"name"}]}')
         assert [o['id'] for o in unnamed] == [1,2]

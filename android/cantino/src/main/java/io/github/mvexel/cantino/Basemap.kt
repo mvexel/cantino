@@ -173,11 +173,13 @@ public class PmtilesInfo internal constructor(
     public companion object {
         /**
          * Validates [file] as PMTiles v3 (magic, version, every section inside
-         * the file) and reads its header. Throws [CantinoException] if it
-         * is missing or not one. Synchronous file I/O (small reads); any thread.
+         * the file) and reads its header. Throws [CantinoException.Io] if
+         * the file is missing or unreadable, [CantinoException.InvalidFile]
+         * if it is not a valid PMTiles v3 archive. Synchronous file I/O
+         * (small reads); any thread.
          */
         @JvmStatic
-        public fun read(file: File): PmtilesInfo = JSONObject(native { NativeBridge.basemapInfo(file.path) }).let { json ->
+        public fun read(file: File): PmtilesInfo = JSONObject(NativeBridge.basemapInfo(file.path)).let { json ->
             val b = json.getJSONArray("bounds")
             PmtilesInfo(
                 minZoom = json.getInt("min_zoom"),
@@ -336,10 +338,15 @@ internal class BasemapExtract(
         }
     }
 
-    /** Engine rejections (bad archive, unsupported format) are permanent: retrying the same source cannot help. */
+    /**
+     * Engine rejections are permanent: retrying the same source cannot help.
+     * The reason comes from the native category: a bad or unsupported
+     * archive is INVALID_DATA, zooms/bbox the archive cannot serve are
+     * INVALID_REQUEST, a staging write that fails is STORAGE.
+     */
     private inline fun <T> engine(block: () -> T): T = try {
-        native(block)
+        block()
     } catch (error: CantinoException) {
-        throw DownloadFailure.Permanent("basemap extract: ${error.message}", error)
+        throw DownloadFailure.Permanent("basemap extract: ${error.message}", error.failureReason(), error)
     }
 }

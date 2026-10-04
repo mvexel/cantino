@@ -17,7 +17,7 @@ OsmStore.open(area.dataFile).use { store ->                       // on a worker
 
 **An `OsmStore` belongs to the thread that opened it.** Every call
 (`get`, `query`, `wayCoordinates`, `representativePoint`, `close`) must come from that thread; any other thread gets a
-`CantinoException`, never corrupted state. Calls are synchronous.
+`CantinoException.WrongThread`, never corrupted state. Calls are synchronous.
 
 | Pattern | Code |
 | --- | --- |
@@ -41,13 +41,13 @@ No filters at all pages through every object.
 | --- | --- |
 | `TagFilter.Equals(k, v)` | Tag `k` has exactly value `v`. Raw strings: case-sensitive, no trimming |
 | `TagFilter.Exists(k)` | Tag `k` is present, any value (an empty value counts) |
-| `TagFilter.NotExists(k)` | Tag `k` is absent. **Never drives**: it is checked on the candidates of another filter. Needs an `Exists`/`Equals` filter or a `bbox` next to it; alone it throws `CantinoException` (it would otherwise scan the whole area) |
+| `TagFilter.NotExists(k)` | Tag `k` is absent. **Never drives**: it is checked on the candidates of another filter. Needs an `Exists`/`Equals` filter or a `bbox` next to it; alone it throws `CantinoException.InvalidArgument` (it would otherwise scan the whole area) |
 | Several tag filters | AND. Index-driven from the most selective filter; never a full scan |
 | `bbox` on **tagged nodes** | Exact: the point is inside the box |
 | `bbox` on **ways and relations** | **Candidates**: their bounding box intersects the box. A way crossing the box with no node inside is included; one that merely bends around the box may be too |
 | `bbox` on **untagged nodes** | **Never returned**: way vertices are not spatially indexed. Reach them through their ways (`store.wayCoordinates(wayId)` for coordinates, or `store.get(way.nodeIds.map { OsmId(OsmKind.NODE, it) })` for the node objects) |
 | Objects at the area's edge | Bounds cover only members present in the extract, so clipped objects get smaller boxes and can be missed near the edge |
-| `maxCandidates` (100 000) | A bbox that selects more spatial candidates throws `CantinoException`; results are never silently truncated. Narrow the box or add a tag filter |
+| `maxCandidates` (100 000) | A bbox that selects more spatial candidates throws `CantinoException.InvalidArgument`; results are never silently truncated. Narrow the box or add a tag filter |
 | `limit` | 1..10 000 per call (default 100) |
 
 There is no "OR" and no value pattern matching: run several queries and merge,
@@ -105,7 +105,7 @@ val objects: List<OsmObject?> = store.get(listOf(id1, id2, id3))  // input order
 | --- | --- |
 | `wayCoordinates(wayId)` | The way's node coordinates in order, repeats kept (a closed way ends where it starts), one native call. A **null entry** is a node outside the area: do not draw across it. Null for a way not in the area |
 | `representativePoint(id)` | One point for a marker, a label or a distance origin (see below). Null when the object, or all of its geometry, is outside the area |
-| `get(ids)` | One entry per ID in input order, null where the object is not in the area. One JNI crossing for the list; at most `OsmStore.MAX_BATCH` (10 000) IDs, more throws `CantinoException` |
+| `get(ids)` | One entry per ID in input order, null where the object is not in the area. One JNI crossing for the list; at most `OsmStore.MAX_BATCH` (10 000) IDs, more throws `CantinoException.InvalidArgument` |
 
 `Coordinate` holds `latE7`/`lonE7` (exact integers) and `lat`/`lon` in degrees.
 
@@ -136,7 +136,29 @@ Absent source fields are stored as zero/empty, so a zero may mean "unknown".
 
 ## Errors
 
+Native failures are subtypes of the sealed `CantinoException`; catch the one
+you can act on, or `CantinoException` for all. The store stays usable after
+any of them.
+
 | Exception | When |
 | --- | --- |
-| `CantinoException` | Missing or incompatible file on `open`, invalid query (limit, bbox, only `NotExists` filters), too many candidates, a batch `get` over 10 000 IDs, wrong thread, I/O. The store stays usable after a failed query |
-| `IllegalStateException` | Store already closed |
+| `CantinoException.InvalidArgument` | Invalid query (limit outside 1..10 000, invalid bbox, only `NotExists` filters and no bbox), more spatial candidates than `maxCandidates`, a batch `get` over 10 000 IDs, a non-positive ID |
+| `CantinoException.InvalidFile` | `open` of a file that is not an area database or of an incompatible format version (re-import / re-download); `importArea` of a corrupt, truncated or non-snapshot input; `PmtilesInfo.read` of a file that is not PMTiles v3 |
+| `CantinoException.Io` | A missing file (`open` of a path that does not exist, a missing import input), permissions, a full disk, read/write errors |
+| `CantinoException.WrongThread` | A call from a thread other than the store's owner |
+| `IllegalStateException` | Store already closed; also an internal error of the core (a bug, message "Cantino internal error ...": report it) |
+
+```kotlin
+val store = try {
+    OsmStore.open(file)
+} catch (e: CantinoException.InvalidFile) {
+    redownload()   // not an area, or an old format version
+    return
+} catch (e: CantinoException.Io) {
+    showError("cannot read offline data: ${e.message}")
+    return
+}
+```
+
+The category comes from the native core (`cantino_last_error_code`, see
+[C ABI](c-abi.md#errors)); the subtype is never inferred from the message.

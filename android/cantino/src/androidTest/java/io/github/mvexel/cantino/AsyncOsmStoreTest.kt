@@ -48,7 +48,7 @@ class AsyncOsmStoreTest {
 
     @Test
     fun openFailureLeavesNoStore() = runBlocking {
-        assertThrows(CantinoException::class.java) {
+        assertThrows(CantinoException.Io::class.java) {
             runBlocking { withContext(Dispatchers.IO) { AsyncOsmStore.open(File(target.cacheDir, "missing.sqlite")) } }
         }
         Unit

@@ -76,7 +76,8 @@ impl Compression {
     pub fn check_internal(self) -> Result<()> {
         match self {
             Self::None | Self::Gzip => Ok(()),
-            other => Err(Error::Invalid(format!(
+            // A property of the archive (InvalidFile), not of the caller's request.
+            other => Err(Error::Format(format!(
                 "unsupported PMTiles internal compression {other:?} (only none and gzip are supported)"
             ))),
         }

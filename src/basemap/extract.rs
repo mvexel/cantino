@@ -276,7 +276,8 @@ impl ExtractPlan {
     fn on_header(&mut self, bytes: &[u8], fetch: &mut Vec<ByteRange>) -> Result<()> {
         let source = Header::parse(bytes)?;
         if !source.clustered {
-            return Err(Error::Invalid(
+            // A property of the source file, not of the request.
+            return Err(Error::Format(
                 "source archive must be clustered for extracts".into(),
             ));
         }

@@ -54,17 +54,27 @@ public class AsyncOsmStore private constructor(
      * is cancelled meanwhile. Do not let the [OsmStore] escape [block]: it
      * is only valid on the owner thread, and not after [close]. Throws
      * [IllegalStateException] if this store is closed, and whatever [block]
-     * throws ([CantinoException] for native errors).
+     * throws (the [CantinoException] subtypes each [OsmStore] method
+     * documents; never [CantinoException.WrongThread], since [block] runs on
+     * the owner thread).
      */
     public suspend fun <T> withStore(block: (OsmStore) -> T): T {
         check(!closed.get()) { "AsyncOsmStore is closed" }
         return withContext(dispatcher) { block(store) }
     }
 
-    /** Suspending [OsmStore.get]: the object with [id], or null if it is not in this area. */
+    /**
+     * Suspending [OsmStore.get]: the object with [id], or null if it is not
+     * in this area. Throws [CantinoException.InvalidArgument] for a
+     * non-positive ID, [IllegalStateException] if closed.
+     */
     public suspend fun get(id: OsmId): OsmObject? = withStore { it.get(id) }
 
-    /** Suspending [OsmStore.query]; see [Query] for ordering, pagination and candidate semantics. */
+    /**
+     * Suspending [OsmStore.query]; see [Query] for ordering, pagination and
+     * candidate semantics. Throws [CantinoException.InvalidArgument] for an
+     * invalid query (see [OsmStore.query]), [IllegalStateException] if closed.
+     */
     public suspend fun query(query: Query): List<OsmObject> = withStore { it.query(query) }
 
     /**
@@ -87,9 +97,10 @@ public class AsyncOsmStore private constructor(
     public companion object {
         /**
          * Starts the owner thread and opens the area database at [file] on it
-         * (see [OsmStore.open]). Throws [CantinoException] if the file is
-         * missing, not an area database or of an incompatible format version;
-         * no thread is left behind in that case.
+         * (see [OsmStore.open]). Throws [CantinoException.Io] if the file is
+         * missing or unreadable, [CantinoException.InvalidFile] if it is not
+         * an area database or of an incompatible format version; no thread is
+         * left behind in that case.
          */
         public suspend fun open(file: File): AsyncOsmStore {
             val executor = Executors.newSingleThreadExecutor { runnable ->

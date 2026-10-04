@@ -104,7 +104,12 @@ internal class AreaDownloadWorker(context: Context, parameters: WorkerParameters
                 })
             }
             if (progress.sizeBytes != null && bytes != progress.sizeBytes) {
-                throw DownloadFailure.Transient("download size $bytes differs from SliceOSM's ${progress.sizeBytes}")
+                // A complete HTTP body (its own length matched) that is not
+                // the file the job announced: the server's inconsistency.
+                throw DownloadFailure.Transient(
+                    "download size $bytes differs from SliceOSM's ${progress.sizeBytes}",
+                    FailureReason.SERVER,
+                )
             }
 
             report(PHASE_IMPORTING)
@@ -113,8 +118,9 @@ internal class AreaDownloadWorker(context: Context, parameters: WorkerParameters
                     // Into the staging directory: nothing is published here.
                     OsmStore.importArea(staging.path, storage.stagedArea(request.areaId, id).path, config.importOptions)
                 } catch (error: CantinoException) {
-                    // Bad or truncated PBF, or a full disk. The old area is intact.
-                    throw DownloadFailure.Permanent("import failed: ${error.message}", error)
+                    // Bad or truncated PBF (InvalidFile → INVALID_DATA), or a
+                    // full disk (Io → STORAGE). The old area is intact.
+                    throw DownloadFailure.Permanent("import failed: ${error.message}", error.failureReason(), error)
                 }
             }
             AreaTestHooks.afterImport?.invoke()
@@ -137,7 +143,7 @@ internal class AreaDownloadWorker(context: Context, parameters: WorkerParameters
             return Result.success(workDataOf(KEY_METADATA to metadata.toJson().toString()))
         } catch (failure: DownloadFailure.Permanent) {
             storage.clearCheckpoint(request.areaId, id)
-            return failed(failure.message, retryable = false)
+            return failed(failure.message, retryable = false, failure.reason)
         } catch (failure: DownloadFailure) {
             // Transient: keep the checkpoint so the next run resumes the same
             // job. A job whose file vanished (JobGone from the download) must
@@ -147,7 +153,7 @@ internal class AreaDownloadWorker(context: Context, parameters: WorkerParameters
                 Result.retry()
             } else {
                 storage.clearCheckpoint(request.areaId, id)
-                failed(failure.message, retryable = true)
+                failed(failure.message, retryable = true, failure.reason)
             }
         } finally {
             // Also runs on cancellation. A killed process skips this; the next
@@ -184,7 +190,7 @@ internal class AreaDownloadWorker(context: Context, parameters: WorkerParameters
             } catch (error: java.io.IOException) {
                 // Past the commit point: the next run's recover() finishes
                 // the renames and then finds its area published.
-                throw DownloadFailure.Transient("publishing interrupted: ${error.message}", error)
+                throw DownloadFailure.Transient("publishing interrupted: ${error.message}", FailureReason.STORAGE, error)
             }
         }
     }
@@ -209,7 +215,13 @@ internal class AreaDownloadWorker(context: Context, parameters: WorkerParameters
                 val info = try {
                     withContext(Dispatchers.IO) { PmtilesInfo.read(output) }
                 } catch (error: CantinoException) {
-                    throw DownloadFailure.Permanent("basemap ${source.url} is not a valid PMTiles v3 archive: ${error.message}", error)
+                    // InvalidFile (not PMTiles v3) → INVALID_DATA; Io (the
+                    // staged file unreadable) → STORAGE.
+                    throw DownloadFailure.Permanent(
+                        "basemap ${source.url} is not a valid PMTiles v3 archive: ${error.message}",
+                        error.failureReason(),
+                        error,
+                    )
                 }
                 BasemapMetadata(BasemapKind.URL, source.url, output.length(), info.addressedTiles, info.minZoom, info.maxZoom, 1, bytes)
             }
@@ -223,7 +235,13 @@ internal class AreaDownloadWorker(context: Context, parameters: WorkerParameters
                     output,
                     throttledPhase { phase, bytes, total -> report(PHASE_BASEMAP, bytes = bytes, total = total, basemapPhase = phase) },
                 )
-                val info = withContext(Dispatchers.IO) { PmtilesInfo.read(output) }
+                val info = try {
+                    withContext(Dispatchers.IO) { PmtilesInfo.read(output) }
+                } catch (error: CantinoException) {
+                    // The engine wrote and validated this file itself, so
+                    // this is storage trouble or a bug; classify, never crash.
+                    throw DownloadFailure.Permanent("extracted basemap is unreadable: ${error.message}", error.failureReason(), error)
+                }
                 BasemapMetadata(
                     BasemapKind.EXTRACT,
                     source.planetUrl,
@@ -294,7 +312,7 @@ internal class AreaDownloadWorker(context: Context, parameters: WorkerParameters
                 job = null
             }
         }
-        throw DownloadFailure.Transient("SliceOSM lost the job twice")
+        throw DownloadFailure.Transient("SliceOSM lost the job twice", FailureReason.SERVER)
     }
 
     private suspend fun awaitSlice(
@@ -309,18 +327,32 @@ internal class AreaDownloadWorker(context: Context, parameters: WorkerParameters
             report(PHASE_SLICING, fraction = progress.fraction)
             if (progress.complete) return progress
             if (SystemClock.elapsedRealtime() - started > config.maxSliceWaitMillis) {
-                throw DownloadFailure.Transient("SliceOSM job ${job.id} still running after ${config.maxSliceWaitMillis} ms")
+                throw DownloadFailure.Transient(
+                    "SliceOSM job ${job.id} still running after ${config.maxSliceWaitMillis} ms",
+                    FailureReason.SERVER,
+                )
             }
             delay(config.pollIntervalMillis)
         }
     }
 
-    /** Maps a protocol (Rust) rejection onto the failure classes. */
+    /**
+     * Maps a protocol (Rust) rejection onto the failure classes. The core
+     * reports every bad protocol input as InvalidArgument; whose fault it is
+     * depends on the call site, so the reason follows [transient]: building
+     * the submit request from the app's bbox/name (permanent) fails because
+     * the request is invalid, reading a server answer (transient) fails
+     * because the server sent garbage.
+     */
     private inline fun <T> protocol(transient: Boolean = false, block: () -> T): T = try {
         block()
     } catch (error: CantinoException) {
         val message = "SliceOSM protocol: ${error.message}"
-        throw if (transient) DownloadFailure.Transient(message, error) else DownloadFailure.Permanent(message, error)
+        throw if (transient) {
+            DownloadFailure.Transient(message, FailureReason.SERVER, error)
+        } else {
+            DownloadFailure.Permanent(message, FailureReason.INVALID_REQUEST, error)
+        }
     }
 
     private suspend fun report(
@@ -459,8 +491,19 @@ internal class AreaDownloadWorker(context: Context, parameters: WorkerParameters
         private fun megabytes(bytes: Long) = "%.1f".format(java.util.Locale.ROOT, bytes / 1e6)
     }
 
-    private fun failed(message: String?, retryable: Boolean) =
-        Result.failure(workDataOf(KEY_MESSAGE to (message ?: "download failed"), KEY_RETRYABLE to retryable))
+    /**
+     * The failed result. [reason] travels as its enum name ([KEY_REASON]);
+     * [AreaManager] reads it back, and a missing or unknown name (a run that
+     * threw, or one recorded by an older version) becomes
+     * [FailureReason.UNKNOWN].
+     */
+    private fun failed(message: String?, retryable: Boolean, reason: FailureReason) = Result.failure(
+        workDataOf(
+            KEY_MESSAGE to (message ?: "download failed"),
+            KEY_RETRYABLE to retryable,
+            KEY_REASON to reason.name,
+        ),
+    )
 
     /** Everything a run needs, carried in the WorkRequest's input so a restarted process has it too. */
     internal data class DownloadRequest(
@@ -602,6 +645,7 @@ internal class AreaDownloadWorker(context: Context, parameters: WorkerParameters
         const val KEY_METADATA = "metadata"
         const val KEY_MESSAGE = "message"
         const val KEY_RETRYABLE = "retryable"
+        const val KEY_REASON = "reason"
         const val KEY_BASEMAP_PHASE = "basemap_phase"
         const val PHASE_SUBMITTING = "submitting"
         const val PHASE_SLICING = "slicing"

@@ -35,7 +35,7 @@ before 1.0 a minor version may break the API.
 - **`TagFilter.NotExists(key)`**: "tag absent" as a post-check on another
   filter's candidates (e.g. amenities without `opening_hours`). A query whose
   only filters are `NotExists` and that has no bbox throws
-  `CantinoException`. Wire form `{"NotExists":"key"}`. Source compatibility:
+  `CantinoException.InvalidArgument`. Wire form `{"NotExists":"key"}`. Source compatibility:
   an exhaustive `when` over the sealed `TagFilter` needs a new branch.
 - `AreaState.runId: UUID?`: the WorkManager ID of the run a state belongs to
   (the `UUID` `AreaManager.download()` returns); null only for `Idle`. Wait for
@@ -44,6 +44,25 @@ before 1.0 a minor version may break the API.
 - Suspend, main-safe variants of the blocking disk reads:
   `AreaManager.loadDataFile`, `loadBasemapFile`, `loadPublishedArea`
   (`Dispatchers.IO`).
+- **Typed errors**: `CantinoException` subtypes
+  `CantinoException.InvalidArgument` (bad query, bbox, ID, batch size, too
+  many candidates), `InvalidFile` (not an area, old format version, corrupt
+  PBF/XML input, bad PMTiles), `Io` (missing file, disk full, I/O) and
+  `WrongThread` (a store used off its owner thread). The native layer throws
+  them directly from the category the core assigns; nothing parses messages.
+  Every KDoc names the subtypes a method throws. The AAR ships consumer R8
+  rules keeping them (they are thrown from JNI by name).
+- **`AreaState.Failed.reason: FailureReason`**: `NETWORK`, `SERVER`,
+  `INVALID_REQUEST`, `STORAGE`, `INVALID_DATA`, and `UNKNOWN` (an unexpected
+  error in the worker, or a failure recorded by 0.1, which stored no reason).
+  Filled for every failure path of the download worker; `message` and
+  `retryable` are unchanged.
+- C ABI: `cantino_last_error_code()` returns the `CANTINO_ERROR_*` category
+  (`INVALID_ARGUMENT` 1, `INVALID_FILE` 2, `IO` 3, `WRONG_THREAD` 4,
+  `INTERNAL` 5) of the last failed call on the calling thread, errno-style.
+  Backward compatible: no signature or return value changed, `-1` still
+  means error. Rust: `ErrorKind` and `Error::kind()`, an exhaustive mapping
+  of every `Error` variant and SQLite result code.
 
 ### Changed
 
@@ -57,6 +76,22 @@ before 1.0 a minor version may break the API.
   `runId`, no longer objects: write `is AreaState.Cancelled`, not
   `AreaState.Cancelled`. `equals`/`hashCode`/`toString` of every state
   subtype include `runId`, so states of different runs are never equal.
+- `CantinoException` is a sealed class: it can no longer be constructed
+  directly (construct a subtype). `catch (e: CantinoException)` keeps
+  working; an exhaustive `when` over it needs the four subtype branches.
+- Internal errors of the native core (bugs, caught panics) are
+  `IllegalStateException("Cantino internal error ...")` instead of
+  `CantinoException`.
+- `AreaState.Failed` carries `reason`; its `equals`/`hashCode`/`toString`
+  include it.
+- A full disk while downloading the PBF or basemap ends the run at once as
+  `Failed(retryable = false, reason = STORAGE)`; it used to be retried as a
+  network error.
+- Rust: `Error` gains `Format` (not a Cantino area, another
+  `FORMAT_VERSION`, an unclustered PMTiles archive or unsupported internal
+  compression, all formerly `Invalid`), `WrongThread` (formerly `Invalid`)
+  and `Internal`; `Corrupt` displays as "corrupt file". A missing or
+  unreadable PBF input is `Error::Io` (formerly `Input`).
 
 ## 0.1.0 — first release
 
