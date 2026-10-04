@@ -50,7 +50,7 @@ about 13 MB per ABI if you use it. Ship only the ABIs you need (`arm64-v8a`, `ar
 - Disk ≈ 10× the PBF size, and ≈ 75 MB per 10×10 km of dense city, plus
   ~6.5 MB of basemap at z15.
 - Import memory grows with the area; city scale is fine, country scale is not
-  a 0.1.0 goal.
+  a 0.x goal.
 - Keep one store open; `open` costs more than a query.
 - Prefer a tag filter plus bbox over a bare bbox: tag filters are the most
   selective index.

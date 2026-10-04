@@ -22,7 +22,7 @@ of Lisbon: a copy of the master map you carry away.*
 *The café reference app ([`android/cafe-app`](android/cafe-app)) in airplane
 mode: offline basemap, cafés from a tag + bbox query, and the raw object.*
 
-## What 0.1.0 does
+## What 0.2.0 does
 
 | Does | Does not (yet) |
 | --- | --- |

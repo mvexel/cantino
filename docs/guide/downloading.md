@@ -142,7 +142,7 @@ is AreaState.Failed -> when (state.reason) {
 All of these knobs are in `AreaConfig` (`inlineRetries`, `maxRunAttempts`,
 `backoffDelayMillis`, timeouts, `sliceBaseUrl`). Most apps pass
 `AreaConfig()` or only set `foreground`. Downloads restart from byte 0 on a
-retry (no byte-range resume in 0.1.0).
+retry (no byte-range resume in 0.2.0).
 
 ## Foreground mode
 

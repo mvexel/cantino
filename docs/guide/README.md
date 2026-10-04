@@ -1,6 +1,6 @@
 # Cantino guide
 
-Cantino 0.1.0, Android. Start with the [quickstart](../../README.md#quickstart),
+Cantino 0.2.0, Android. Start with the [quickstart](../../README.md#quickstart),
 then read the page you need.
 
 | Page | Read it for |

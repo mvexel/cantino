@@ -1,7 +1,7 @@
 # Café app walkthrough
 
 [`android/cafe-app`](../../android/cafe-app) is the reference app for
-Cantino 0.1.0: find cafés near you, with no network after the first
+Cantino 0.2.0: find cafés near you, with no network after the first
 download. Plain Android views, MapLibre Native 13.6.1, no Play Services.
 It passed this acceptance scenario on a Pixel 8 (2026-10-03, downtown Salt
 Lake City):

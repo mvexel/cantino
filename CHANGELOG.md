@@ -3,7 +3,7 @@
 All notable changes to Cantino (formerly osm-framework). Versions follow semantic versioning;
 before 1.0 a minor version may break the API.
 
-## 0.2.0 (unreleased)
+## 0.2.0 — 2026-10-03
 
 ### Added
 

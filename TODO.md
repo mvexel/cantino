@@ -6,6 +6,10 @@ Verify each `[x]` against the repo before trusting it.
 
 ## Status (verified 2026-10-03)
 
+- **0.2.0 prepared, not yet published** (2026-10-03): all of Next up 1
+  merged on `main`, version bumped, green on Pixel 8 + emulator. Publish
+  steps (gh-pages push, tag `v0.2.0`) are Martijn's. New coordinates
+  `lol.osm:cantino`, package `lol.osm.cantino` (0.1.0 stays at the old ones).
 - **0.1.0 is released**: repo public at https://github.com/mvexel/cantino
   (Apache-2.0), tag `v0.1.0`, Maven + API docs on https://mvexel.github.io/cantino/
   (`io.github.mvexel:cantino:0.1.0`). README quickstart builds against the live
@@ -24,7 +28,8 @@ Verify each `[x]` against the repo before trusting it.
 
 ## Next up (in priority order; each item = one agent-sized slice)
 
-1. **0.2 API polish** (details in §7 "0.2 API candidates"). Done when: every
+1. ~~**0.2 API polish**~~ DONE 2026-10-03 (merged on `main`; publish
+   pending, see Status). Was: (details in §7 "0.2 API candidates"). Done when: every
    candidate is decided (do / won't), the "do" ones ship with KDoc + tests,
    the quickstart drops its `dropWhile` workaround, CHANGELOG has a 0.2.0
    section. Must-haves: run identity in `AreaState` (or `state(runId)`),
@@ -46,8 +51,17 @@ Verify each `[x]` against the repo before trusting it.
    dropping `node_way`/`member_rel` (keep if editing needs them — see 6).
 4. **Café app fixes** (§6): opening hours in the area's time zone (tz lookup
    at download time); exercise relation-café/member UI with a fixture.
-5. **iOS** (§3) — BLOCKED on Martijn: Mac access (ssh host or he runs
-   commands). Then xcframework + Swift wrapper + XCTest on simulator.
+5. **iOS** (§3). Decided 2026-10-03: no Xcode SDK on Linux (xtool needs
+   Xcode.xip; Martijn: not on Linux). Done when (Martijn): iOS and Android
+   behave identically (same output on same input via the parity corpus),
+   tests pass, café demo compiles. Linux part in progress: parity corpus +
+   Rust runner (`ios/parity-corpus`), Swift package tested on Linux in
+   Docker (`ios/swift-package`). Next: Kotlin + Swift parity runners;
+   journal/recovery/failure classification into Rust; download state
+   machine as a Rust reducer (design in-session first). iOS builds, XCTest
+   on the simulator and the café app need macOS: GitHub Actions macOS
+   runner (Martijn pushes the workflow) or a Mac; iPhone available for
+   on-device checks.
 6. **Offline editing + upload** — needs a scope change in `CLAUDE.md` first
    (currently out of scope). Design notes: edits overlay db ATTACHed to the
    read-only base (`docs/research/2026-10-03-prebaked-dataset-format.md`),
@@ -100,7 +114,8 @@ Verify each `[x]` against the repo before trusting it.
 
 - [ ] Follow-ups from migration: in-app import 8.2 s vs 5.7 s plain binary (cause unknown); import peak memory grows with area (chunk writes); JNI+JSON ≈ 0.08 ms/object; decide whether to drop unused node_way/member_rel (−25 MB)
 
-## 3. iOS vertical slice — SKIPPED for now (2026-10-03, Martijn): finish Android end-to-end first
+## 3. iOS vertical slice — restarted 2026-10-03 (see Next up 5)
+- xtool evaluated 2026-10-03 (research): builds/signs SwiftPM apps on Linux and installs on a USB device, but needs Xcode.xip for the SDK (Xcode licence: Apple hardware), no simulator, no iOS test runner (xtool issue #177), binary targets (MapLibre xcframework) and Rust staticlib linking undocumented. Martijn: no Xcode SDK on Linux, so iOS builds go to macOS CI / a Mac
 - [ ] Inspect Mac (Xcode, toolchain)
 - [ ] xcframework: device arm64 + simulator arm64
 - [ ] Swift wrapper + XCTest on simulator (import, get, query)
@@ -149,7 +164,7 @@ Target onboarding flow (Martijn, 2026-10-03): get location → offer to download
 - [x] Guide `docs/guide/`: concepts, downloading (state machine, cancellation, failures, foreground mode, sizes, privacy, permissions), basemaps, querying, performance
 - [x] API reference: Dokka 2.2.0 on `:cantino` (`dokkaGeneratePublicationHtml`, public API only, source links to tag v0.1.0); fixed 4 unresolved KDoc links and added `@property` docs for constructor properties of input types and AreaState subtypes, plus companion docs (only equals/hashCode/toString overrides remain undocumented); published under `/api/` by the Pages script
 - [x] Café app walkthrough (`docs/guide/cafe-app.md`), building from source (`building.md`), C ABI notes (`c-abi.md`; its C example compiles and links against `libcantino`)
-- [ ] 0.2 API candidates found while documenting (2026-10-03, not decided):
+- [x] 0.2 API candidates found while documenting (2026-10-03), all decided 2026-10-03 and shipped in 0.2.0 except the last (won't for 0.2): coroutines `api`; `AreaState.runId` + `isTerminal`; `Bbox.around`; `wayCoordinates`/`representativePoint`/batch `get`; `AsyncOsmStore`; suspend `loadDataFile`/`loadBasemapFile`/`loadPublishedArea`; style assets artifact WON'T (0.2). Original list:
   - coroutines are an `implementation` dependency (via work-runtime-ktx, POM scope runtime) although `Flow` (`AreaManager.state`) and `suspend` (`ProtomapsBuilds.latestUrl`) are public API: apps must declare kotlinx-coroutines themselves (README says so). Make it `api`
   - `state(areaId)` follows the area, not a run: right after `download()` (WorkManager enqueues asynchronously) the flow can still emit the previous run's final state, and `Failed`/`Cancelled` carry no work ID to tell them apart. Quickstart works around it with `dropWhile`. Options: work ID on every state, `state(runId)`, or a `suspend download` that returns once enqueued
   - no `Bbox` around a point (every app writes `squareAround`)
@@ -186,15 +201,16 @@ within 0.2 (Next up 1), not one by one in backlog order.
 ## 9. Geometry helpers (both) — highest reach; part of 0.2 (Next up 1)
 Every app with features mapped as ways (shops as buildings, trails) writes
 this itself today. Replaces 0.2's "way geometry / batch get" candidate (§7).
-- [ ] ⚡ Expose `way_coordinates` (already in the Rust core, `src/store.rs`)
+- [x] (0.2.0) ⚡ Expose `way_coordinates` (already in the Rust core, `src/store.rs`)
   through C ABI + JNI + Kotlin: one call per way, not one per node
-- [ ] ⚡ Core-computed representative point for ways and relations (what the
+- [x] (0.2.0) ⚡ Core-computed representative point for ways and relations (what the
   café app does by hand); define it honestly (not a guaranteed
   point-on-surface)
-- [ ] Batch `get(ids)` / coordinate-only fast path to cut per-object JNI+JSON cost
+- [x] (0.2.0) Batch `get(ids)` (one JNI crossing; still one lookup per object) — coordinate-only fast path beyond `wayCoordinates` not done
+  Batch `get(ids)` / coordinate-only fast path to cut per-object JNI+JSON cost
 
 ## 10. Query expressiveness (E; every POI app)
-- [ ] ⚡ `TagFilter.NotExists(key)` as a non-driving filter (filters are
+- [x] (0.2.0) ⚡ `TagFilter.NotExists(key)` as a non-driving filter (filters are
   already post-checks on a driver key's index range), e.g. "amenities
   without `opening_hours`"
 - [ ] Key/value OR (`ExistsAny(keys)` or any-of values) as a driver: union
@@ -211,7 +227,7 @@ this itself today. Replaces 0.2's "way geometry / batch get" candidate (§7).
 ## 12. Distribution and platforms (both)
 Corporate dependency policies flag the current setup. Outward-facing steps
 (Sonatype account, signing keys, group ID) are Martijn's.
-- [ ] ⚡ armeabi-v7a (`armv7-linux-androideabi` in `scripts/build-android.sh`,
+- [x] (0.2.0) ⚡ armeabi-v7a (`armv7-linux-androideabi` in `scripts/build-android.sh`,
   tests on the emulator) — cheap budget phones used by field mappers and
   hikers
 - [ ] Maven Central with signed artifacts; decide the group ID (personal
@@ -228,14 +244,14 @@ Corporate dependency policies flag the current setup. Outward-facing steps
   the release build.
 
 ## 13. Docs and developer experience (both)
-- [ ] ⚡ Dokka renders non-literal defaults (`Query.maxCandidates`,
+- [x] (0.2.0) ⚡ Dokka renders non-literal defaults (`Query.maxCandidates`,
   `AreaConfig` timeouts/intervals look required); fix or document them in
   KDoc
-- [ ] ⚡ Move the guide onto the Pages site next to `/api/`
-- [ ] ⚡ Doc pages: SliceOSM in production (terms, rate limits, lag,
+- [x] (0.2.0) ⚡ Move the guide onto the Pages site next to `/api/`
+- [x] (0.2.0) ⚡ Doc pages: SliceOSM in production (terms, rate limits, lag,
   self-hosting via `sliceBaseUrl`); pairing with an `opening_hours` library;
   "editing apps: what Cantino gives you" (versions in snapshots, freshness)
-- [ ] ⚡ Roadmap/maintenance page (who maintains, path to 1.0, expected
+- [x] (0.2.0, page only; repo description/topics/Discussions still Martijn's) ⚡ Roadmap/maintenance page (who maintains, path to 1.0, expected
   breaking minors); repo description, topics, Discussions (Martijn)
 - [x] Typed errors (codes or a sealed exception hierarchy) instead of one
   type with a string; breaking, so part of 0.2 (Next up 1). Done on branch
