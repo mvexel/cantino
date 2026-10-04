@@ -375,11 +375,12 @@ internal class BasemapExtract(
      * Engine rejections are permanent: retrying the same source cannot help.
      * The reason comes from the native category: a bad or unsupported
      * archive is INVALID_DATA, zooms/bbox the archive cannot serve are
-     * INVALID_REQUEST, a staging write that fails is STORAGE.
+     * INVALID_REQUEST, a staging write that fails is STORAGE (core table,
+     * `cantino_classify_failure` context "engine").
      */
     private inline fun <T> engine(block: () -> T): T = try {
         block()
     } catch (error: CantinoException) {
-        throw DownloadFailure.Permanent("basemap extract: ${error.message}", error.failureReason(), error)
+        throw Failures.native(error, "engine").failure("basemap extract: ${error.message}", error)
     }
 }

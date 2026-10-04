@@ -19,13 +19,14 @@
 //! never closed twice.
 use crate::ErrorKind;
 use crate::mobile_api::*;
+use crate::mobile_area::*;
 use crate::mobile_basemap::*;
 use jni::{
     Env, EnvUnowned,
     errors::ErrorPolicy,
-    objects::{JByteArray, JClass, JString},
+    objects::{JByteArray, JClass, JObject, JString},
     strings::JNIString,
-    sys::{jdouble, jint, jlong},
+    sys::{jboolean, jdouble, jint, jlong},
 };
 use std::{
     ffi::{CStr, CString, c_char},
@@ -669,6 +670,260 @@ pub extern "system" fn Java_lol_osm_cantino_NativeBridge_basemapInfo<'local>(
         json_call(env, |out, error| unsafe {
             cantino_basemap_info(path.as_ptr(), out, error)
         })
+    })
+    .resolve::<ThrowTyped>()
+}
+
+// --- Area store and failure classification -----------------------------------
+//
+// Thin wrappers over `cantino_area_*` / `cantino_classify_failure`
+// (`src/mobile_area.rs`): no handles, any thread. The Kotlin `AreaStorage`
+// passes its root directory (`filesDir/cantino-areas`) on every call.
+
+/// What the commit hook trampoline needs: the JNI environment of the calling
+/// native method and the Kotlin `AreaCommitHook`. Lives on the stack of
+/// `areaCommit` for exactly the duration of the `cantino_area_commit` call,
+/// which invokes the hook synchronously on this same thread.
+struct HookContext<'env, 'local> {
+    env: &'env mut Env<'local>,
+    hook: &'env JObject<'local>,
+}
+
+/// `cantino_area_commit_hook` for Kotlin: calls `hook.onStage(stage)`. A
+/// Java exception thrown by the hook (the worker's CancellationException at
+/// BEFORE_COMMIT) stays pending: we return non-zero, the core aborts the
+/// commit with nothing changed, and the exception propagates to Kotlin when
+/// the native method returns. Once an exception is pending we never call
+/// into Java again (JNI forbids it); the core then only finishes file work.
+unsafe extern "C" fn kotlin_commit_hook(context: *mut std::ffi::c_void, stage: i32) -> i32 {
+    // A panic must not unwind out of an extern "C" function (it would
+    // abort the app); treat it like a throwing hook.
+    std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        // SAFETY: `context` is the HookContext that areaCommit passed for
+        // this call; nothing else uses it while the hook runs.
+        let context = unsafe { &mut *(context as *mut HookContext<'_, '_>) };
+        if context.env.exception_check() {
+            return 1;
+        }
+        match context.env.call_method(
+            context.hook,
+            jni::jni_str!("onStage"),
+            jni::jni_sig!("(I)V"),
+            &[jni::JValue::Int(stage)],
+        ) {
+            Ok(_) => 0,
+            Err(_) => 1,
+        }
+    }))
+    .unwrap_or(1)
+}
+
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_lol_osm_cantino_NativeBridge_areaValidateId<'local>(
+    mut env: EnvUnowned<'local>,
+    _class: JClass<'local>,
+    area_id: JString<'local>,
+) {
+    env.with_env(|env| -> Result<(), BridgeError> {
+        let area_id = c_string(area_id.try_to_string(env)?)?;
+        // SAFETY: area_id lives for the call.
+        call(|_, error| unsafe { cantino_area_validate_id(area_id.as_ptr(), error) })?;
+        Ok(())
+    })
+    .resolve::<ThrowTyped>()
+}
+
+/// Layout JSON; `workId` may be Java `null`.
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_lol_osm_cantino_NativeBridge_areaLayout<'local>(
+    mut env: EnvUnowned<'local>,
+    _class: JClass<'local>,
+    root: JString<'local>,
+    area_id: JString<'local>,
+    work_id: JString<'local>,
+) -> JString<'local> {
+    env.with_env(|env| -> Result<JString<'local>, BridgeError> {
+        let root = c_string(root.try_to_string(env)?)?;
+        let area_id = c_string(area_id.try_to_string(env)?)?;
+        let work_id = optional(env, &work_id)?;
+        let work_id = work_id.as_ref().map_or(ptr::null(), |value| value.as_ptr());
+        // SAFETY: strings live for the call; work_id may be NULL by contract.
+        json_call(env, |out, error| unsafe {
+            cantino_area_layout(root.as_ptr(), area_id.as_ptr(), work_id, out, error)
+        })
+    })
+    .resolve::<ThrowTyped>()
+}
+
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_lol_osm_cantino_NativeBridge_areaPrepareStaging<'local>(
+    mut env: EnvUnowned<'local>,
+    _class: JClass<'local>,
+    root: JString<'local>,
+    area_id: JString<'local>,
+    work_id: JString<'local>,
+) -> JString<'local> {
+    env.with_env(|env| -> Result<JString<'local>, BridgeError> {
+        let root = c_string(root.try_to_string(env)?)?;
+        let area_id = c_string(area_id.try_to_string(env)?)?;
+        let work_id = c_string(work_id.try_to_string(env)?)?;
+        // SAFETY: strings live for the call.
+        json_call(env, |out, error| unsafe {
+            cantino_area_prepare_staging(
+                root.as_ptr(),
+                area_id.as_ptr(),
+                work_id.as_ptr(),
+                out,
+                error,
+            )
+        })
+    })
+    .resolve::<ThrowTyped>()
+}
+
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_lol_osm_cantino_NativeBridge_areaDiscardStaging<'local>(
+    mut env: EnvUnowned<'local>,
+    _class: JClass<'local>,
+    root: JString<'local>,
+    area_id: JString<'local>,
+    work_id: JString<'local>,
+) {
+    env.with_env(|env| -> Result<(), BridgeError> {
+        let root = c_string(root.try_to_string(env)?)?;
+        let area_id = c_string(area_id.try_to_string(env)?)?;
+        let work_id = c_string(work_id.try_to_string(env)?)?;
+        // SAFETY: strings live for the call.
+        call(|_, error| unsafe {
+            cantino_area_discard_staging(root.as_ptr(), area_id.as_ptr(), work_id.as_ptr(), error)
+        })?;
+        Ok(())
+    })
+    .resolve::<ThrowTyped>()
+}
+
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_lol_osm_cantino_NativeBridge_areaWriteStagedMetadata<'local>(
+    mut env: EnvUnowned<'local>,
+    _class: JClass<'local>,
+    root: JString<'local>,
+    area_id: JString<'local>,
+    work_id: JString<'local>,
+    metadata: JString<'local>,
+) {
+    env.with_env(|env| -> Result<(), BridgeError> {
+        let root = c_string(root.try_to_string(env)?)?;
+        let area_id = c_string(area_id.try_to_string(env)?)?;
+        let work_id = c_string(work_id.try_to_string(env)?)?;
+        let metadata = c_string(metadata.try_to_string(env)?)?;
+        // SAFETY: strings live for the call.
+        call(|_, error| unsafe {
+            cantino_area_write_staged_metadata(
+                root.as_ptr(),
+                area_id.as_ptr(),
+                work_id.as_ptr(),
+                metadata.as_ptr(),
+                error,
+            )
+        })?;
+        Ok(())
+    })
+    .resolve::<ThrowTyped>()
+}
+
+/// Commits; returns `true` when published, `false` when the hook aborted
+/// (the hook's Java exception is then normally pending and wins).
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_lol_osm_cantino_NativeBridge_areaCommit<'local>(
+    mut env: EnvUnowned<'local>,
+    _class: JClass<'local>,
+    root: JString<'local>,
+    area_id: JString<'local>,
+    work_id: JString<'local>,
+    has_basemap: jboolean,
+    hook: JObject<'local>,
+) -> jboolean {
+    env.with_env(|env| -> Result<jboolean, BridgeError> {
+        let root = c_string(root.try_to_string(env)?)?;
+        let area_id = c_string(area_id.try_to_string(env)?)?;
+        let work_id = c_string(work_id.try_to_string(env)?)?;
+        let mut context = HookContext { env, hook: &hook };
+        let context_ptr = &mut context as *mut HookContext<'_, '_> as *mut std::ffi::c_void;
+        // SAFETY: strings live for the call; the trampoline runs only
+        // during cantino_area_commit, on this thread, with context_ptr,
+        // which outlives the call; `env` is used only through it meanwhile.
+        let (status, _) = call(|_, error| unsafe {
+            cantino_area_commit(
+                root.as_ptr(),
+                area_id.as_ptr(),
+                work_id.as_ptr(),
+                i32::from(has_basemap),
+                Some(kotlin_commit_hook),
+                context_ptr,
+                error,
+            )
+        })?;
+        Ok(status == 0)
+    })
+    .resolve::<ThrowTyped>()
+}
+
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_lol_osm_cantino_NativeBridge_areaRecover<'local>(
+    mut env: EnvUnowned<'local>,
+    _class: JClass<'local>,
+    root: JString<'local>,
+    area_id: JString<'local>,
+) {
+    env.with_env(|env| -> Result<(), BridgeError> {
+        let root = c_string(root.try_to_string(env)?)?;
+        let area_id = c_string(area_id.try_to_string(env)?)?;
+        // SAFETY: strings live for the call.
+        call(|_, error| unsafe { cantino_area_recover(root.as_ptr(), area_id.as_ptr(), error) })?;
+        Ok(())
+    })
+    .resolve::<ThrowTyped>()
+}
+
+/// The published area JSON, or Java `null` when none (status 1).
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_lol_osm_cantino_NativeBridge_areaPublished<'local>(
+    mut env: EnvUnowned<'local>,
+    _class: JClass<'local>,
+    root: JString<'local>,
+    area_id: JString<'local>,
+) -> JString<'local> {
+    env.with_env(|env| -> Result<JString<'local>, BridgeError> {
+        let root = c_string(root.try_to_string(env)?)?;
+        let area_id = c_string(area_id.try_to_string(env)?)?;
+        // SAFETY: strings live for the call.
+        let (status, json) = call(|out, error| unsafe {
+            cantino_area_published(root.as_ptr(), area_id.as_ptr(), out, error)
+        })?;
+        match (status, json) {
+            (0, Some(json)) => Ok(JString::from_str(env, json)?),
+            _ => Ok(JString::default()),
+        }
+    })
+    .resolve::<ThrowTyped>()
+}
+
+/// The classification JSON, or Java `null` when the input is not a failure.
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_lol_osm_cantino_NativeBridge_classifyFailure<'local>(
+    mut env: EnvUnowned<'local>,
+    _class: JClass<'local>,
+    input: JString<'local>,
+) -> JString<'local> {
+    env.with_env(|env| -> Result<JString<'local>, BridgeError> {
+        let input = c_string(input.try_to_string(env)?)?;
+        // SAFETY: input lives for the call.
+        let (status, json) =
+            call(|out, error| unsafe { cantino_classify_failure(input.as_ptr(), out, error) })?;
+        match (status, json) {
+            (0, Some(json)) => Ok(JString::from_str(env, json)?),
+            _ => Ok(JString::default()),
+        }
     })
     .resolve::<ThrowTyped>()
 }

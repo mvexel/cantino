@@ -29,6 +29,7 @@ UPDATE_PARITY=1 cargo test --test parity
 | `expected.json` | Canonical outcome of every call ("Result file" below). |
 | `geometry.osm` | Area 2: the synthetic geometry area of `tests/geometry.rs` plus node 20 (escapes, empty value, u32-max metadata, code-point key order). |
 | `unsorted.osm` | An input breaking the snapshot rules (unsorted IDs), for an `invalid_file` import. |
+| `../fixtures/area-storage-0.2.0/` | Area store directories as Cantino 0.2.0 left them (published, pending commit, half rolled forward, killed before the commit point, ...), for the area ops. Placeholder data files; a mobile runner bundles the tree, dot-directories (`.staging`) included. |
 
 Area 1 is the existing `tests/fixtures/snapshot.osm` (imported three times:
 default options, `preserve_untagged_metadata`, and as `snapshot.osm.pbf`). The
@@ -78,6 +79,29 @@ Each call is `{"id","op","args"}` plus an optional `"abi_only": true`.
 | `basemap_plan_new` | `bbox`, `min_zoom`, `max_zoom`, `overfetch` | `plan_new`, then `plan_free` if it succeeded; the outcome is `plan_new`'s |
 | `basemap_bad_feed` | as `basemap_plan_new` + `source`, `feeds` `[{"id","offset","length"}]` | `plan_new`, `plan_first_request`, each feed (`plan_feed(id, source[offset..offset+length])`), `plan_free` |
 | `basemap_extract` | as `basemap_plan_new` + `source` | the whole extract, see below |
+| `area_validate_id` | `area_id` | `cantino_area_validate_id` |
+| `area_layout` | `root` (a `scratch:` path, never created), `area_id`, `work_id` (null = none) | `cantino_area_layout`; paths projected relative to `root` |
+| `area_published` | `fixture` (a directory to copy, or null), `root` (a fresh `scratch:` path), `area_id` | copy `fixture` to `root`, `cantino_area_published`; see "Area ops" |
+| `area_recover` | as `area_published` | copy `fixture` to `root`, `cantino_area_recover`; see "Area ops" |
+| `classify_failure` | `input` (the failure JSON) | `cantino_classify_failure` |
+
+### Area ops
+
+`area_published` and `area_recover` run on a copy of a directory from
+`tests/fixtures/area-storage-0.2.0/` (laid out exactly as Cantino 0.2.0's
+Kotlin `AreaStorage` left it; scenarios are described in
+`tests/area_storage.rs`), so they are deterministic and touch no committed
+file. The runner copies `fixture` (recursively) to `root`, which must not
+exist yet (each call names its own); with a null `fixture`, `root` stays
+absent. The result is `{"result": <outcome>, "files": <listing>}`:
+
+* `result`: the call's outcome, with every string that is a path under
+  `root` rewritten relative to it (`root` itself becomes `"."`; separator
+  `/`). `area_layout` applies the same projection to its outcome.
+* `files`: every regular file under `root` after the call, as an object from
+  relative path (`/`-separated) to size in bytes, or `null` when `root` does
+  not exist. It shows what recovery moved, deleted and left (the empty
+  `city.lock` the core creates, a dead run's staging directory).
 
 `basemap_extract` plays the HTTP server by slicing the local `source` file (a
 range past the end comes back short, as from a server) and records every
@@ -107,7 +131,7 @@ Every ABI call's result becomes one of:
 |---|---|
 | status 0 with result JSON | `{"ok": <the JSON>}` |
 | status 0 without result JSON (`open`, `close`, `plan_new`, `asm_write_range`, `asm_finish`, `*_free`) | `{"ok": null}` |
-| status 1 (object not in the area: `get`, `way_coordinates`, `representative_point`) | `{"missing": true}` |
+| status 1 (nothing to return: object not in the area for `get`, `way_coordinates`, `representative_point`; no published area for `area_published`; not a failure for `classify_failure`) | `{"missing": true}` |
 | status -1 | `{"error": {"code": N, "kind": "<name>"}}` |
 
 The error `code` is `cantino_last_error_code()` read right after the call on
@@ -243,6 +267,11 @@ proposal for the adapter, mirroring Kotlin.
 | `slice_progress` | `SliceProtocol.progress(status)` (internal) | `SliceProtocol.progress(status:)` (internal) |
 | `basemap_info` | `PmtilesInfo.read(File)` (subset) + `NativeBridge.basemapInfo` for the rest | `PmtilesInfo.read(_ url: URL)` (all fields) |
 | `basemap_plan_new`, `basemap_bad_feed`, `basemap_extract` | `NativeBridge.basemapPlan*` / `basemapAsm*` (internal; the public path, `BasemapExtract.run`, does its own HTTP and cannot be fed canned bytes) | the internal plan/assembler wrapper under the Swift `BasemapExtract` |
+| `area_validate_id` | `AreaStorage.requireValidAreaId(areaId)` (internal; `IllegalArgumentException` → `invalid_argument`) | `AreaStorage.validate(areaId:)` (internal, throws `CantinoError.invalidArgument`) |
+| `area_layout` | `NativeBridge.areaLayout(root, areaId, workId)` (internal; `AreaStorage` exposes only single paths) | `AreaStorage(root:).layout(areaId:workId:)` (internal) |
+| `area_published` | `AreaStorage(areas = root, downloads = scratch).published(areaId)` → `AreaInfo?` (internal; map `AreaInfo` back to `{"data","basemap","metadata"}` with `AreaMetadata.toJson` key names) | `AreaStorage(root:).published(areaId:)` → `AreaInfo?` (internal) |
+| `area_recover` | `NativeBridge.areaRecover(root, areaId)` (internal; `AreaStorage.recover` swallows I/O errors by design) | `AreaStorage(root:).recover(areaId:)` (internal) |
+| `classify_failure` | `NativeBridge.classifyFailure(input)` (internal; `Failures` wraps it) | `Failures.classify(_:)` (internal) |
 
 Errors: Kotlin `CantinoException.{InvalidArgument, InvalidFile, Io,
 WrongThread, Internal}`; Swift (planned) `CantinoError.{invalidArgument,
