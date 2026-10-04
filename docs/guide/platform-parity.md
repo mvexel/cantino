@@ -6,9 +6,9 @@ publication, recovery, failure classification) is implemented once. Parity
 is checked two ways:
 
 1. **The parity corpus** ([`tests/parity`](../../tests/parity/README.md)):
-   243 calls whose canonical output every runner must reproduce byte for
+   244 calls whose canonical output every runner must reproduce byte for
    byte. Rust runs all of them through the C ABI; Kotlin (`ParityTest`,
-   instrumented) and Swift (`ParityTests`) run the 219 that a typed API can
+   instrumented) and Swift (`ParityTests`) run the 220 that a typed API can
    express.
 2. **The same behavioural tests on both platforms**, listed below. A Swift
    test has the Kotlin test's name unless noted.

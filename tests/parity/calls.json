@@ -168,6 +168,7 @@
 {"id":"area_layout.bad_run","op":"area_layout","args":{"root":"scratch:areas","area_id":"city","work_id":"not-a-uuid"}},
 {"id":"area_layout.bad_area","op":"area_layout","args":{"root":"scratch:areas","area_id":"../city","work_id":null}},
 {"id":"area_published.published","op":"area_published","args":{"fixture":"tests/fixtures/area-storage-0.2.0/published","root":"scratch:published-published","area_id":"city"}},
+{"id":"area_published.with_profile","op":"area_published","args":{"fixture":"tests/fixtures/area-storage-profile/published","root":"scratch:published-with-profile","area_id":"city"}},
 {"id":"area_published.pending_commit","op":"area_published","args":{"fixture":"tests/fixtures/area-storage-0.2.0/pending-commit","root":"scratch:published-pending-commit","area_id":"city"}},
 {"id":"area_recover.pending_commit","op":"area_recover","args":{"fixture":"tests/fixtures/area-storage-0.2.0/pending-commit","root":"scratch:recover-pending-commit","area_id":"city"}},
 {"id":"area_published.partial_roll_forward","op":"area_published","args":{"fixture":"tests/fixtures/area-storage-0.2.0/partial-roll-forward","root":"scratch:published-partial-roll-forward","area_id":"city"}},

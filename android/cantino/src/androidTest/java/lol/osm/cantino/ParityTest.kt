@@ -380,6 +380,18 @@ class ParityTest {
             mapOf(
                 "counts" to mapOf("nodes" to report.counts.nodes, "ways" to report.counts.ways, "relations" to report.counts.relations),
                 "database_bytes" to report.databaseBytes,
+            ) + listOfNotNull(
+                // Omitted when null, as ImportReport.toJson writes it.
+                report.profile?.let { profile ->
+                    "profile" to mapOf(
+                        "keep" to profile.keep.map { rule ->
+                            mapOf(
+                                "kinds" to OsmKind.entries.filter { it in rule.kinds }.joinToString("") { it.wire.take(1) },
+                                "key" to rule.key,
+                            ) + listOfNotNull(rule.values?.let { "values" to it })
+                        },
+                    )
+                },
             )
         },
         "basemap" to m.basemap?.let {
