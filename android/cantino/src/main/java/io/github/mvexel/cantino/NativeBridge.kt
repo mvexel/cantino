@@ -15,6 +15,9 @@ internal object NativeBridge {
     @JvmStatic external fun open(path: String): Long
     @JvmStatic external fun close(handle: Long)
     @JvmStatic external fun get(handle: Long, kind: Int, id: Long): String?
+    @JvmStatic external fun getMany(handle: Long, request: String): String
+    @JvmStatic external fun wayCoordinates(handle: Long, id: Long): String?
+    @JvmStatic external fun representativePoint(handle: Long, kind: Int, id: Long): String?
     @JvmStatic external fun query(handle: Long, request: String): String
     @JvmStatic external fun importArea(input: String, destination: String, options: String?): String
 

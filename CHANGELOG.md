@@ -3,6 +3,29 @@
 All notable changes to Cantino (formerly osm-framework). Versions follow semantic versioning;
 before 1.0 a minor version may break the API.
 
+## 0.2.0 (unreleased)
+
+- **Way coordinates**: `OsmStore.wayCoordinates(wayId): List<Coordinate?>?`
+  returns a way's node coordinates in order (repeats kept) in one native
+  call; a null entry is a node outside the area, null means the way is not in
+  the area. New `Coordinate` value (`latE7`/`lonE7`, `lat`/`lon`). C ABI:
+  `cantino_way_coordinates` (flat `[lat_e7, lon_e7, ...]` array).
+- **Representative point**: `OsmStore.representativePoint(id): Coordinate?`,
+  computed in the core. A label/anchor point, not a guaranteed
+  point-on-surface: node coordinate; closed way = mean of its distinct
+  in-area vertices; open way = point at half its in-area polyline length;
+  relation = mean of its distinct in-area members' points (nested up to 8
+  levels, cycles skipped). C ABI: `cantino_representative_point`. The café
+  app uses it instead of its own point code.
+- **Batch get**: `OsmStore.get(ids: List<OsmId>): List<OsmObject?>` looks up
+  up to `OsmStore.MAX_BATCH` (10 000) objects in one JNI crossing, in input
+  order with null for missing. C ABI: `cantino_get_many`.
+- **`TagFilter.NotExists(key)`**: "tag absent" as a post-check on another
+  filter's candidates (e.g. amenities without `opening_hours`). A query whose
+  only filters are `NotExists` and that has no bbox throws
+  `CantinoException`. Wire form `{"NotExists":"key"}`. Source compatibility:
+  an exhaustive `when` over the sealed `TagFilter` needs a new branch.
+
 ## 0.1.0 — first release
 
 Android library `io.github.mvexel:cantino:0.1.0` (AAR, minSdk 26,

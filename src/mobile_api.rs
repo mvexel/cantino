@@ -132,15 +132,115 @@ pub unsafe extern "C" fn cantino_get(
         }
     }
     protect(error, || {
-        let id = match kind {
-            0 => OsmId::Node(NodeId(id)),
-            1 => OsmId::Way(WayId(id)),
-            2 => OsmId::Relation(RelationId(id)),
-            _ => return Err(Error::Invalid("invalid object kind".into())),
-        };
+        let id = typed_id(kind, id)?;
         let object = unsafe { handle(store)? }.store.get(id)?;
         match object {
             Some(object) => unsafe { output(out, &object) },
+            None => Ok(1),
+        }
+    })
+}
+
+/// The ABI's numeric kind codes (node=0, way=1, relation=2) to a typed ID.
+fn typed_id(kind: i32, id: i64) -> Result<OsmId> {
+    Ok(match kind {
+        0 => OsmId::Node(NodeId(id)),
+        1 => OsmId::Way(WayId(id)),
+        2 => OsmId::Relation(RelationId(id)),
+        _ => return Err(Error::Invalid("invalid object kind".into())),
+    })
+}
+
+/// Batch lookup: `request` is a JSON array of IDs (`[{"type":"node","id":1},
+/// ...]`, the cursor shape); writes a JSON array with one entry per ID in
+/// input order, the object or `null` when it is not in the area. At most
+/// `MAX_BATCH` IDs; more is an error.
+///
+/// # Safety
+/// `request` must be a live NUL-terminated UTF-8 JSON string for this call;
+/// handle and output pointers obey the header contract.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn cantino_get_many(
+    store: *mut CantinoStore,
+    request: *const c_char,
+    out: *mut *mut c_char,
+    error: *mut *mut c_char,
+) -> i32 {
+    if !out.is_null() {
+        unsafe {
+            *out = std::ptr::null_mut();
+        }
+    }
+    protect(error, || {
+        let ids: Vec<OsmId> = serde_json::from_str(unsafe { text(request)? })?;
+        let objects = unsafe { handle(store)? }.store.get_many(&ids)?;
+        unsafe { output(out, &objects) }
+    })
+}
+
+/// Way coordinates as one flat JSON array `[lat_e7, lon_e7, lat_e7, lon_e7,
+/// ...]`, two numbers per node reference in way order (repeats kept), with
+/// `null, null` for a node outside the area. A flat array of numbers instead
+/// of one object per node keeps the buffer small and the adapter's parse a
+/// single pass. Returns 1 (no JSON) when the way is not in the area.
+///
+/// # Safety
+/// Handle and output pointers obey the header contract.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn cantino_way_coordinates(
+    store: *mut CantinoStore,
+    id: i64,
+    out: *mut *mut c_char,
+    error: *mut *mut c_char,
+) -> i32 {
+    if !out.is_null() {
+        unsafe {
+            *out = std::ptr::null_mut();
+        }
+    }
+    protect(error, || {
+        let store = &unsafe { handle(store)? }.store;
+        if id <= 0 {
+            return Err(Error::Invalid("snapshot IDs must be positive".into()));
+        }
+        let Some(coordinates) = store.way_coordinates(WayId(id))? else {
+            return Ok(1);
+        };
+        let flat: Vec<Option<i32>> = coordinates
+            .iter()
+            .flat_map(|point| match point {
+                Some(point) => [Some(point.lat_e7), Some(point.lon_e7)],
+                None => [None, None],
+            })
+            .collect();
+        unsafe { output(out, &flat) }
+    })
+}
+
+/// Representative (label/anchor) point of an object: writes
+/// `{"lat_e7":..,"lon_e7":..}`, or returns 1 (no JSON) when the object is not
+/// in the area or none of its geometry is. See `Store::representative_point`
+/// for the definition; it is not a guaranteed point-on-surface.
+///
+/// # Safety
+/// Handle and output pointers obey the header contract.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn cantino_representative_point(
+    store: *mut CantinoStore,
+    kind: i32,
+    id: i64,
+    out: *mut *mut c_char,
+    error: *mut *mut c_char,
+) -> i32 {
+    if !out.is_null() {
+        unsafe {
+            *out = std::ptr::null_mut();
+        }
+    }
+    protect(error, || {
+        let id = typed_id(kind, id)?;
+        match unsafe { handle(store)? }.store.representative_point(id)? {
+            Some(point) => unsafe { output(out, &point) },
             None => Ok(1),
         }
     })

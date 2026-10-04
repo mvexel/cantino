@@ -16,7 +16,7 @@ OsmStore.open(area.dataFile).use { store ->                       // on a worker
 ## Threading rule
 
 **An `OsmStore` belongs to the thread that opened it.** Every call
-(`get`, `query`, `close`) must come from that thread; any other thread gets a
+(`get`, `query`, `wayCoordinates`, `representativePoint`, `close`) must come from that thread; any other thread gets a
 `CantinoException`, never corrupted state. Calls are synchronous.
 
 | Pattern | Code |
@@ -41,10 +41,11 @@ No filters at all pages through every object.
 | --- | --- |
 | `TagFilter.Equals(k, v)` | Tag `k` has exactly value `v`. Raw strings: case-sensitive, no trimming |
 | `TagFilter.Exists(k)` | Tag `k` is present, any value (an empty value counts) |
+| `TagFilter.NotExists(k)` | Tag `k` is absent. **Never drives**: it is checked on the candidates of another filter. Needs an `Exists`/`Equals` filter or a `bbox` next to it; alone it throws `CantinoException` (it would otherwise scan the whole area) |
 | Several tag filters | AND. Index-driven from the most selective filter; never a full scan |
 | `bbox` on **tagged nodes** | Exact: the point is inside the box |
 | `bbox` on **ways and relations** | **Candidates**: their bounding box intersects the box. A way crossing the box with no node inside is included; one that merely bends around the box may be too |
-| `bbox` on **untagged nodes** | **Never returned**: way vertices are not spatially indexed. Reach them through their ways (`store.get(OsmId(OsmKind.NODE, id))` for each of `way.nodeIds`) |
+| `bbox` on **untagged nodes** | **Never returned**: way vertices are not spatially indexed. Reach them through their ways (`store.wayCoordinates(wayId)` for coordinates, or `store.get(way.nodeIds.map { OsmId(OsmKind.NODE, it) })` for the node objects) |
 | Objects at the area's edge | Bounds cover only members present in the extract, so clipped objects get smaller boxes and can be missed near the edge |
 | `maxCandidates` (100 000) | A bbox that selects more spatial candidates throws `CantinoException`; results are never silently truncated. Narrow the box or add a tag filter |
 | `limit` | 1..10 000 per call (default 100) |
@@ -89,8 +90,35 @@ OsmObject (sealed)            id: OsmId(kind, id)   tags: Map<String, String>   
 - **Coordinates** are stored as integers in 1e-7 degrees; `lat`/`lon` convert
   to `Double`. Compare and store `latE7`/`lonE7` if you need exact values.
 - **Geometry** is not assembled: a way is a list of node IDs; a multipolygon
-  is a relation. Build what you need (the café app uses the mean of a way's
-  node coordinates as its map point).
+  is a relation. The [geometry helpers](#geometry-helpers) give you a way's
+  coordinates and one anchor point per object; build anything else yourself.
+
+## Geometry helpers
+
+```kotlin
+val line: List<Coordinate?>? = store.wayCoordinates(wayId)        // null = way not in area
+val anchor: Coordinate? = store.representativePoint(cafe.id)      // null = nothing in area
+val objects: List<OsmObject?> = store.get(listOf(id1, id2, id3))  // input order, null = missing
+```
+
+| Call | Returns |
+| --- | --- |
+| `wayCoordinates(wayId)` | The way's node coordinates in order, repeats kept (a closed way ends where it starts), one native call. A **null entry** is a node outside the area: do not draw across it. Null for a way not in the area |
+| `representativePoint(id)` | One point for a marker, a label or a distance origin (see below). Null when the object, or all of its geometry, is outside the area |
+| `get(ids)` | One entry per ID in input order, null where the object is not in the area. One JNI crossing for the list; at most `OsmStore.MAX_BATCH` (10 000) IDs, more throws `CantinoException` |
+
+`Coordinate` holds `latE7`/`lonE7` (exact integers) and `lat`/`lon` in degrees.
+
+**The representative point is an anchor, not a guaranteed point-on-surface or
+a true centroid.** For an L-shaped building it can lie outside the outline;
+for a multipolygon it can fall in a hole. It is computed in the core as:
+
+| Object | Point |
+| --- | --- |
+| Node | Its coordinate |
+| Closed way (first node = last node) | Mean of its distinct vertices that are in the area |
+| Open way | The point at half the length of the line through its in-area nodes (nodes outside the area are skipped, so the line joins across the gap) |
+| Relation | Mean of the representative points of its distinct in-area members, each weighted equally; member relations followed up to 8 levels deep, cycles skipped |
 
 ### Metadata
 
@@ -110,5 +138,5 @@ Absent source fields are stored as zero/empty, so a zero may mean "unknown".
 
 | Exception | When |
 | --- | --- |
-| `CantinoException` | Missing or incompatible file on `open`, invalid query (limit, bbox), too many candidates, wrong thread, I/O. The store stays usable after a failed query |
+| `CantinoException` | Missing or incompatible file on `open`, invalid query (limit, bbox, only `NotExists` filters), too many candidates, a batch `get` over 10 000 IDs, wrong thread, I/O. The store stays usable after a failed query |
 | `IllegalStateException` | Store already closed |

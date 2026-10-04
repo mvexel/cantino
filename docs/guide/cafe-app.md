@@ -51,7 +51,7 @@ need is in `filesDir/cantino-areas/`.
 | --- | --- | --- |
 | One store, one thread, reopened after a refresh | `StoreWorker.withStore` | `OsmStore.open`, `AreaMetadata.workId` |
 | All `amenity=cafe` in the area, paged by 500 | `CafeLoader.load` | `Query(tags, bbox, after, limit)`, `TagFilter.Equals` |
-| A map point for ways and relations (mean of their resolvable nodes; an app choice, not exact geometry) | `CafeLoader.representativePoint` | `OsmObject.Way.nodeIds`, `Relation.members`, `store.get` |
+| A map point for ways and relations (an anchor, not exact geometry) | `CafeLoader.representativePoint` | `store.representativePoint` |
 | Dots on the map (GeoJSON source), nearby list sorted by distance | `MapScreen.applyFilters`, `MapScreen.geoJson` | |
 
 Result on the Salt Lake City area: 136 cafés (120 nodes, 16 ways).

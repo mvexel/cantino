@@ -80,6 +80,9 @@ public class OsmStore private constructor(private var handle: Long) : AutoClosea
         @JvmOverloads
         public fun importArea(input: File, destination: File, options: ImportOptions = ImportOptions()): ImportReport =
             importArea(input.path, destination.path, options)
+
+        /** Most IDs one batch [get] accepts (the same bound as [Query.limit]). */
+        public const val MAX_BATCH: Int = 10_000
     }
 
     /**
@@ -92,10 +95,80 @@ public class OsmStore private constructor(private var handle: Long) : AutoClosea
         native { NativeBridge.get(live(), id.kind.code, id.id) }?.let { osmObjectFromJson(JSONObject(it)) }
 
     /**
+     * Looks up several objects in one native call: one entry per element of
+     * [ids], in the same order, null where the object is not in this area.
+     * Duplicate IDs are returned once per occurrence.
+     *
+     * Use it instead of calling [get] in a loop (for example for a way's
+     * [OsmObject.Way.nodeIds] or a relation's members): each [get] crosses
+     * JNI and decodes JSON once, this crosses once for the whole list.
+     *
+     * At most [MAX_BATCH] (10 000) IDs per call; more throws
+     * [CantinoException] (never a silent truncation), as does an ID that is
+     * not positive. Throws [IllegalStateException] if the store is closed.
+     */
+    public fun get(ids: List<OsmId>): List<OsmObject?> {
+        val handle = live() // closed-store check even for an empty list
+        if (ids.isEmpty()) return emptyList()
+        val request = JSONArray(ids.map { it.toJson() }).toString()
+        val results = JSONArray(native { NativeBridge.getMany(handle, request) })
+        return List(results.length()) { index ->
+            results.optJSONObject(index)?.let(::osmObjectFromJson)
+        }
+    }
+
+    /**
+     * The coordinates of way [wayId]'s nodes, in the way's order with
+     * repeats kept (a closed way ends with its first coordinate again), in
+     * one native call.
+     *
+     * Returns null when the way is not in this area. An entry is null when
+     * that node is outside the area (the way crosses the area's edge): do not
+     * draw a line across such a gap.
+     *
+     * Throws [CantinoException] on a native error (including a non-positive
+     * ID), [IllegalStateException] if the store is closed.
+     */
+    public fun wayCoordinates(wayId: Long): List<Coordinate?>? {
+        val json = native { NativeBridge.wayCoordinates(live(), wayId) } ?: return null
+        // Flat [lat_e7, lon_e7, lat_e7, lon_e7, ...]; null, null for a node
+        // outside the area. See cantino_way_coordinates in include/cantino.h.
+        val flat = JSONArray(json)
+        return List(flat.length() / 2) { index ->
+            if (flat.isNull(2 * index)) null else Coordinate(flat.getInt(2 * index), flat.getInt(2 * index + 1))
+        }
+    }
+
+    /**
+     * A single point to put a marker or label for the object with [id], or
+     * to measure a distance from. Null when the object is not in this area
+     * or none of its geometry is.
+     *
+     * **This is an anchor point, not a guaranteed point-on-surface or a true
+     * centroid**: for a concave building or a multipolygon it can lie outside
+     * the shape. Computed in the native core:
+     * - **Node**: its coordinate.
+     * - **Closed way** (first node = last node): the mean of its distinct
+     *   vertices that are in the area.
+     * - **Open way**: the point at half the length of the line through its
+     *   in-area nodes (nodes outside the area are skipped).
+     * - **Relation**: the mean of the representative points of its distinct
+     *   members that are in the area, each member weighted equally. Member
+     *   relations are followed up to 8 levels deep; cycles are skipped.
+     *
+     * Throws [CantinoException] on a native error (including a non-positive
+     * ID), [IllegalStateException] if the store is closed.
+     */
+    public fun representativePoint(id: OsmId): Coordinate? =
+        native { NativeBridge.representativePoint(live(), id.kind.code, id.id) }
+            ?.let { Coordinate.fromJson(JSONObject(it)) }
+
+    /**
      * Runs [query] and returns at most [Query.limit] objects; see [Query] for
      * ordering, pagination and the candidate semantics of a bbox. Throws
      * [CantinoException] for an invalid query (limit outside 1..10 000,
-     * invalid bbox, too many spatial candidates), [IllegalStateException] if
+     * invalid bbox, too many spatial candidates, only [TagFilter.NotExists]
+     * filters and no bbox), [IllegalStateException] if
      * the store is closed.
      */
     public fun query(query: Query): List<OsmObject> {

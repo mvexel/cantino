@@ -2,7 +2,6 @@ package io.github.mvexel.cantino.cafe
 
 import io.github.mvexel.cantino.Bbox
 import io.github.mvexel.cantino.OsmId
-import io.github.mvexel.cantino.OsmKind
 import io.github.mvexel.cantino.OsmObject
 import io.github.mvexel.cantino.OsmStore
 import io.github.mvexel.cantino.Query
@@ -55,8 +54,8 @@ sealed interface OutdoorSeating {
 /**
  * One café as the app sees it. [location] is null when none of the object's
  * nodes are in the area (it is still listed, without a distance). For ways and
- * relations it is a representative point: the mean of the distinct node
- * coordinates we could resolve (good enough for a café building; not an
+ * relations it is the framework's representative point
+ * ([OsmStore.representativePoint]; good enough for a café building, not an
  * exact centroid or a point guaranteed to lie inside the polygon).
  */
 data class Cafe(
@@ -86,28 +85,14 @@ object CafeLoader {
         return objects.map { Cafe(it.id, it.tags, representativePoint(store, it)) }
     }
 
-    /** Node: its coordinate. Way: mean of its nodes. Relation: mean over node members and way members' nodes (one level). */
-    fun representativePoint(store: OsmStore, obj: OsmObject): LatLon? = when (obj) {
-        is OsmObject.Node -> LatLon(obj.lat, obj.lon)
-        is OsmObject.Way -> mean(obj.nodeIds.distinct().mapNotNull { nodeLocation(store, it) })
-        is OsmObject.Relation -> mean(
-            obj.members.flatMap { member ->
-                when (member.id.kind) {
-                    OsmKind.NODE -> listOfNotNull(nodeLocation(store, member.id.id))
-                    OsmKind.WAY -> (store.get(member.id) as? OsmObject.Way)?.nodeIds.orEmpty().distinct()
-                        .mapNotNull { nodeLocation(store, it) }
-                    // Nested relations are not followed: a café is rarely one.
-                    OsmKind.RELATION -> emptyList()
-                }
-            },
-        )
-    }
-
-    private fun nodeLocation(store: OsmStore, id: Long): LatLon? =
-        (store.get(OsmId(OsmKind.NODE, id)) as? OsmObject.Node)?.let { LatLon(it.lat, it.lon) }
-
-    private fun mean(points: List<LatLon>): LatLon? =
-        if (points.isEmpty()) null else LatLon(points.sumOf { it.lat } / points.size, points.sumOf { it.lon } / points.size)
+    /**
+     * Where to put [obj] on the map: the framework's representative point
+     * ([OsmStore.representativePoint]: node coordinate, mean of a closed
+     * way's vertices, midpoint along an open way, mean of a relation's member
+     * points). An anchor for a marker and a distance, not exact geometry.
+     */
+    fun representativePoint(store: OsmStore, obj: OsmObject): LatLon? =
+        store.representativePoint(obj.id)?.let { LatLon(it.lat, it.lon) }
 
     private const val PAGE = 500
 }
