@@ -352,14 +352,47 @@ public class AreaMetadata internal constructor(
  * [Cancelled] runs publish nothing.
  * WorkManager prunes finished work after about a day; the state then falls
  * back to [Idle] carrying the published area.
+ *
+ * Every state except [Idle] carries [runId], the ID of the run it belongs
+ * to (the value [AreaManager.download] returned). It is the first
+ * constructor property of each subtype and takes part in `equals`.
  */
 public sealed interface AreaState {
+    /**
+     * The WorkManager ID of the run this state belongs to: the same
+     * [UUID] [AreaManager.download] returned for it. Null only for [Idle]
+     * (no run known); every other state carries it.
+     *
+     * [AreaManager.state] follows the *area*, not one run: right after
+     * [AreaManager.download] it can still emit the previous run's final
+     * state. Match [runId] to wait for your own download:
+     *
+     * ```
+     * val runId = areaManager.download("home", bbox)
+     * val last = areaManager.state("home")
+     *     .filter { it.runId == runId && it.isTerminal }
+     *     .first()
+     * ```
+     */
+    public val runId: UUID?
+
+    /**
+     * True for the states a run ends in: [Ready], [Failed] and [Cancelled].
+     * [Idle] is not terminal (no run), and neither is [Queued] after a
+     * transient failure: the same run resumes. Combine with [runId] to wait
+     * for your own download (see there).
+     */
+    public val isTerminal: Boolean
+        get() = this is Ready || this is Failed || this is Cancelled
+
     /**
      * No download is known.
      *
      * @property published The area on disk, if any.
      */
     public class Idle internal constructor(public val published: AreaInfo?) : AreaState {
+        /** Always null: no run is known. */
+        override val runId: UUID? get() = null
         override fun equals(other: Any?): Boolean = this === other || other is Idle && published == other.published
         override fun hashCode(): Int = hash(published)
         override fun toString(): String = "Idle(published=$published)"
@@ -371,24 +404,30 @@ public sealed interface AreaState {
      *
      * @property previousRuns Runs that already happened (0 before the first).
      */
-    public class Queued internal constructor(public val previousRuns: Int) : AreaState {
-        override fun equals(other: Any?): Boolean = this === other || other is Queued && previousRuns == other.previousRuns
-        override fun hashCode(): Int = previousRuns
-        override fun toString(): String = "Queued(previousRuns=$previousRuns)"
+    public class Queued internal constructor(override val runId: UUID, public val previousRuns: Int) : AreaState {
+        override fun equals(other: Any?): Boolean = this === other || other is Queued &&
+            runId == other.runId && previousRuns == other.previousRuns
+        override fun hashCode(): Int = hash(runId, previousRuns)
+        override fun toString(): String = "Queued(runId=$runId, previousRuns=$previousRuns)"
     }
 
     /** Submitting the job to SliceOSM, or re-attaching to the job of an interrupted run. */
-    public data object Submitting : AreaState
+    public class Submitting internal constructor(override val runId: UUID) : AreaState {
+        override fun equals(other: Any?): Boolean = this === other || other is Submitting && runId == other.runId
+        override fun hashCode(): Int = runId.hashCode()
+        override fun toString(): String = "Submitting(runId=$runId)"
+    }
 
     /**
      * SliceOSM is cutting the extract.
      *
      * @property fraction Progress 0..1, or null before the server reports totals.
      */
-    public class Slicing internal constructor(public val fraction: Double?) : AreaState {
-        override fun equals(other: Any?): Boolean = this === other || other is Slicing && fraction == other.fraction
-        override fun hashCode(): Int = hash(fraction)
-        override fun toString(): String = "Slicing(fraction=$fraction)"
+    public class Slicing internal constructor(override val runId: UUID, public val fraction: Double?) : AreaState {
+        override fun equals(other: Any?): Boolean = this === other || other is Slicing &&
+            runId == other.runId && fraction == other.fraction
+        override fun hashCode(): Int = hash(runId, fraction)
+        override fun toString(): String = "Slicing(runId=$runId, fraction=$fraction)"
     }
 
     /**
@@ -397,11 +436,15 @@ public sealed interface AreaState {
      * @property bytes Bytes downloaded so far.
      * @property totalBytes Size of the download, or null when the server sends no length.
      */
-    public class Downloading internal constructor(public val bytes: Long, public val totalBytes: Long?) : AreaState {
+    public class Downloading internal constructor(
+        override val runId: UUID,
+        public val bytes: Long,
+        public val totalBytes: Long?,
+    ) : AreaState {
         override fun equals(other: Any?): Boolean = this === other || other is Downloading &&
-            bytes == other.bytes && totalBytes == other.totalBytes
-        override fun hashCode(): Int = hash(bytes, totalBytes)
-        override fun toString(): String = "Downloading(bytes=$bytes, totalBytes=$totalBytes)"
+            runId == other.runId && bytes == other.bytes && totalBytes == other.totalBytes
+        override fun hashCode(): Int = hash(runId, bytes, totalBytes)
+        override fun toString(): String = "Downloading(runId=$runId, bytes=$bytes, totalBytes=$totalBytes)"
     }
 
     /**
@@ -409,7 +452,11 @@ public sealed interface AreaState {
      * The native import itself cannot be interrupted, but a cancel during it
      * is honored when it returns (the staged import is discarded).
      */
-    public data object Importing : AreaState
+    public class Importing internal constructor(override val runId: UUID) : AreaState {
+        override fun equals(other: Any?): Boolean = this === other || other is Importing && runId == other.runId
+        override fun hashCode(): Int = runId.hashCode()
+        override fun toString(): String = "Importing(runId=$runId)"
+    }
 
     /**
      * Downloading the basemap ([BasemapSource.Url] or [BasemapSource.Extract])
@@ -422,14 +469,15 @@ public sealed interface AreaState {
      * @property totalBytes Bytes to transfer in [phase], or null while unknown.
      */
     public class Basemap internal constructor(
+        override val runId: UUID,
         public val phase: BasemapPhase,
         public val bytes: Long,
         public val totalBytes: Long?,
     ) : AreaState {
         override fun equals(other: Any?): Boolean = this === other || other is Basemap &&
-            phase == other.phase && bytes == other.bytes && totalBytes == other.totalBytes
-        override fun hashCode(): Int = hash(phase, bytes, totalBytes)
-        override fun toString(): String = "Basemap(phase=$phase, bytes=$bytes, totalBytes=$totalBytes)"
+            runId == other.runId && phase == other.phase && bytes == other.bytes && totalBytes == other.totalBytes
+        override fun hashCode(): Int = hash(runId, phase, bytes, totalBytes)
+        override fun toString(): String = "Basemap(runId=$runId, phase=$phase, bytes=$bytes, totalBytes=$totalBytes)"
     }
 
     /**
@@ -441,10 +489,11 @@ public sealed interface AreaState {
      *
      * @property area The area this run published.
      */
-    public class Ready internal constructor(public val area: AreaInfo) : AreaState {
-        override fun equals(other: Any?): Boolean = this === other || other is Ready && area == other.area
-        override fun hashCode(): Int = area.hashCode()
-        override fun toString(): String = "Ready(area=$area)"
+    public class Ready internal constructor(override val runId: UUID, public val area: AreaInfo) : AreaState {
+        override fun equals(other: Any?): Boolean = this === other || other is Ready &&
+            runId == other.runId && area == other.area
+        override fun hashCode(): Int = hash(runId, area)
+        override fun toString(): String = "Ready(runId=$runId, area=$area)"
     }
 
     /**
@@ -456,11 +505,15 @@ public sealed interface AreaState {
      * @property message Developer-facing description of the failure (not localized).
      * @property retryable True for a transient cause that exhausted its retries.
      */
-    public class Failed internal constructor(public val message: String, public val retryable: Boolean) : AreaState {
+    public class Failed internal constructor(
+        override val runId: UUID,
+        public val message: String,
+        public val retryable: Boolean,
+    ) : AreaState {
         override fun equals(other: Any?): Boolean = this === other || other is Failed &&
-            message == other.message && retryable == other.retryable
-        override fun hashCode(): Int = hash(message, retryable)
-        override fun toString(): String = "Failed(message=$message, retryable=$retryable)"
+            runId == other.runId && message == other.message && retryable == other.retryable
+        override fun hashCode(): Int = hash(runId, message, retryable)
+        override fun toString(): String = "Failed(runId=$runId, message=$message, retryable=$retryable)"
     }
 
     /**
@@ -469,5 +522,9 @@ public sealed interface AreaState {
      * [AreaManager.download] of the same area is not reported: the state
      * follows the new run.)
      */
-    public data object Cancelled : AreaState
+    public class Cancelled internal constructor(override val runId: UUID) : AreaState {
+        override fun equals(other: Any?): Boolean = this === other || other is Cancelled && runId == other.runId
+        override fun hashCode(): Int = runId.hashCode()
+        override fun toString(): String = "Cancelled(runId=$runId)"
+    }
 }

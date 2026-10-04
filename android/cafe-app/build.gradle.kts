@@ -45,9 +45,6 @@ tasks.named("preBuild") { dependsOn(copyBasemapStyleAssets) }
 dependencies {
     implementation(project(":cantino"))
     implementation("org.maplibre.gl:android-sdk:13.6.1")
-    // AreaManager.state() is a Flow; the framework keeps coroutines as an
-    // implementation dependency, so the app declares them itself.
-    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.2")
 
     testImplementation("junit:junit:4.13.2")
 }

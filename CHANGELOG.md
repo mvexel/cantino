@@ -3,6 +3,31 @@
 All notable changes to Cantino (formerly osm-framework). Versions follow semantic versioning;
 before 1.0 a minor version may break the API.
 
+## 0.2.0 (unreleased)
+
+### Added
+
+- `AreaState.runId: UUID?`: the WorkManager ID of the run a state belongs to
+  (the `UUID` `AreaManager.download()` returns); null only for `Idle`. Wait for
+  your own download with `state(id).first { it.runId == runId && it.isTerminal }`.
+- `AreaState.isTerminal`: true for `Ready`, `Failed` and `Cancelled`.
+- Suspend, main-safe variants of the blocking disk reads:
+  `AreaManager.loadDataFile`, `loadBasemapFile`, `loadPublishedArea`
+  (`Dispatchers.IO`).
+
+### Changed
+
+- kotlinx-coroutines (`kotlinx-coroutines-android:1.10.2`) is now an `api`
+  dependency (POM compile scope): apps no longer declare it themselves.
+- Quickstart and guide use the `runId` match instead of the `dropWhile` workaround.
+
+### Breaking
+
+- `AreaState.Submitting`, `Importing` and `Cancelled` are classes carrying
+  `runId`, no longer objects: write `is AreaState.Cancelled`, not
+  `AreaState.Cancelled`. `equals`/`hashCode`/`toString` of every state
+  subtype include `runId`, so states of different runs are never equal.
+
 ## 0.1.0 — first release
 
 Android library `io.github.mvexel:cantino:0.1.0` (AAR, minSdk 26,
@@ -86,7 +111,7 @@ arm64-v8a and x86_64) over a Rust core with a C ABI (`include/cantino.h`, prefix
   SCM), API reference (Dokka) at `https://mvexel.github.io/cantino/api/`,
   guide in `docs/guide/`. `AreaManager.state()` returns a `Flow` but
   kotlinx-coroutines is not an API dependency in 0.1.0: apps declare it
-  themselves (see the README's Install section).
+  themselves (see the README's Install section; fixed in 0.2.0).
 
 Not in this release: iOS adapter, edits/upload, incremental refresh,
 overlapping areas, byte-range resume of downloads.

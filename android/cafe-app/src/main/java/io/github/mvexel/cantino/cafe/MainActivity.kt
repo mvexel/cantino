@@ -209,7 +209,7 @@ class MainActivity : Activity() {
                 showMap()
             }
             is AreaState.Failed -> showFailure(state.message, state.retryable)
-            AreaState.Cancelled -> {
+            is AreaState.Cancelled -> {
                 progress = null
                 scope.launch {
                     val published = withContext(Dispatchers.IO) { areas.publishedArea(StoreWorker.AREA_ID) }
@@ -375,7 +375,7 @@ class MainActivity : Activity() {
                     phase(if (state.previousRuns == 0) "Waiting for network" else "Waiting to retry (attempt ${state.previousRuns + 1})")
                     indeterminate("Queued in WorkManager (needs a connection and free storage).")
                 }
-                AreaState.Submitting -> { phase("Requesting the extract (SliceOSM)"); indeterminate("") }
+                is AreaState.Submitting -> { phase("Requesting the extract (SliceOSM)"); indeterminate("") }
                 is AreaState.Slicing -> {
                     phase("SliceOSM is cutting the extract")
                     val fraction = state.fraction
@@ -386,7 +386,7 @@ class MainActivity : Activity() {
                     phase("Downloading OSM data")
                     bytes(state.bytes, state.totalBytes)
                 }
-                AreaState.Importing -> { phase("Importing into the offline database"); indeterminate("Building indexes on the device.") }
+                is AreaState.Importing -> { phase("Importing into the offline database"); indeterminate("Building indexes on the device.") }
                 is AreaState.Basemap -> {
                     phase(
                         when (state.phase) {
@@ -397,7 +397,7 @@ class MainActivity : Activity() {
                     )
                     bytes(state.bytes, state.totalBytes)
                 }
-                is AreaState.Ready, is AreaState.Failed, AreaState.Cancelled, is AreaState.Idle -> Unit
+                is AreaState.Ready, is AreaState.Failed, is AreaState.Cancelled, is AreaState.Idle -> Unit
             }
         }
 
@@ -441,8 +441,8 @@ class MainActivity : Activity() {
     }
 
     private fun AreaState.isRunning() = when (this) {
-        is AreaState.Queued, AreaState.Submitting, is AreaState.Slicing, is AreaState.Downloading,
-        AreaState.Importing, is AreaState.Basemap -> true
+        is AreaState.Queued, is AreaState.Submitting, is AreaState.Slicing, is AreaState.Downloading,
+        is AreaState.Importing, is AreaState.Basemap -> true
         else -> false
     }
 

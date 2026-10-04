@@ -60,8 +60,6 @@ android {
 
 dependencies {
     implementation("io.github.mvexel:cantino:0.1.0")
-    // AreaManager.state() is a Flow: declare coroutines yourself.
-    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.2")
     // Only to show the offline basemap.
     implementation("org.maplibre.gl:android-sdk:13.6.1")
 }
@@ -119,16 +117,16 @@ class MainActivity : Activity() {
     /** The published area, or a fresh download of ~10×10 km around (lat, lon). */
     private suspend fun publishedOrDownload(): AreaInfo {
         val areas = AreaManager(this)
-        withContext(Dispatchers.IO) { areas.publishedArea(AREA) }?.let { return it }
+        areas.loadPublishedArea(AREA)?.let { return it }
         val dLat = 5.0 / 111.32
         val dLon = dLat / cos(Math.toRadians(lat))
         val bbox = Bbox(west = lon - dLon, south = lat - dLat, east = lon + dLon, north = lat + dLat)
         // Demo basemap: today's Protomaps build. Production apps use their own mirror (see the guide).
-        areas.download(AREA, bbox, basemap = BasemapSource.Extract(ProtomapsBuilds.latestUrl(), maxZoom = 15))
+        val runId = areas.download(AREA, bbox, basemap = BasemapSource.Extract(ProtomapsBuilds.latestUrl(), maxZoom = 15))
+        // state() follows the area, not one run: match runId to wait for *this* download.
         val end = areas.state(AREA)
             .onEach { Log.i(TAG, "$it") } // Queued, Submitting, Slicing, Downloading, Importing, Basemap, Ready
-            .dropWhile { it is AreaState.Idle || it is AreaState.Ready || it is AreaState.Failed || it is AreaState.Cancelled }
-            .first { it is AreaState.Ready || it is AreaState.Failed || it is AreaState.Cancelled }
+            .first { it.runId == runId && it.isTerminal }
         return (end as? AreaState.Ready)?.area ?: error("download ended: $end")
     }
 
