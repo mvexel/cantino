@@ -58,8 +58,15 @@ internal object NativeBridge {
     @JvmStatic external fun areaDiscardStaging(root: String, areaId: String, workId: String)
     @JvmStatic external fun areaWriteStagedMetadata(root: String, areaId: String, workId: String, metadata: String)
 
-    /** True when published; false when [hook] aborted (its exception is then thrown instead). */
-    @JvmStatic external fun areaCommit(root: String, areaId: String, workId: String, hasBasemap: Boolean, hook: AreaCommitHook): Boolean
+    /**
+     * True when published; false when [hook] aborted (its exception is then
+     * thrown instead). [parts]: [PART_DATA] and/or [PART_BASEMAP].
+     */
+    @JvmStatic external fun areaCommit(root: String, areaId: String, workId: String, parts: Int, hook: AreaCommitHook): Boolean
+
+    /** `CANTINO_AREA_PART_*`. */
+    const val PART_DATA: Int = 1
+    const val PART_BASEMAP: Int = 2
     @JvmStatic external fun areaRecover(root: String, areaId: String)
 
     /** The published area JSON, or null when none is published. */

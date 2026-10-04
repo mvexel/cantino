@@ -102,6 +102,14 @@ internal class AreaDownloadWorker(context: Context, parameters: WorkerParameters
             }
             storage.deleteStaleStaging(request.areaId, keep = staging)
             storage.prepareStaging(request.areaId, id)
+            if (!request.includeData) {
+                // Basemap only: no SliceOSM job, no import.
+                val basemap = checkNotNull(basemap(request, storage, http)) { "basemap-only run without a source" }
+                val metadata = AreaMetadata(request.bbox, request.name, null, System.currentTimeMillis(), null, basemap, id)
+                storage.writeStagedMetadata(request.areaId, id, metadata)
+                publish(request, storage, hasData = false, hasBasemap = true)
+                return Result.success(workDataOf(KEY_METADATA to metadata.toJson().toString()))
+            }
             val (job, progress) = sliceJob(request, storage, http)
 
             report(PHASE_DOWNLOADING, bytes = 0, total = progress.sizeBytes)
@@ -146,7 +154,7 @@ internal class AreaDownloadWorker(context: Context, parameters: WorkerParameters
                 id,
             )
             storage.writeStagedMetadata(request.areaId, id, metadata)
-            publish(request, storage, hasBasemap = basemap != null)
+            publish(request, storage, hasData = true, hasBasemap = basemap != null)
             storage.clearCheckpoint(request.areaId, id)
             return Result.success(workDataOf(KEY_METADATA to metadata.toJson().toString()))
         } catch (failure: DownloadFailure.Permanent) {
@@ -183,7 +191,7 @@ internal class AreaDownloadWorker(context: Context, parameters: WorkerParameters
      * even if a cancel arrives meanwhile ([AreaManager.state] then reads the
      * published sidecar's work ID and reports Ready).
      */
-    private suspend fun publish(request: DownloadRequest, storage: AreaStorage, hasBasemap: Boolean) {
+    private suspend fun publish(request: DownloadRequest, storage: AreaStorage, hasData: Boolean, hasBasemap: Boolean) {
         val job = currentCoroutineContext()[Job]
         val workManager = WorkManager.getInstance(applicationContext)
         // NonCancellable: once the commit point has passed, a cancel must not
@@ -192,7 +200,7 @@ internal class AreaDownloadWorker(context: Context, parameters: WorkerParameters
         // commit point uses the outer job, so cancellation still counts there.
         withContext(NonCancellable + Dispatchers.IO) {
             try {
-                storage.commit(request.areaId, id, hasBasemap) {
+                storage.commit(request.areaId, id, hasData, hasBasemap) {
                     job?.ensureActive()
                     // cancelUniqueWork records CANCELLED before it stops the
                     // worker; checking the record here closes that window.
@@ -522,11 +530,14 @@ internal class AreaDownloadWorker(context: Context, parameters: WorkerParameters
         val basemap: BasemapSource = BasemapSource.None,
         /** Resource name of [ForegroundConfig.smallIcon] (IDs are not stable across app versions). */
         val foregroundIcon: String? = null,
+        /** False for [AreaManager.downloadBasemap]: no OSM data. */
+        val includeData: Boolean = true,
     ) {
         fun toData(): Data = Data.Builder()
             .putString(KEY_AREA, areaId)
             .putString(KEY_BBOX, bbox.toJson().toString())
             .putString(KEY_NAME, name)
+            .putBoolean("include_data", includeData)
             .putString("base", config.sliceBaseUrl)
             .putInt("connect_timeout", config.connectTimeoutMillis)
             .putInt("read_timeout", config.readTimeoutMillis)
@@ -594,6 +605,7 @@ internal class AreaDownloadWorker(context: Context, parameters: WorkerParameters
                         else -> error("missing or invalid basemap kind")
                     },
                     foregroundIcon = data.getString("fg_icon"),
+                    includeData = data.getBoolean("include_data", true),
                 )
             }
         }

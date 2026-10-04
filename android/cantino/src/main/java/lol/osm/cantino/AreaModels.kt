@@ -128,11 +128,12 @@ public data class ForegroundConfig(
 }
 
 /**
- * A published area as found on disk: OSM data, optional basemap, metadata.
+ * A published area as found on disk: OSM data and/or a basemap, metadata.
  *
  * @property areaId The app-chosen area ID (see [AreaManager]).
  * @property dataFile The OSM data (`filesDir/cantino-areas/<areaId>.sqlite`);
- *   open it with [OsmStore.open].
+ *   open it with [OsmStore.open]. Null for a basemap-only area
+ *   ([AreaManager.downloadBasemap]).
  * @property metadata What the download recorded (bbox, snapshot age, import
  *   report, basemap). Null when the sidecar is missing or does not describe
  *   these files;
@@ -142,7 +143,7 @@ public data class ForegroundConfig(
  */
 public data class AreaInfo(
     public val areaId: String,
-    public val dataFile: File,
+    public val dataFile: File?,
     public val metadata: AreaMetadata?,
     public val basemapFile: File? = null,
 ) {
@@ -225,7 +226,8 @@ public data class BasemapMetadata(
  *   show it to users as the age of the data. Null if the server did not
  *   report one or reported one that is not an RFC 3339 date-time.
  * @property importedAtMillis Device clock (Unix milliseconds) when the area was published.
- * @property report The import's object counts and database size.
+ * @property report The import's object counts and database size; null for a
+ *   basemap-only area.
  * @property basemap The published basemap, null for [BasemapSource.None].
  * @property workId The [AreaManager.download] run that published the area
  *   (null for areas published by hand). Changes with every refresh, so it
@@ -239,7 +241,7 @@ public data class AreaMetadata(
      */
     public val snapshotTimestamp: Instant?,
     public val importedAtMillis: Long,
-    public val report: ImportReport,
+    public val report: ImportReport?,
     public val basemap: BasemapMetadata? = null,
     public val workId: UUID? = null,
 ) {
@@ -248,7 +250,7 @@ public data class AreaMetadata(
         .put("name", name)
         .put("snapshot_timestamp", snapshotTimestamp?.toString() ?: JSONObject.NULL)
         .put("imported_at_millis", importedAtMillis)
-        .put("report", report.toJson())
+        .put("report", report?.toJson() ?: JSONObject.NULL)
         .put("basemap", basemap?.toJson() ?: JSONObject.NULL)
         .put("work_id", workId?.toString() ?: JSONObject.NULL)
 
@@ -258,7 +260,7 @@ public data class AreaMetadata(
             json.getString("name"),
             parseSnapshotTimestamp(if (json.isNull("snapshot_timestamp")) null else json.getString("snapshot_timestamp")),
             json.getLong("imported_at_millis"),
-            ImportReport.fromJson(json.getJSONObject("report")),
+            json.optJSONObject("report")?.let { ImportReport.fromJson(it) },
             json.optJSONObject("basemap")?.let { BasemapMetadata.fromJson(it) },
             if (json.isNull("work_id")) null else UUID.fromString(json.getString("work_id")),
         )

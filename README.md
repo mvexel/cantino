@@ -191,7 +191,7 @@ class MainActivity : Activity() {
             val area = publishedOrDownload()
             // An OsmStore belongs to the thread that opened it: open, query and close in one block.
             val cafes = withContext(Dispatchers.IO) {
-                OsmStore.open(area.dataFile).use { store ->
+                OsmStore.open(checkNotNull(area.dataFile)).use { store ->
                     store.query(Query(tags = listOf(TagFilter.Equals("amenity", "cafe")), limit = 1000))
                 }
             }

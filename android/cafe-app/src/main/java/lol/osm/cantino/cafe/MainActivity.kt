@@ -409,7 +409,7 @@ class MainActivity : Activity() {
             val metadata = area.metadata
             Log.i(
                 TIMING_TAG,
-                "ready in $total ms; data db ${area.dataFile.length()} B; pmtiles ${area.basemapFile?.length()} B; " +
+                "ready in $total ms; data db ${area.dataFile?.length()} B; pmtiles ${area.basemapFile?.length()} B; " +
                     "counts ${metadata?.report?.counts}; basemap ${metadata?.basemap}; snapshot ${metadata?.snapshotTimestamp}; bbox ${metadata?.bbox}",
             )
         }

@@ -116,7 +116,7 @@ class ProcessDeathTest {
         val manager = manager()
         val runId = manager.download(areaId, Bbox(-111.01, 39.89, -110.99, 40.11), "kill test", BasemapSource.Url(base + "basemap/old.pmtiles"))
         val ready = await(manager, 60) { it is AreaState.Ready && it.runId == runId } as AreaState.Ready
-        assertEquals(ObjectCounts(4, 2, 1), ready.area.metadata!!.report.counts)
+        assertEquals(ObjectCounts(4, 2, 1), ready.area.metadata!!.report!!.counts)
         notes.writeText(JSONObject().put("old", runId.toString()).put("submits_before", submitsBefore).toString())
     }
 
@@ -153,16 +153,16 @@ class ProcessDeathTest {
         val published = manager.publishedArea(areaId)
         assertNotNull(published)
         assertEquals(old, published!!.metadata!!.workId)
-        assertEquals(ObjectCounts(4, 2, 1), published.metadata!!.report.counts)
-        assertFalse(isNewArea(published.dataFile))
+        assertEquals(ObjectCounts(4, 2, 1), published.metadata!!.report!!.counts)
+        assertFalse(isNewArea(published.dataFile!!))
         assertBasemap(published, refreshed = false)
 
         control("""{"slow":false}""")
         // WorkManager reruns the killed work by itself (JobScheduler), no
         // download() call here; backoff and job scheduling can take a while.
         val ready = await(manager, 300) { it is AreaState.Ready && it.runId == runId } as AreaState.Ready
-        assertEquals(ObjectCounts(10, 3, 4), ready.area.metadata!!.report.counts)
-        assertTrue(isNewArea(ready.area.dataFile))
+        assertEquals(ObjectCounts(10, 3, 4), ready.area.metadata!!.report!!.counts)
+        assertTrue(isNewArea(ready.area.dataFile!!))
         assertBasemap(ready.area, refreshed = true)
         assertEquals(runId, ready.area.metadata!!.workId)
         val server = serverState()
@@ -192,8 +192,8 @@ class ProcessDeathTest {
         val published = manager.publishedArea(areaId)
         assertNotNull(published)
         assertEquals(runId, published!!.metadata!!.workId)
-        assertEquals(ObjectCounts(10, 3, 4), published.metadata!!.report.counts)
-        assertTrue(isNewArea(published.dataFile))
+        assertEquals(ObjectCounts(10, 3, 4), published.metadata!!.report!!.counts)
+        assertTrue(isNewArea(published.dataFile!!))
         assertBasemap(published, refreshed = true)
         assertFalse(File(target.filesDir, "cantino-areas/$areaId.commit").exists())
 

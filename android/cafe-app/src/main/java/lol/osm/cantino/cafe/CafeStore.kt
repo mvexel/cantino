@@ -54,8 +54,10 @@ object CafeStore {
             val identity = identity(published)
             if (store == null || identity != openedIdentity) {
                 closeStore()
-                Log.i(TAG, "opening ${published.dataFile} ($identity)")
-                store = AsyncOsmStore.open(published.dataFile)
+                // The café app always downloads OSM data (never downloadBasemap).
+                val dataFile = checkNotNull(published.dataFile) { "area ${published.areaId} has no OSM data" }
+                Log.i(TAG, "opening $dataFile ($identity)")
+                store = AsyncOsmStore.open(dataFile)
                 openedIdentity = identity
             }
             beforeRead?.invoke()
@@ -70,7 +72,7 @@ object CafeStore {
     }
 
     private fun identity(area: AreaInfo): String =
-        area.metadata?.workId?.toString() ?: area.dataFile.let { f: File -> "${f.length()}:${f.lastModified()}" }
+        area.metadata?.workId?.toString() ?: area.dataFile?.let { f: File -> "${f.length()}:${f.lastModified()}" } ?: "no-data"
 
     class NoAreaException : IllegalStateException("no offline area has been downloaded")
 }

@@ -133,8 +133,9 @@ internal class AreaStorage @VisibleForTesting internal constructor(
      * Publishes run [workId]'s staged version (see the class comment).
      * [beforeCommit] runs under the area lock immediately before the commit
      * point; throwing from it aborts with nothing changed, and the exception
-     * propagates. [hasBasemap] says whether the version includes
-     * `basemap.pmtiles` (if not, a previously published basemap is removed).
+     * propagates. [hasData] and [hasBasemap] say whether the version includes
+     * `area.sqlite` and `basemap.pmtiles` (at least one); a published part the
+     * version lacks is removed.
      * [AreaTestHooks.afterCommitPoint] runs right after the commit point.
      *
      * Throws [IOException] for a file system failure: before the commit
@@ -142,9 +143,10 @@ internal class AreaStorage @VisibleForTesting internal constructor(
      * committed and the next [recover] finishes it.
      * [CantinoException.InvalidArgument] if the staged version is incomplete.
      */
-    fun commit(areaId: String, workId: UUID, hasBasemap: Boolean, beforeCommit: () -> Unit) {
+    fun commit(areaId: String, workId: UUID, hasData: Boolean, hasBasemap: Boolean, beforeCommit: () -> Unit) {
+        val parts = (if (hasData) NativeBridge.PART_DATA else 0) or (if (hasBasemap) NativeBridge.PART_BASEMAP else 0)
         val published = storageIo {
-            NativeBridge.areaCommit(root, areaId, workId.toString(), hasBasemap) { stage ->
+            NativeBridge.areaCommit(root, areaId, workId.toString(), parts) { stage ->
             when (stage) {
                     AreaCommitHook.STAGE_BEFORE_COMMIT -> beforeCommit()
                     AreaCommitHook.STAGE_AFTER_COMMIT_POINT -> AreaTestHooks.afterCommitPoint?.invoke()
@@ -192,7 +194,8 @@ internal class AreaStorage @VisibleForTesting internal constructor(
             }
         }
         val basemap = if (json.isNull("basemap")) null else File(json.getString("basemap"))
-        return AreaInfo(areaId, File(json.getString("data")), metadata, basemap)
+        val data = if (json.isNull("data")) null else File(json.getString("data"))
+        return AreaInfo(areaId, data, metadata, basemap)
     }
 
     // --- Job checkpoint (process-death resume) -------------------------------

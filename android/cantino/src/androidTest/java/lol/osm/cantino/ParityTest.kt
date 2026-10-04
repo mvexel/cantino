@@ -362,7 +362,7 @@ class ParityTest {
         return outcome(missingOnNull = true) {
             storage.published(areaId)?.let { info ->
                 mapOf(
-                    "data" to info.dataFile.path,
+                    "data" to info.dataFile?.path,
                     "basemap" to info.basemapFile?.path,
                     "metadata" to info.metadata?.let(::metadataTree),
                 )
@@ -376,10 +376,12 @@ class ParityTest {
         "name" to m.name,
         "snapshot_timestamp" to m.snapshotTimestamp?.toString(),
         "imported_at_millis" to m.importedAtMillis,
-        "report" to mapOf(
-            "counts" to mapOf("nodes" to m.report.counts.nodes, "ways" to m.report.counts.ways, "relations" to m.report.counts.relations),
-            "database_bytes" to m.report.databaseBytes,
-        ),
+        "report" to m.report?.let { report ->
+            mapOf(
+                "counts" to mapOf("nodes" to report.counts.nodes, "ways" to report.counts.ways, "relations" to report.counts.relations),
+                "database_bytes" to report.databaseBytes,
+            )
+        },
         "basemap" to m.basemap?.let {
             mapOf(
                 "kind" to it.kind.wire, "source_url" to it.sourceUrl, "bytes" to it.fileBytes, "addressed_tiles" to it.addressedTiles,

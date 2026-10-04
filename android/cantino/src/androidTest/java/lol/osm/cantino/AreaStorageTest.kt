@@ -45,7 +45,7 @@ class AreaStorageTest {
 
     @Test fun failedRecoveryDoesNotExposeMixedFilesAndKeepsJournalForRetry() {
         val old = stage("old")
-        storage.commit(areaId, old, true) {}
+        storage.commit(areaId, old, hasData = true, hasBasemap = true) {}
         val next = stage("new-version")
         // After the durable journal, force the data rename to fail. The
         // basemap rename succeeds first, leaving a genuinely partial commit.
@@ -54,7 +54,7 @@ class AreaStorageTest {
             check(storage.dataFile(areaId).mkdir())
             File(storage.dataFile(areaId), "obstruction").writeText("cannot replace directory")
         }
-        expectIo { storage.commit(areaId, next, true) {} }
+        expectIo { storage.commit(areaId, next, hasData = true, hasBasemap = true) {} }
         AreaTestHooks.afterCommitPoint = null
         assertEquals("map-new-version", storage.basemapFile(areaId).readText())
         expectIo { storage.recover(areaId) }
@@ -64,7 +64,7 @@ class AreaStorageTest {
         storage.dataFile(areaId).deleteRecursively()
         val recovered = storage.published(areaId)!!
         assertEquals(next, recovered.metadata!!.workId)
-        assertEquals("new-version", recovered.dataFile.readText())
+        assertEquals("new-version", recovered.dataFile!!.readText())
         assertFalse(File(areas, "$areaId.commit").exists())
     }
 

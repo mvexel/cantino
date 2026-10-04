@@ -83,7 +83,27 @@ public class AreaManager @JvmOverloads constructor(context: Context, private val
      * resource.
      */
     @JvmOverloads
-    public fun download(areaId: String, bbox: Bbox, name: String = areaId, basemap: BasemapSource = BasemapSource.None): UUID {
+    public fun download(areaId: String, bbox: Bbox, name: String = areaId, basemap: BasemapSource = BasemapSource.None): UUID =
+        enqueue(areaId, bbox, name, basemap, includeData = true)
+
+    /**
+     * Starts downloading only a basemap for [bbox] as area [areaId]: no
+     * SliceOSM job, no OSM data. Returns the run ID, as [download] does, and
+     * behaves like it in every other way (states, cancel, replacement,
+     * process death). The published area has [AreaInfo.dataFile] and
+     * [AreaMetadata.report] null. Refresh = full replace: a basemap-only run
+     * removes OSM data an earlier download published, and a later [download]
+     * brings it back. The run goes Submitting → Basemap → Ready.
+     *
+     * Throws [IllegalArgumentException] for an invalid [areaId] or for
+     * [BasemapSource.None].
+     */
+    public fun downloadBasemap(areaId: String, bbox: Bbox, basemap: BasemapSource): UUID {
+        require(basemap != BasemapSource.None) { "downloadBasemap needs a basemap source" }
+        return enqueue(areaId, bbox, areaId, basemap, includeData = false)
+    }
+
+    private fun enqueue(areaId: String, bbox: Bbox, name: String, basemap: BasemapSource, includeData: Boolean): UUID {
         AreaStorage.requireValidAreaId(areaId)
         // Resource IDs can change between app versions; a queued run keeps the icon's name.
         val iconName = config.foreground?.let { foreground ->
@@ -94,7 +114,7 @@ public class AreaManager @JvmOverloads constructor(context: Context, private val
             }
         }
         val request = OneTimeWorkRequestBuilder<AreaDownloadWorker>()
-            .setInputData(AreaDownloadWorker.DownloadRequest(areaId, bbox, name, config, basemap, iconName).toData())
+            .setInputData(AreaDownloadWorker.DownloadRequest(areaId, bbox, name, config, basemap, iconName, includeData).toData())
             .setConstraints(
                 Constraints.Builder()
                     .setRequiredNetworkType(NetworkType.CONNECTED)

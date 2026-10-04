@@ -22,6 +22,7 @@ import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.Assume.assumeTrue
 import org.junit.Before
@@ -129,7 +130,7 @@ class AreaManagerTest {
         progress.forEach { assertEquals("$it", runId, it.runId); assertFalse("$it", it.isTerminal) }
 
         val metadata = ready.area.metadata!!
-        assertEquals(ObjectCounts(4, 2, 1), metadata.report.counts)
+        assertEquals(ObjectCounts(4, 2, 1), metadata.report!!.counts)
         assertEquals(Instant.parse(FakeSlice.TIMESTAMP), metadata.snapshotTimestamp)
         // The sidecar keeps the server's string as received.
         val sidecar = JSONObject(File(target.filesDir, "cantino-areas/$areaId.json").readText())
@@ -356,11 +357,11 @@ class AreaManagerTest {
         Log.i("AreaLive", "total %.0f ms, final $ready".format(total))
         assertTrue("$ready", ready is AreaState.Ready)
         ready as AreaState.Ready
-        val cafes = cafeNames(ready.area.dataFile)
+        val cafes = cafeNames(ready.area.dataFile!!)
         val metadata = ready.area.metadata!!
         Log.i("AreaLive", "snapshot ${metadata.snapshotTimestamp}, ${metadata.report}, ${cafes.size} cafés: $cafes")
         assertNotNull(metadata.snapshotTimestamp)
-        assertTrue(metadata.report.counts.nodes > 0)
+        assertTrue(metadata.report!!.counts.nodes > 0)
         states.close()
     }
 
@@ -375,7 +376,7 @@ class AreaManagerTest {
         val ready = states.await { it is AreaState.Ready } as AreaState.Ready
 
         val area = ready.area
-        assertEquals(listOf("Café Test"), cafeNames(area.dataFile))
+        assertEquals(listOf("Café Test"), cafeNames(area.dataFile!!))
         assertEquals(File(target.filesDir, "cantino-areas/$areaId.pmtiles"), area.basemapFile)
         assertArrayEquals(pmtiles, area.basemapFile!!.readBytes())
         assertEquals("pmtiles://file://${area.basemapFile!!.absolutePath}", area.pmtilesUrl)
@@ -408,6 +409,57 @@ class AreaManagerTest {
         states.close()
     }
 
+    @Test
+    fun basemapOnlyPublishesNoDataAndMakesNoSliceRequests() {
+        val manager = manager()
+        val states = Recorder(manager, areaId)
+        val url = server.url("/basemap.pmtiles").toString()
+        val runId = manager.downloadBasemap(areaId, bbox, BasemapSource.Url(url))
+        val ready = states.await { it.runId == runId && it.isTerminal }
+        assertTrue("$ready", ready is AreaState.Ready)
+        ready as AreaState.Ready
+        assertEquals(null, ready.area.dataFile)
+        assertArrayEquals(pmtiles, ready.area.basemapFile!!.readBytes())
+        val metadata = ready.area.metadata!!
+        assertEquals(null, metadata.report)
+        assertEquals(null, metadata.snapshotTimestamp)
+        assertEquals(runId, metadata.workId)
+        assertEquals(BasemapKind.URL, metadata.basemap!!.kind)
+        assertEquals(0, slice.submits.get())
+        assertEquals(0, slice.downloads.get())
+        assertFalse(states.seen.any { it is AreaState.Slicing || it is AreaState.Downloading || it is AreaState.Importing })
+        assertTrue(states.seen.any { it is AreaState.Basemap && it.runId == runId })
+        assertEquals(ready.area, manager.publishedArea(areaId))
+        assertNoStagingLeft()
+        states.close()
+    }
+
+    /** Refresh = full replace: basemap-only removes the old data; a later download brings it back. */
+    @Test
+    fun basemapOnlyReplacesDataAndADownloadBringsItBack() {
+        publishOldArea()
+        val manager = manager()
+        val url = server.url("/basemap.pmtiles").toString()
+        val basemapOnly = manager.downloadBasemap(areaId, bbox, BasemapSource.Url(url))
+        val first = runBlocking { withTimeout(30_000) { manager.state(areaId).first { it.runId == basemapOnly && it.isTerminal } } }
+        assertTrue("$first", first is AreaState.Ready)
+        assertEquals(null, manager.publishedArea(areaId)!!.dataFile)
+        assertFalse(File(target.filesDir, "cantino-areas/$areaId.sqlite").exists())
+
+        val full = manager.download(areaId, bbox)
+        val second = runBlocking { withTimeout(30_000) { manager.state(areaId).first { it.runId == full && it.isTerminal } } }
+        assertTrue("$second", second is AreaState.Ready)
+        val area = manager.publishedArea(areaId)!!
+        assertEquals(listOf("Café Test"), cafeNames(area.dataFile!!))
+        assertEquals(null, area.basemapFile) // the full download asked for no basemap
+        assertNoStagingLeft()
+    }
+
+    @Test
+    fun downloadBasemapNeedsASource() {
+        assertThrows(IllegalArgumentException::class.java) { manager().downloadBasemap(areaId, bbox, BasemapSource.None) }
+    }
+
     /**
      * On-device extract against a range-capable fake planet (the fixture
      * archive). The published file must be byte-identical to the Rust engine
@@ -438,7 +490,7 @@ class AreaManagerTest {
         // Every request was a range request, and the sidecar counts them.
         assertEquals(basemap.requests, slice.basemapRequests.get().toLong())
         assertTrue(slice.rangeHeaders.all { it.startsWith("bytes=") })
-        assertEquals(listOf("Café Test"), cafeNames(ready.area.dataFile))
+        assertEquals(listOf("Café Test"), cafeNames(ready.area.dataFile!!))
         assertNoStagingLeft()
         states.close()
     }
@@ -568,7 +620,7 @@ class AreaManagerTest {
         val basemap = ready.area.metadata!!.basemap!!
         val info = PmtilesInfo.read(ready.area.basemapFile!!)
         Log.i("AreaLive", "basemap $basemap; file ${info.fileBytes} B, z${info.minZoom}-${info.maxZoom}, ${info.addressedTiles} tiles")
-        Log.i("AreaLive", "data ${ready.area.metadata!!.report}; ${cafeNames(ready.area.dataFile).size} cafés")
+        Log.i("AreaLive", "data ${ready.area.metadata!!.report}; ${cafeNames(ready.area.dataFile!!).size} cafés")
         assertTrue(info.addressedTiles > 0)
         states.close()
     }
@@ -599,7 +651,7 @@ class AreaManagerTest {
             oldRun,
         )
         storage.writeStagedMetadata(areaId, oldRun, metadata)
-        storage.commit(areaId, oldRun, hasBasemap = true) {}
+        storage.commit(areaId, oldRun, hasData = true, hasBasemap = true) {}
         val published = storage.published(areaId)!!
         assertEquals(metadata, published.metadata)
         return published to oldBasemap
