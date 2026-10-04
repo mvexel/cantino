@@ -23,6 +23,7 @@ android {
         // downloaded per area at runtime). Copied from the sample app's
         // generated assets by copyBasemapStyleAssets below.
         getByName("main").assets.directories.add("build/generated/basemap-style-assets")
+        getByName("androidTest").assets.directories.add("../../tests/fixtures")
     }
 }
 
@@ -47,4 +48,7 @@ dependencies {
     implementation("org.maplibre.gl:android-sdk:13.6.1")
 
     testImplementation("junit:junit:4.13.2")
+    androidTestImplementation("androidx.test:runner:1.7.0")
+    androidTestImplementation("androidx.test.ext:junit:1.3.0")
+    androidTestImplementation("junit:junit:4.13.2")
 }

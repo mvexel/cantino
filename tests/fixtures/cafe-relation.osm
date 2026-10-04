@@ -1,0 +1,8 @@
+<osm version="0.6" generator="cantino-test">
+ <node id="101" lat="40.0000" lon="-111.0000"/>
+ <node id="102" lat="40.0000" lon="-111.0010"/>
+ <node id="103" lat="40.0010" lon="-111.0010"/>
+ <node id="104" lat="40.0010" lon="-111.0000"/>
+ <way id="201"><nd ref="101"/><nd ref="102"/><nd ref="103"/><nd ref="104"/><nd ref="101"/></way>
+ <relation id="301"><member type="way" ref="201" role="outer"/><member type="way" ref="999" role="inner"/><tag k="type" v="multipolygon"/><tag k="amenity" v="cafe"/><tag k="name" v="Relation Café"/></relation>
+</osm>

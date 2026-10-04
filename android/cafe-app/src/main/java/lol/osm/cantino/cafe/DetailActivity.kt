@@ -39,8 +39,7 @@ class DetailActivity : Activity() {
     private val scope = MainScope()
 
     /** What the store thread hands to the UI: plain values only. */
-    private data class Model(val obj: OsmObject?, val nodeRefs: List<Pair<Long, LatLon?>>, val members: List<MemberRow>, val point: LatLon?)
-    private data class MemberRow(val member: OsmObject.Member, val present: Boolean, val name: String?)
+    private data class Model(val obj: OsmObject?, val nodeRefs: List<Pair<Long, LatLon?>>, val members: List<RelationMemberRow>, val point: LatLon?)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -60,10 +59,7 @@ class DetailActivity : Activity() {
                     val refs = (obj as? OsmObject.Way)?.nodeIds?.map { ref ->
                         ref to (store.get(OsmId(OsmKind.NODE, ref)) as? OsmObject.Node)?.let { LatLon(it.lat, it.lon) }
                     }.orEmpty()
-                    val members = (obj as? OsmObject.Relation)?.members?.map { member ->
-                        val target = store.get(member.id)
-                        MemberRow(member, target != null, target?.tags?.get("name"))
-                    }.orEmpty()
+                    val members = (obj as? OsmObject.Relation)?.let { relationMemberRows(store, it) }.orEmpty()
                     Model(obj, refs, members, obj?.let { CafeLoader.representativePoint(store, it) })
                 }
             } catch (error: Exception) {
@@ -131,10 +127,7 @@ class DetailActivity : Activity() {
             is OsmObject.Relation -> {
                 section(root, "Relation members (${obj.members.size})")
                 model.members.forEachIndexed { index, row ->
-                    val role = row.member.role.ifEmpty { "(no role)" }
-                    val target = "${row.member.id.kind.name.lowercase()} ${row.member.id.id}"
-                    val label = "${index + 1}. $role · $target" +
-                        (row.name?.let { " · $it" } ?: "") + if (row.present) "" else " · not in this area"
+                    val label = row.label(index)
                     root.addView(if (row.present) link(label, row.member.id) else mono(label, Colors.MUTED))
                 }
             }

@@ -41,7 +41,7 @@ that no iOS device or simulator has run yet.
    while SliceOSM slices: measure what a retry costs at 10×10 km (≈ 8 MB
    PBF + 7 MB basemap) and document "not now" unless it is cheap. These
    kill scenarios become the behaviour the iOS port must match (3).
-2. **Café app: relation path** (§6). Done when: a fixture with a café
+2. **Café app: relation path** (§6) — DONE 2026-10-03. Done when: a fixture with a café
    mapped as a relation and a "not in this area" member exercises the
    relation detail UI in a test. The opening-hours time zone bug is
    documented as a known limitation instead of fixed: the default flow
@@ -157,8 +157,8 @@ Target onboarding flow (Martijn, 2026-10-03): get location → offer to download
 - [x] Find nearby cafés, filter outdoor seating + opening hours (unknown stays unknown) — 136 cafés (120 nodes, 16 ways) in the SLC area; Open/Closed/Unknown and Yes/No/Unknown filters with counts; nearby list by distance. App-side `opening_hours` evaluator, 14 JVM tests; on this area 104 of 106 present values evaluate, 2 → Unknown (date selectors, a comment), 30 cafés have no tag → Unknown
 - [x] Inspect full tags and underlying objects — raw tags, metadata or "not stored", node coordinate, way node list (ordered, repeats, tap → node), relation members (role/kind/id, tap, "not in this area")
 - [x] Airplane-mode acceptance scenario passes end to end — Pixel 8, airplane mode on, force-stop, relaunch: basemap, cafés, filters, list, node and way detail, map tap → detail
-- [ ] Relation-café and relation-member UI path not exercised on a device (no café relation in the SLC area); "not in this area" member rows likewise
-- [ ] Opening hours use the device clock and zone; a café in another zone than the phone is evaluated wrongly (needs the area's zone, e.g. from a tz lookup at download time)
+- [x] Relation-café and relation-member UI path exercised by `RelationCafeTest.relationCafeQueryDetailRowsAndPresentMemberResolve`: relation query, member role/kind/id, absent member, and present-member resolution
+- [x] Opening hours time-zone limitation documented (known limitation, not fixed): the app evaluates in the phone zone; the default user-centred area is normally correct, but another-zone areas are wrong
 - [ ] Real-GPS first run not exercised by an agent on purpose (privacy); permission-denied path checked on the emulator only
 
 ## 7. Developer documentation — shipping milestone 2026-10-03 (GO)

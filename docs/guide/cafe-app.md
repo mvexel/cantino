@@ -89,6 +89,7 @@ cd android && mise exec -- ./gradlew :cafe-app:installDebug
 adb shell am start -S -n lol.osm.cantino.cafe/.MainActivity --ef lat 40.7608 --ef lon -111.8910
 ```
 
-Known limits: opening hours use the device's time zone, not the café's;
-the relation-café path has not run on a device (no café relation in the test
-area).
+Known limit: opening hours are evaluated in the phone's time zone. This is
+correct for the default flow because the area is downloaded around the user,
+but wrong when an area is used in another time zone; the area zone is not yet
+stored.
