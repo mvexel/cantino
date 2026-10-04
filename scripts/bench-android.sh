@@ -12,6 +12,6 @@ remote=/data/local/tmp/cantino/bench.osm.pbf
 "$adb" logcat -c
 cd "$root/android"
 mise exec -- ./gradlew :cantino:connectedDebugAndroidTest -q \
-    -Pandroid.testInstrumentationRunnerArguments.class=io.github.mvexel.cantino.CityBenchmark \
+    -Pandroid.testInstrumentationRunnerArguments.class=lol.osm.cantino.CityBenchmark \
     -Pandroid.testInstrumentationRunnerArguments.pbf="$remote"
 "$adb" logcat -d -s CANTINO_BENCH:I | grep -o '{.*}'

@@ -29,7 +29,7 @@ coroutine can resume on another thread. `open` loads dictionaries, so keep a
 long-lived store rather than opening one per query. Returned objects are
 plain immutable values: they outlive the store and can go to any thread.
 
-The café app's [`StoreWorker`](../../android/cafe-app/src/main/java/io/github/mvexel/cantino/cafe/StoreWorker.kt)
+The café app's [`StoreWorker`](../../android/cafe-app/src/main/java/lol/osm/cantino/cafe/StoreWorker.kt)
 is a complete long-lived pattern, including reopening after a refresh.
 
 ## Query semantics

@@ -2,7 +2,7 @@
 # Builds the GitHub Pages site for Cantino into a local directory:
 #
 #   <out>/index.html    landing page (links to GitHub, guide, API, Maven)
-#   <out>/maven/...     static Maven repository: io/github/mvexel/cantino/<version>/
+#   <out>/maven/...     static Maven repository: lol/osm/cantino/<version>/
 #                       (AAR, POM, Gradle module metadata, sources jar, checksums)
 #   <out>/api/...       Dokka HTML API reference (public API only)
 #   <out>/guide/...     docs/guide/*.md rendered to HTML with pandoc (scripts/guide-filter.lua,
@@ -92,6 +92,21 @@ done
 
 # 2. Start from the published Maven repo when a gh-pages worktree has one, so
 #    maven-metadata.xml keeps listing earlier versions.
+#    The worktree is created first so a fresh checkout of gh-pages is seen too.
+#    Everything already under maven/ is carried over untouched, which keeps the
+#    0.1.0 artifacts at their original io/github/mvexel/cantino/ path (the group
+#    was renamed to lol.osm in 0.2.0; existing 0.1.0 consumers must keep resolving).
+if [ -n "$worktree" ]; then
+    if [ ! -e "$worktree/.git" ]; then
+        if git -C "$root" show-ref --verify --quiet refs/heads/gh-pages; then
+            git -C "$root" worktree add "$worktree" gh-pages
+        elif git -C "$root" show-ref --verify --quiet refs/remotes/origin/gh-pages; then
+            git -C "$root" worktree add -b gh-pages "$worktree" origin/gh-pages
+        else
+            git -C "$root" worktree add --orphan -b gh-pages "$worktree"
+        fi
+    fi
+fi
 rm -rf "$out"
 mkdir -p "$out"
 if [ -n "$worktree" ] && [ -d "$worktree/maven" ]; then
@@ -142,7 +157,7 @@ of the master map you carry away.</p>
   <li><a href="guide/">Guide</a>
       (<a href="guide/sliceosm.html">SliceOSM</a>, <a href="guide/roadmap.html">roadmap</a>)</li>
   <li><a href="api/">API reference</a></li>
-  <li><a href="maven/io/github/mvexel/cantino/">Maven repository</a>
+  <li><a href="maven/lol/osm/cantino/">Maven repository</a>
       (<a href="https://github.com/mvexel/cantino/blob/main/CHANGELOG.md">changelog</a>)</li>
 </ul>
 <pre><code>// settings.gradle.kts
@@ -156,7 +171,7 @@ dependencyResolutionManagement {
 
 // app/build.gradle.kts
 dependencies {
-    implementation("io.github.mvexel:cantino:$version")
+    implementation("lol.osm:cantino:$version")
 }</code></pre>
 <footer>Apache-2.0. Map data &copy; OpenStreetMap contributors (ODbL); apps that show it must say so.
 "OpenStreetMap" is used descriptively; Cantino is not affiliated with the OpenStreetMap Foundation.</footer>
@@ -186,14 +201,10 @@ echo "Site written to $out:"
 
 # 5. Optional local gh-pages worktree (never pushed from here).
 if [ -n "$worktree" ]; then
-    if [ ! -e "$worktree/.git" ]; then
-        if git -C "$root" show-ref --verify --quiet refs/heads/gh-pages; then
-            git -C "$root" worktree add "$worktree" gh-pages
-        elif git -C "$root" show-ref --verify --quiet refs/remotes/origin/gh-pages; then
-            git -C "$root" worktree add -b gh-pages "$worktree" origin/gh-pages
-        else
-            git -C "$root" worktree add --orphan -b gh-pages "$worktree"
-        fi
+    # Never drop published artifacts: the old-group 0.1.0 release must survive.
+    if [ -d "$worktree/maven/io/github/mvexel/cantino" ] && [ ! -d "$out/maven/io/github/mvexel/cantino" ]; then
+        echo "refusing to publish: $out/maven lost the 0.1.0 artifacts under io/github/mvexel/cantino" >&2
+        exit 1
     fi
     # Replace everything except .git with the new site.
     find "$worktree" -mindepth 1 -maxdepth 1 ! -name .git -exec rm -rf {} +
@@ -228,5 +239,5 @@ cat <<EOF
   # 4. Make the repository public (once)
   gh repo edit mvexel/cantino --visibility public --accept-visibility-change-consequences
 
-Then check https://mvexel.github.io/cantino/maven/io/github/mvexel/cantino/$version/cantino-$version.pom
+Then check https://mvexel.github.io/cantino/maven/lol/osm/cantino/$version/cantino-$version.pom
 EOF

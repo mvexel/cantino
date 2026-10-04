@@ -49,7 +49,7 @@ are the reference for the syntax.
 
 ## The café app's evaluator: an example, not a recommendation
 
-[`OpeningHours.kt`](../../android/cafe-app/src/main/java/io/github/mvexel/cantino/cafe/OpeningHours.kt)
+[`OpeningHours.kt`](../../android/cafe-app/src/main/java/lol/osm/cantino/cafe/OpeningHours.kt)
 in the café app evaluates a strict subset (weekday ranges, `24/7`, `off`,
 past-midnight ranges) with 14 JVM tests and returns Open, Closed or Unknown
 with a reason. On the Salt Lake City test area, 104 of 106 present values

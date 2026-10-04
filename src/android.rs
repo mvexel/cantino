@@ -1,4 +1,4 @@
-//! JNI entry points for the Kotlin adapter (`io.github.mvexel.cantino`).
+//! JNI entry points for the Kotlin adapter (`lol.osm.cantino`).
 //!
 //! These functions deliberately go through the same C ABI as the iOS adapter
 //! (`mobile_api`) instead of calling `Store` directly. That keeps one
@@ -65,12 +65,10 @@ impl BridgeError {
     /// `ErrorKind`: a new category does not compile until it has a class.
     fn class(&self) -> &'static str {
         match self.kind() {
-            ErrorKind::InvalidArgument => {
-                "io/github/mvexel/cantino/CantinoException$InvalidArgument"
-            }
-            ErrorKind::InvalidFile => "io/github/mvexel/cantino/CantinoException$InvalidFile",
-            ErrorKind::Io => "io/github/mvexel/cantino/CantinoException$Io",
-            ErrorKind::WrongThread => "io/github/mvexel/cantino/CantinoException$WrongThread",
+            ErrorKind::InvalidArgument => "lol/osm/cantino/CantinoException$InvalidArgument",
+            ErrorKind::InvalidFile => "lol/osm/cantino/CantinoException$InvalidFile",
+            ErrorKind::Io => "lol/osm/cantino/CantinoException$Io",
+            ErrorKind::WrongThread => "lol/osm/cantino/CantinoException$WrongThread",
             // A bug, not a condition an app handles: like Kotlin's own
             // check() failures. Documented on CantinoException.
             ErrorKind::Internal => "java/lang/IllegalStateException",
@@ -169,7 +167,7 @@ fn c_string(value: String) -> Result<CString, BridgeError> {
 }
 
 #[unsafe(no_mangle)]
-pub extern "system" fn Java_io_github_mvexel_cantino_NativeBridge_open<'local>(
+pub extern "system" fn Java_lol_osm_cantino_NativeBridge_open<'local>(
     mut env: EnvUnowned<'local>,
     _class: JClass<'local>,
     path: JString<'local>,
@@ -185,7 +183,7 @@ pub extern "system" fn Java_io_github_mvexel_cantino_NativeBridge_open<'local>(
 }
 
 #[unsafe(no_mangle)]
-pub extern "system" fn Java_io_github_mvexel_cantino_NativeBridge_close<'local>(
+pub extern "system" fn Java_lol_osm_cantino_NativeBridge_close<'local>(
     mut env: EnvUnowned<'local>,
     _class: JClass<'local>,
     handle: jlong,
@@ -200,7 +198,7 @@ pub extern "system" fn Java_io_github_mvexel_cantino_NativeBridge_close<'local>(
 
 /// Returns the object JSON, or Java `null` when the object is absent (status 1).
 #[unsafe(no_mangle)]
-pub extern "system" fn Java_io_github_mvexel_cantino_NativeBridge_get<'local>(
+pub extern "system" fn Java_lol_osm_cantino_NativeBridge_get<'local>(
     mut env: EnvUnowned<'local>,
     _class: JClass<'local>,
     handle: jlong,
@@ -222,7 +220,7 @@ pub extern "system" fn Java_io_github_mvexel_cantino_NativeBridge_get<'local>(
 
 /// Batch lookup: JSON array of IDs in, JSON array of objects-or-null out.
 #[unsafe(no_mangle)]
-pub extern "system" fn Java_io_github_mvexel_cantino_NativeBridge_getMany<'local>(
+pub extern "system" fn Java_lol_osm_cantino_NativeBridge_getMany<'local>(
     mut env: EnvUnowned<'local>,
     _class: JClass<'local>,
     handle: jlong,
@@ -241,7 +239,7 @@ pub extern "system" fn Java_io_github_mvexel_cantino_NativeBridge_getMany<'local
 /// Flat `[lat_e7, lon_e7, ...]` JSON array, or Java `null` when the way is
 /// not in the area (status 1).
 #[unsafe(no_mangle)]
-pub extern "system" fn Java_io_github_mvexel_cantino_NativeBridge_wayCoordinates<'local>(
+pub extern "system" fn Java_lol_osm_cantino_NativeBridge_wayCoordinates<'local>(
     mut env: EnvUnowned<'local>,
     _class: JClass<'local>,
     handle: jlong,
@@ -262,7 +260,7 @@ pub extern "system" fn Java_io_github_mvexel_cantino_NativeBridge_wayCoordinates
 
 /// `{"lat_e7","lon_e7"}`, or Java `null` when there is no point (status 1).
 #[unsafe(no_mangle)]
-pub extern "system" fn Java_io_github_mvexel_cantino_NativeBridge_representativePoint<'local>(
+pub extern "system" fn Java_lol_osm_cantino_NativeBridge_representativePoint<'local>(
     mut env: EnvUnowned<'local>,
     _class: JClass<'local>,
     handle: jlong,
@@ -283,7 +281,7 @@ pub extern "system" fn Java_io_github_mvexel_cantino_NativeBridge_representative
 }
 
 #[unsafe(no_mangle)]
-pub extern "system" fn Java_io_github_mvexel_cantino_NativeBridge_query<'local>(
+pub extern "system" fn Java_lol_osm_cantino_NativeBridge_query<'local>(
     mut env: EnvUnowned<'local>,
     _class: JClass<'local>,
     handle: jlong,
@@ -302,7 +300,7 @@ pub extern "system" fn Java_io_github_mvexel_cantino_NativeBridge_query<'local>(
 
 /// `options` may be Java `null` for default import options.
 #[unsafe(no_mangle)]
-pub extern "system" fn Java_io_github_mvexel_cantino_NativeBridge_importArea<'local>(
+pub extern "system" fn Java_lol_osm_cantino_NativeBridge_importArea<'local>(
     mut env: EnvUnowned<'local>,
     _class: JClass<'local>,
     input: JString<'local>,
@@ -338,7 +336,7 @@ fn optional(env: &mut jni::Env, value: &JString) -> Result<Option<CString>, Brid
 
 /// SliceOSM submit request: `{"url","body"}`. `base` may be Java `null`.
 #[unsafe(no_mangle)]
-pub extern "system" fn Java_io_github_mvexel_cantino_NativeBridge_sliceJobRequest<'local>(
+pub extern "system" fn Java_lol_osm_cantino_NativeBridge_sliceJobRequest<'local>(
     mut env: EnvUnowned<'local>,
     _class: JClass<'local>,
     base: JString<'local>,
@@ -361,7 +359,7 @@ pub extern "system" fn Java_io_github_mvexel_cantino_NativeBridge_sliceJobReques
 
 /// SliceOSM job from a submit response or a persisted ID: `{"job_id","status_url","download_url"}`.
 #[unsafe(no_mangle)]
-pub extern "system" fn Java_io_github_mvexel_cantino_NativeBridge_sliceJob<'local>(
+pub extern "system" fn Java_lol_osm_cantino_NativeBridge_sliceJob<'local>(
     mut env: EnvUnowned<'local>,
     _class: JClass<'local>,
     base: JString<'local>,
@@ -381,7 +379,7 @@ pub extern "system" fn Java_io_github_mvexel_cantino_NativeBridge_sliceJob<'loca
 
 /// SliceOSM status document → `{"complete","fraction","size_bytes","timestamp"}`.
 #[unsafe(no_mangle)]
-pub extern "system" fn Java_io_github_mvexel_cantino_NativeBridge_sliceProgress<'local>(
+pub extern "system" fn Java_lol_osm_cantino_NativeBridge_sliceProgress<'local>(
     mut env: EnvUnowned<'local>,
     _class: JClass<'local>,
     status: JString<'local>,
@@ -415,7 +413,7 @@ fn json_call<'local>(
 }
 
 #[unsafe(no_mangle)]
-pub extern "system" fn Java_io_github_mvexel_cantino_NativeBridge_basemapPlanNew<'local>(
+pub extern "system" fn Java_lol_osm_cantino_NativeBridge_basemapPlanNew<'local>(
     mut env: EnvUnowned<'local>,
     _class: JClass<'local>,
     bbox: JString<'local>,
@@ -443,9 +441,7 @@ pub extern "system" fn Java_io_github_mvexel_cantino_NativeBridge_basemapPlanNew
 }
 
 #[unsafe(no_mangle)]
-pub extern "system" fn Java_io_github_mvexel_cantino_NativeBridge_basemapPlanFirstRequest<
-    'local,
->(
+pub extern "system" fn Java_lol_osm_cantino_NativeBridge_basemapPlanFirstRequest<'local>(
     mut env: EnvUnowned<'local>,
     _class: JClass<'local>,
     plan: jlong,
@@ -461,7 +457,7 @@ pub extern "system" fn Java_io_github_mvexel_cantino_NativeBridge_basemapPlanFir
 
 /// Feeds a directory-phase response (`bytes` copied once out of the JVM heap).
 #[unsafe(no_mangle)]
-pub extern "system" fn Java_io_github_mvexel_cantino_NativeBridge_basemapPlanFeed<'local>(
+pub extern "system" fn Java_lol_osm_cantino_NativeBridge_basemapPlanFeed<'local>(
     mut env: EnvUnowned<'local>,
     _class: JClass<'local>,
     plan: jlong,
@@ -486,7 +482,7 @@ pub extern "system" fn Java_io_github_mvexel_cantino_NativeBridge_basemapPlanFee
 }
 
 #[unsafe(no_mangle)]
-pub extern "system" fn Java_io_github_mvexel_cantino_NativeBridge_basemapPlanOutstanding<'local>(
+pub extern "system" fn Java_lol_osm_cantino_NativeBridge_basemapPlanOutstanding<'local>(
     mut env: EnvUnowned<'local>,
     _class: JClass<'local>,
     plan: jlong,
@@ -503,9 +499,7 @@ pub extern "system" fn Java_io_github_mvexel_cantino_NativeBridge_basemapPlanOut
 /// Consumes the plan (see the header: every call past the handle check) and
 /// returns the assembler handle.
 #[unsafe(no_mangle)]
-pub extern "system" fn Java_io_github_mvexel_cantino_NativeBridge_basemapPlanIntoAssembler<
-    'local,
->(
+pub extern "system" fn Java_lol_osm_cantino_NativeBridge_basemapPlanIntoAssembler<'local>(
     mut env: EnvUnowned<'local>,
     _class: JClass<'local>,
     plan: jlong,
@@ -530,7 +524,7 @@ pub extern "system" fn Java_io_github_mvexel_cantino_NativeBridge_basemapPlanInt
 }
 
 #[unsafe(no_mangle)]
-pub extern "system" fn Java_io_github_mvexel_cantino_NativeBridge_basemapPlanFree<'local>(
+pub extern "system" fn Java_lol_osm_cantino_NativeBridge_basemapPlanFree<'local>(
     mut env: EnvUnowned<'local>,
     _class: JClass<'local>,
     plan: jlong,
@@ -546,7 +540,7 @@ pub extern "system" fn Java_io_github_mvexel_cantino_NativeBridge_basemapPlanFre
 }
 
 #[unsafe(no_mangle)]
-pub extern "system" fn Java_io_github_mvexel_cantino_NativeBridge_basemapAsmWriteRange<'local>(
+pub extern "system" fn Java_lol_osm_cantino_NativeBridge_basemapAsmWriteRange<'local>(
     mut env: EnvUnowned<'local>,
     _class: JClass<'local>,
     assembler: jlong,
@@ -571,9 +565,7 @@ pub extern "system" fn Java_io_github_mvexel_cantino_NativeBridge_basemapAsmWrit
 }
 
 #[unsafe(no_mangle)]
-pub extern "system" fn Java_io_github_mvexel_cantino_NativeBridge_basemapAsmWriteRangeFile<
-    'local,
->(
+pub extern "system" fn Java_lol_osm_cantino_NativeBridge_basemapAsmWriteRangeFile<'local>(
     mut env: EnvUnowned<'local>,
     _class: JClass<'local>,
     assembler: jlong,
@@ -597,7 +589,7 @@ pub extern "system" fn Java_io_github_mvexel_cantino_NativeBridge_basemapAsmWrit
 }
 
 #[unsafe(no_mangle)]
-pub extern "system" fn Java_io_github_mvexel_cantino_NativeBridge_basemapAsmRemaining<'local>(
+pub extern "system" fn Java_lol_osm_cantino_NativeBridge_basemapAsmRemaining<'local>(
     mut env: EnvUnowned<'local>,
     _class: JClass<'local>,
     assembler: jlong,
@@ -612,7 +604,7 @@ pub extern "system" fn Java_io_github_mvexel_cantino_NativeBridge_basemapAsmRema
 }
 
 #[unsafe(no_mangle)]
-pub extern "system" fn Java_io_github_mvexel_cantino_NativeBridge_basemapAsmProgress<'local>(
+pub extern "system" fn Java_lol_osm_cantino_NativeBridge_basemapAsmProgress<'local>(
     mut env: EnvUnowned<'local>,
     _class: JClass<'local>,
     assembler: jlong,
@@ -627,7 +619,7 @@ pub extern "system" fn Java_io_github_mvexel_cantino_NativeBridge_basemapAsmProg
 }
 
 #[unsafe(no_mangle)]
-pub extern "system" fn Java_io_github_mvexel_cantino_NativeBridge_basemapAsmFinish<'local>(
+pub extern "system" fn Java_lol_osm_cantino_NativeBridge_basemapAsmFinish<'local>(
     mut env: EnvUnowned<'local>,
     _class: JClass<'local>,
     assembler: jlong,
@@ -649,7 +641,7 @@ pub extern "system" fn Java_io_github_mvexel_cantino_NativeBridge_basemapAsmFini
 }
 
 #[unsafe(no_mangle)]
-pub extern "system" fn Java_io_github_mvexel_cantino_NativeBridge_basemapAsmFree<'local>(
+pub extern "system" fn Java_lol_osm_cantino_NativeBridge_basemapAsmFree<'local>(
     mut env: EnvUnowned<'local>,
     _class: JClass<'local>,
     assembler: jlong,
@@ -666,7 +658,7 @@ pub extern "system" fn Java_io_github_mvexel_cantino_NativeBridge_basemapAsmFree
 
 /// Validates a local PMTiles file and describes its header (any thread).
 #[unsafe(no_mangle)]
-pub extern "system" fn Java_io_github_mvexel_cantino_NativeBridge_basemapInfo<'local>(
+pub extern "system" fn Java_lol_osm_cantino_NativeBridge_basemapInfo<'local>(
     mut env: EnvUnowned<'local>,
     _class: JClass<'local>,
     path: JString<'local>,

@@ -10,7 +10,7 @@ Lake City):
 | --- | --- | --- | --- |
 | ![progress](../screenshots/2026-10-03-cafe-progress.png) | ![map](../screenshots/2026-10-03-cafe-map-airplane.png) | ![filter](../screenshots/2026-10-03-cafe-list-outdoor-yes.png) | ![way](../screenshots/2026-10-03-cafe-detail-way.png) |
 
-Paths below are relative to `android/cafe-app/src/main/java/io/github/mvexel/cantino/cafe/`.
+Paths below are relative to `android/cafe-app/src/main/java/lol/osm/cantino/cafe/`.
 
 ## 1. Download the area
 
@@ -86,7 +86,7 @@ scripts/basemap-assets.sh                         # style, glyphs, sprites
 scripts/build-android.sh
 cd android && mise exec -- ./gradlew :cafe-app:installDebug
 # Automated runs: never send a real location; use the debug override (debuggable builds only)
-adb shell am start -S -n io.github.mvexel.cantino.cafe/.MainActivity --ef lat 40.7608 --ef lon -111.8910
+adb shell am start -S -n lol.osm.cantino.cafe/.MainActivity --ef lat 40.7608 --ef lon -111.8910
 ```
 
 Known limits: opening hours use the device's time zone, not the café's;

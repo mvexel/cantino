@@ -60,7 +60,7 @@ mapView.getMapAsync { map ->
 ```
 
 Add your own data as GeoJSON sources on top (the café app builds one from a
-`Query`; see [`MapScreen.kt`](../../android/cafe-app/src/main/java/io/github/mvexel/cantino/cafe/MapScreen.kt)).
+`Query`; see [`MapScreen.kt`](../../android/cafe-app/src/main/java/lol/osm/cantino/cafe/MapScreen.kt)).
 
 ## A full offline style
 

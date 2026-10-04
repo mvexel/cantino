@@ -25,7 +25,7 @@ kotlin {
 }
 
 android {
-    namespace = "io.github.mvexel.cantino"
+    namespace = "lol.osm.cantino"
     compileSdk = 36
     // Used only to strip the prebuilt .so files; must be the SDK-managed NDK.
     ndkVersion = "29.0.14206865"
@@ -53,11 +53,11 @@ abstract class GenerateVersionSource : DefaultTask() {
 
     @TaskAction
     fun generate() {
-        val file = outputDir.file("io/github/mvexel/cantino/GeneratedVersion.kt").get().asFile
+        val file = outputDir.file("lol/osm/cantino/GeneratedVersion.kt").get().asFile
         file.parentFile.mkdirs()
         file.writeText(
             "// Generated from Cargo.toml by :cantino:generateVersionSource. Do not edit.\n" +
-                "package io.github.mvexel.cantino\n\n" +
+                "package lol.osm.cantino\n\n" +
                 "internal const val GENERATED_VERSION: String = \"${frameworkVersion.get()}\"\n",
         )
     }
@@ -99,7 +99,7 @@ afterEvaluate {
         publications {
             create<MavenPublication>("release") {
                 from(components["release"])
-                groupId = "io.github.mvexel"
+                groupId = "lol.osm"
                 artifactId = "cantino"
                 version = cantinoVersion
                 pom {

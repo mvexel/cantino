@@ -6,10 +6,10 @@ plugins {
 }
 
 android {
-    namespace = "io.github.mvexel.cantino.sample"
+    namespace = "lol.osm.cantino.sample"
     compileSdk = 36
     defaultConfig {
-        applicationId = "io.github.mvexel.cantino.sample"
+        applicationId = "lol.osm.cantino.sample"
         minSdk = 26
         targetSdk = 36
         versionCode = 1
