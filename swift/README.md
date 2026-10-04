@@ -44,9 +44,12 @@ Sources/Cantino/
                               Coordinate, Bbox (+ around), TagFilter, Query, ImportOptions, ImportReport, ObjectCounts
   Errors.swift                CantinoError, CantinoStateError, C call plumbing (buffer ownership, error mapping)
   Wire.swift                  Codable decoding of the core's JSON
-  JSONValue.swift             deterministic JSON writer for requests and the canonical form
-  Canonical.swift             canonical parity rendering (entry point for the parity runner)
-Tests/CantinoTests/           ports of OsmStoreTest, AsyncOsmStoreTest, BboxAroundTest; canonical tests; parity stub
+  SliceProtocol.swift         internal SliceProtocol: jobRequest, job, progress (cantino_slice_*), as Kotlin's
+  Basemap.swift               public PmtilesInfo.read; internal BasemapPlan / BasemapAssembler (sans-IO extract engine)
+  JSONValue.swift             deterministic JSON writer for requests and the parity canonical form
+  Canonical.swift             parity corpus canonical form and outcome envelope (tests/parity/README.md)
+Tests/CantinoTests/           ports of OsmStoreTest, AsyncOsmStoreTest, BboxAroundTest; canonical and basemap
+                              tests; ParityTests, the Swift runner of tests/parity
 ```
 
 ## Build and test
@@ -111,6 +114,11 @@ target instead (later slice).
 | `withStore(block: (OsmStore) -> T)` | `withStore(_: @Sendable (OsmStore) throws -> T) async throws -> T` with `T: Sendable` | Block and result cross between the task and the owner thread |
 | `AsyncOsmStore.open` checks `ensureActive()` after opening | throws `CancellationError` (store closed again) if the task was cancelled while opening | Swift cancellation |
 | dropped `AsyncOsmStore` leaks its thread and connection | `deinit` queues a close and stops the thread | Safety net; still call `close()` |
+| `PmtilesInfo` (class; zooms, bounds, counts, file size) | `struct PmtilesInfo` with every field `cantino_basemap_info` reports: also `specVersion`, `center` (`lon`, `lat`, `zoom`), `tileType`, `tileCompression` (PMTiles codes), `clustered` | The parity corpus compares the full C ABI object (tests/parity/README.md asks the platform types to grow them); value type |
+| `PmtilesInfo.read(File)` | `PmtilesInfo.read(_ path: String)` / `read(_ url: URL)` (non-file URL: `.invalidArgument`) | As `open` |
+| `internal object SliceProtocol` (data classes `JobRequest`, `Job`, `Progress`) | `internal enum SliceProtocol` with structs of the same names and fields; `jobRequest(base:bbox:name:)`, `job(base:response:)`, `progress(status:)` | Argument labels. Internal, as in Kotlin |
+| `BasemapExtract` drives `NativeBridge.basemapPlan*` / `basemapAsm*` (raw JSON strings, `Long` handles) | internal `BasemapPlan` / `BasemapAssembler` classes (thread-confined, `deinit` frees best-effort) with typed `ByteRange`, `BasemapStep` (`.fetch`/`.wait`/`.tilesReady`), `TilePlan`, `BasemapProgress`; `BasemapPlan(bboxJSON:...)` keeps the raw-string entry of `basemapPlanNew` | No networking yet: the public `BasemapExtract` (HTTP, background transfer) comes with the area lifecycle and will sit on these |
+| `CantinoException.Internal` / `IllegalStateException` for an internal core error | `CantinoStateError.internalError` (see above) | The parity canonical form maps it to code 5, `internal`, like every other runner |
 
 Thread confinement itself is the core's: every `cantino_*` store call
 compares the calling OS thread's Rust `ThreadId` with the opener's and
@@ -118,15 +126,28 @@ fails with `CANTINO_ERROR_WRONG_THREAD` (handle untouched), which this
 adapter maps to `CantinoError.wrongThread`. The adapter adds no check of
 its own, so it cannot disagree with the core.
 
+## Parity
+
+`Tests/CantinoTests/ParityTests.swift` replays
+[`tests/parity/calls.json`](../tests/parity/calls.json) through the Swift
+API and compares its canonical output byte for byte with
+`tests/parity/expected.json` (written by the Rust runner through the C ABI),
+skipping the calls marked `abi_only`; a mismatch fails with the call id and
+both lines. The contract (ops, outcome envelope, canonical JSON) is
+[`tests/parity/README.md`](../tests/parity/README.md); `Canonical.swift`
+and `JSONValue.swift` implement it. Store ops and `basemap_info` go through
+the public API; the slice and basemap-engine ops through the internal
+`SliceProtocol` and `BasemapPlan` / `BasemapAssembler` (as the Kotlin
+runner uses its internals for them). A mismatch is an adapter bug: fix the
+adapter, never `expected.json`.
+
 ## Not in this slice
 
 - Area download lifecycle (`AreaManager`, `AreaConfig`, `AreaState`,
-  SliceOSM HTTP), offline basemap (`BasemapExtract`, `PmtilesInfo`), and
-  `Cantino.VERSION`: they need iOS background transfer and scheduling.
-  The pure protocol helpers in the C ABI (`cantino_slice_*`,
-  `cantino_basemap_*`) are ready for them.
+  SliceOSM HTTP), the networked basemap extract (public `BasemapExtract`,
+  `BasemapSource`, `ProtomapsBuilds`), and `Cantino.VERSION`: they need iOS
+  background transfer and scheduling. Their platform-neutral halves are
+  here: `SliceProtocol` and `BasemapPlan` / `BasemapAssembler` (internal),
+  `PmtilesInfo` (public).
 - iOS/macOS build: xcframework binary target and simulator tests (macOS CI).
-- Parity runner: `Tests/CantinoTests/ParityTests.swift` is the hook (skipped
-  until `tests/parity/calls.json` exists, then it fails until implemented);
-  `Canonical.swift` is the rendering it will use.
 - `scripts/check.sh` does not run the Swift tests (Docker dependency).
