@@ -238,7 +238,10 @@ class MapScreen(
         if (area != null) {
             val snapshot = area.metadata?.snapshotTimestamp?.let(SNAPSHOT_FORMAT::format) ?: "unknown"
             val ref = reference?.let { "distances from ${it.source.label}" } ?: "no reference location"
-            status.text = "Offline area · OSM data as of $snapshot UTC · $ref"
+            // The profile comes from the area's own import report, never from
+            // what the app would request today (see CafeProfile.label).
+            val profile = CafeProfile.label(area.metadata?.report?.profile)?.let { "$it · " } ?: ""
+            status.text = "Offline area · ${profile}OSM data as of $snapshot UTC · $ref"
         }
         adapter.notifyDataSetChanged()
 

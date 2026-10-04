@@ -9,6 +9,7 @@ import android.view.View
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
+import lol.osm.cantino.ImportProfile
 import lol.osm.cantino.ObjectMetadata
 import lol.osm.cantino.OsmId
 import lol.osm.cantino.OsmKind
@@ -32,6 +33,13 @@ import kotlinx.coroutines.launch
  *   "not in this area" when [lol.osm.cantino.OsmStore.get]
  *   returns null (extracts are clipped at the area edge).
  *
+ * The area is imported with [CafeProfile] (points of interest only). That
+ * does not change the way-node and member rows: the import keeps every node
+ * of a kept way and every member of a kept relation, so a missing one is
+ * outside the area. An object opened directly (not reached from a kept
+ * object) may also be missing because the profile filtered it out; the
+ * "not found" text says so when the area has a profile ([notFoundText]).
+ *
  * All store access goes through [CafeStore] (its one thread). Opened with
  * extras [EXTRA_KIND] (an [OsmKind] name) and [EXTRA_ID].
  */
@@ -39,7 +47,14 @@ class DetailActivity : Activity() {
     private val scope = MainScope()
 
     /** What the store thread hands to the UI: plain values only. */
-    private data class Model(val obj: OsmObject?, val nodeRefs: List<Pair<Long, LatLon?>>, val members: List<RelationMemberRow>, val point: LatLon?)
+    private data class Model(
+        val obj: OsmObject?,
+        val nodeRefs: List<Pair<Long, LatLon?>>,
+        val members: List<RelationMemberRow>,
+        val point: LatLon?,
+        /** The profile the area was imported with (null: everything). */
+        val profile: ImportProfile?,
+    )
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -52,7 +67,7 @@ class DetailActivity : Activity() {
 
         scope.launch {
             val model = try {
-                CafeStore.withStore(this@DetailActivity) { store, _ ->
+                CafeStore.withStore(this@DetailActivity) { store, area ->
                     val obj = store.get(id)
                     // Resolve node coordinates / member presence here, on the
                     // store thread, so the UI thread only renders.
@@ -60,7 +75,7 @@ class DetailActivity : Activity() {
                         ref to (store.get(OsmId(OsmKind.NODE, ref)) as? OsmObject.Node)?.let { LatLon(it.lat, it.lon) }
                     }.orEmpty()
                     val members = (obj as? OsmObject.Relation)?.let { relationMemberRows(store, it) }.orEmpty()
-                    Model(obj, refs, members, obj?.let { CafeLoader.representativePoint(store, it) })
+                    Model(obj, refs, members, obj?.let { CafeLoader.representativePoint(store, it) }, area.metadata?.report?.profile)
                 }
             } catch (error: Exception) {
                 root.removeAllViews()
@@ -77,7 +92,7 @@ class DetailActivity : Activity() {
         val kind = id.kind.name.lowercase()
         if (obj == null) {
             root.addView(text("$kind ${id.id}", 22f, bold = true))
-            root.addView(text("Not in this area: the offline extract does not contain this object (it lies outside the area, or was clipped at its edge)."))
+            root.addView(text(notFoundText(model.profile)))
             return
         }
         val name = obj.tags["name"]

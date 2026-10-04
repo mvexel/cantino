@@ -26,7 +26,10 @@ class RelationCafeTest {
         val input = File(directory, "cafe-relation.osm")
         context.assets.open("cafe-relation.osm").use { source -> input.outputStream().use { source.copyTo(it) } }
         val area = File(directory, "area.sqlite")
-        OsmStore.importArea(input, area)
+        // Imported as the app imports downloads (CafeProfile): the café relation
+        // keeps its members by reference closure.
+        val report = OsmStore.importArea(input, area, CafeProfile.IMPORT_OPTIONS)
+        assertEquals(CafeProfile.POI, report.profile)
 
         OsmStore.open(area).use { store ->
             // The list path: the relation café is found and placed on the map.

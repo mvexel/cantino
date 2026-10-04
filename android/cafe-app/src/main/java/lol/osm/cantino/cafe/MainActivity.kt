@@ -35,7 +35,8 @@ import kotlinx.coroutines.withContext
  *
  *   location permission → current location (LocationManager)
  *     → offer "download ~10×10 km around you (map data + basemap)?"
- *     → AreaManager.download(…, BasemapSource.Extract(latest Protomaps build, z15))
+ *     → AreaManager.download(…, BasemapSource.Extract(latest Protomaps build, z15)),
+ *       importing points of interest only ([CafeProfile])
  *       with honest progress (phase, bytes, fraction when known)
  *     → Ready → map ([MapScreen]).
  *
@@ -69,7 +70,8 @@ class MainActivity : Activity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        areas = AreaManager(this)
+        // Downloads started here import points of interest only (CafeProfile).
+        areas = AreaManager(this, CafeProfile.AREA_CONFIG)
         debugLocation = DebugLocation.read(this, intent)
         DebugShowWhenLocked.read(this, intent)
         DebugShowWhenLocked.apply(this)
@@ -159,7 +161,8 @@ class MainActivity : Activity() {
             .setTitle("Download an offline area?")
             .setMessage(
                 "About $km × $km km around $center: map data (to find cafés) and a basemap, " +
-                    "so the app works without a connection.\n\n" +
+                    "so the app works without a connection. Of the map data, only points of interest " +
+                    "(cafés, shops, other places) are kept; the basemap shows the rest.\n\n" +
                     "Privacy: the area's bounds (≈ your location) are sent to SliceOSM and the Protomaps tile host.",
             )
             .setPositiveButton("Download") { _, _ -> startDownload(center) }
@@ -410,7 +413,7 @@ class MainActivity : Activity() {
             Log.i(
                 TIMING_TAG,
                 "ready in $total ms; data db ${area.dataFile?.length()} B; pmtiles ${area.basemapFile?.length()} B; " +
-                    "counts ${metadata?.report?.counts}; basemap ${metadata?.basemap}; snapshot ${metadata?.snapshotTimestamp}; bbox ${metadata?.bbox}",
+                    "counts ${metadata?.report?.counts}; profile ${metadata?.report?.profile}; basemap ${metadata?.basemap}; snapshot ${metadata?.snapshotTimestamp}; bbox ${metadata?.bbox}",
             )
         }
 
