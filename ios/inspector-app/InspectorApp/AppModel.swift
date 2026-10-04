@@ -7,7 +7,8 @@ import Observation
 /// detail; Inspector shows one progress line). Port of android/inspector-app
 /// MainActivity:
 ///
-///   location (or debug override, or typed "lat,lon") → offer
+///   location (or debug override, or typed "lat,lon")
+///     → offer, with a radius choice (``AreaRadius``: 1, 2.5 (default), 5 or 10 km)
 ///     → AreaManager.download(…, .extract(latest Protomaps build, z15)),
 ///       a full import (no import profile: Inspector exists to show everything)
 ///     → ready → map (``MapScreen``).
@@ -44,6 +45,8 @@ final class AppModel {
     let debugLocation = DebugLocation.read()
     /// Consumed by the first map (``takeDebugLaunch()``).
     private var debugLaunch = DebugLaunch.read()
+    /// The radius selected on the offer screen, in km (kept while the app runs).
+    var radiusKm = DebugLaunch.read().radiusKm ?? AreaRadius.defaultKm
     @ObservationIgnored let device = DeviceLocation()
     @ObservationIgnored private let areas = AreaManager()
     @ObservationIgnored private var currentRun: UUID?
@@ -135,7 +138,8 @@ final class AppModel {
 
     // MARK: - download
 
-    /// Downloads the default-size area around `center`, or exactly `bbox` (refresh).
+    /// Downloads the square of the selected ``radiusKm`` around `center`, or
+    /// exactly `bbox` (refresh: the published area's bbox, full replace).
     func startDownload(center: LatLon, bbox: Bbox? = nil) {
         screen = .progress
         setProgress("Finding the newest basemap build", nil)
@@ -153,7 +157,8 @@ final class AppModel {
             }
             guard !Task.isCancelled else { return }
             do {
-                let area = try bbox ?? Bbox.around(lat: center.lat, lon: center.lon, widthKm: Geo.areaSizeKm)
+                let area = try bbox ?? AreaRadius.bbox(center, radiusKm: radiusKm)
+                Log.app.info("area \(bbox == nil ? "radius \(self.radiusKm) km" : "refresh", privacy: .public), bbox \(String(describing: area), privacy: .public)")
                 currentRun = try areas.download(
                     areaId: InspectorStore.areaId, bbox: area,
                     name: String(format: "inspector %.4f,%.4f", center.lat, center.lon),

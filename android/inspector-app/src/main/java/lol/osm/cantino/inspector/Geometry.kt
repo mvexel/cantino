@@ -38,9 +38,6 @@ data class LatLon(val lat: Double, val lon: Double) {
 }
 
 object Geo {
-    /** Edge length of the default area, in km (a 5×5 km city centre: a full import stays small). */
-    const val AREA_SIZE_KM = 5.0
-
     private const val EARTH_RADIUS_M = 6_371_000.0
     private const val METERS_PER_DEGREE = EARTH_RADIUS_M * Math.PI / 180
 

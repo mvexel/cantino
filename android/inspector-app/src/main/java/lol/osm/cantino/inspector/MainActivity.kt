@@ -9,6 +9,9 @@ import android.util.Log
 import android.view.View
 import android.widget.EditText
 import android.widget.ProgressBar
+import android.widget.RadioButton
+import android.widget.RadioGroup
+import android.widget.ScrollView
 import lol.osm.cantino.AreaInfo
 import lol.osm.cantino.AreaManager
 import lol.osm.cantino.AreaState
@@ -28,7 +31,8 @@ import kotlinx.coroutines.withContext
  * (the café app demonstrates the download lifecycle in detail; Inspector
  * shows one progress line):
  *
- *   location (or debug override, or typed "lat,lon") → offer
+ *   location (or debug override, or typed "lat,lon")
+ *     → offer, with a radius choice ([AreaRadius]: 1, 2.5 (default), 5 or 10 km)
  *     → AreaManager.download(…, BasemapSource.Extract(latest Protomaps build, z15))
  *       a full import (no import profile: Inspector exists to show everything)
  *     → Ready → map ([MapScreen]).
@@ -42,6 +46,8 @@ class MainActivity : Activity() {
     private lateinit var areas: AreaManager
     private var debugLocation: LatLon? = null
     private var debugLaunch = DebugLaunch()
+    /** The radius selected on the offer screen (kept while the app runs). */
+    private var radiusKm = AreaRadius.DEFAULT_KM
 
     private var mapScreen: MapScreen? = null
     private var started = false
@@ -54,6 +60,7 @@ class MainActivity : Activity() {
         areas = AreaManager(this)
         debugLocation = DebugLocation.read(this, intent)
         debugLaunch = DebugLaunch.read(this, intent)
+        debugLaunch.radiusKm?.let { radiusKm = it }
         setContentView(vertical(children = arrayOf(text("Opening…"))))
 
         scope.launch {
@@ -130,30 +137,63 @@ class MainActivity : Activity() {
         )
     }
 
-    /** The offer, with the one-line privacy note. */
+    /**
+     * The offer: the area centred on [center], the radius choice
+     * ([AreaRadius.CHOICES_KM]) and the one-line privacy note.
+     */
     private fun offerDownload(center: LatLon, source: LocationSource) {
-        val km = Geo.AREA_SIZE_KM.toInt()
-        val body = "About $km × $km km around $center: every OpenStreetMap object (a full import) and a basemap, " +
-            "so you can inspect the data without a connection.\n\n" +
-            "Privacy: the area's bounds (≈ your location) are sent to SliceOSM and the Protomaps tile host."
-        showMessage("Inspector", "Area centre ($center, ${source.label}).")
-        if (debugLaunch.autoDownload) {
-            showMessage("Download an offline area?", body)
-            scope.launch { kotlinx.coroutines.delay(1000); startDownload(center) } // time to see (and screenshot) the offer
-            return
+        val body = text("")
+        fun describe() {
+            body.text = "About ${AreaRadius.sideLabel(radiusKm)} around $center (radius ${AreaRadius.label(radiusKm)}): " +
+                "every OpenStreetMap object (a full import) and a basemap, so you can inspect the data without a connection."
         }
-        AlertDialog.Builder(this)
-            .setTitle("Download an offline area?")
-            .setMessage(body)
-            .setPositiveButton("Download") { _, _ -> startDownload(center) }
-            .setNegativeButton("Choose another place") { _, _ -> showLocationChooser("") }
-            .setCancelable(false)
-            .show()
+        describe()
+        setScreen(
+            ScrollView(this).apply {
+                addView(
+                    vertical(
+                        children = arrayOf(
+                            text("Download an offline area?", 22f, bold = true),
+                            text("Area centre ($center, ${source.label}).", 13f, color = Colors.MUTED),
+                            text("Radius", bold = true),
+                            radiusChoice { describe() },
+                            body,
+                            text("Privacy: the area's bounds (≈ your location) are sent to SliceOSM and the Protomaps tile host."),
+                            button("Download") { startDownload(center, AreaRadius.bbox(center, radiusKm)) },
+                            button("Choose another place") { showLocationChooser("") },
+                        ),
+                    ),
+                )
+            },
+        )
+        if (debugLaunch.autoDownload) {
+            // Time to see (and screenshot) the offer.
+            scope.launch { kotlinx.coroutines.delay(1000); startDownload(center, AreaRadius.bbox(center, radiusKm)) }
+        }
+    }
+
+    /** One radio button per [AreaRadius.CHOICES_KM]; a choice updates [radiusKm]. */
+    private fun radiusChoice(onChange: () -> Unit) = RadioGroup(this).apply {
+        orientation = RadioGroup.HORIZONTAL
+        AreaRadius.CHOICES_KM.forEach { km ->
+            addView(
+                RadioButton(this@MainActivity).apply {
+                    id = View.generateViewId()
+                    text = AreaRadius.label(km)
+                    isChecked = km == radiusKm
+                    setOnClickListener { radiusKm = km; onChange() }
+                },
+            )
+        }
     }
 
     // ---- download -----------------------------------------------------------
 
-    private fun startDownload(center: LatLon, bbox: Bbox? = null) {
+    /**
+     * Downloads [area]: the offer's [AreaRadius.bbox], or for a refresh the
+     * published area's bbox as it is (full replace). [center] names the area.
+     */
+    private fun startDownload(center: LatLon, area: Bbox) {
         val line = showProgress()
         line.set("Finding the newest basemap build", null)
         scope.launch {
@@ -163,10 +203,10 @@ class MainActivity : Activity() {
                 Log.w(TAG, "basemap build lookup failed", error)
                 return@launch showFailure("Could not reach the basemap host: ${error.message}", retryable = true)
             }
-            Log.i(TAG, "basemap source $planet")
+            Log.i(TAG, "basemap source $planet; area bbox $area")
             areas.download(
                 InspectorStore.AREA_ID,
-                bbox ?: Bbox.around(center.lat, center.lon, Geo.AREA_SIZE_KM),
+                area,
                 name = "inspector %.4f,%.4f".format(java.util.Locale.ROOT, center.lat, center.lon),
                 basemap = BasemapSource.Extract(planet, maxZoom = BASEMAP_MAX_ZOOM),
             )

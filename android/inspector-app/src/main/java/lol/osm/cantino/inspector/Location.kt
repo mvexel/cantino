@@ -66,9 +66,11 @@ object DebugLocation {
  * only, not sticky). The same options exist on iOS as launch arguments
  * (`-query "…"`); see docs/guide/inspector-app.md.
  *
+ *     --ef radius 5                    preselect this area radius on the offer, km
+ *                                      (one of AreaRadius.CHOICES_KM; same as the café app)
  *     --ez auto_download true          accept the download offer
  *     --es query 'amenity=* !opening_hours' [--ez view_only true]   run a query
- *     --es tap 40.76080,-111.89100 [--ef radius 15]   tap there (candidates sheet)
+ *     --es tap 40.76080,-111.89100 [--ef tap_radius 15]   tap there (candidates sheet; hit radius in m)
  *     --ei select 0                    then select the candidate at that index
  *     --es object way/123              open the object navigator
  *     --ez about true                  open "About this area"
@@ -76,11 +78,14 @@ object DebugLocation {
  *     --ef zoom 17                     camera zoom (centre: the tap, else the area centre)
  */
 data class DebugLaunch(
+    /** The download area's radius in km ([AreaRadius]); not the tap's hit radius. */
+    val radiusKm: Double? = null,
     val autoDownload: Boolean = false,
     val query: String? = null,
     val viewOnly: Boolean = false,
     val tap: LatLon? = null,
-    val radius: Double? = null,
+    /** The debug tap's hit radius, in metres. */
+    val tapRadius: Double? = null,
     val select: Int? = null,
     val obj: OsmId? = null,
     val about: Boolean = false,
@@ -91,11 +96,12 @@ data class DebugLaunch(
         fun read(context: Context, intent: Intent?): DebugLaunch {
             if (intent == null || !context.debuggable()) return DebugLaunch()
             return DebugLaunch(
+                radiusKm = if (intent.hasExtra("radius")) AreaRadius.choice(intent.getFloatExtra("radius", Float.NaN).toDouble()) else null,
                 autoDownload = intent.getBooleanExtra("auto_download", false),
                 query = intent.getStringExtra("query"),
                 viewOnly = intent.getBooleanExtra("view_only", false),
                 tap = intent.getStringExtra("tap")?.let(::parseLatLon),
-                radius = intent.getFloatExtra("radius", Float.NaN).toDouble().takeIf { !it.isNaN() && it > 0 },
+                tapRadius = intent.getFloatExtra("tap_radius", Float.NaN).toDouble().takeIf { !it.isNaN() && it > 0 },
                 select = intent.getIntExtra("select", -1).takeIf { it >= 0 },
                 obj = intent.getStringExtra("object")?.let(Labels::parsePath),
                 about = intent.getBooleanExtra("about", false),

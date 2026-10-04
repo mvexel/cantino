@@ -216,7 +216,7 @@ class MapScreen(
         val launch = debug
         debug = DebugLaunch() // once per launch
         launch.query?.let { input.setText(it); viewOnly.isChecked = launch.viewOnly; runQuery() }
-        launch.tap?.let { runTap(it, launch.radius ?: HitTest.DEFAULT_RADIUS_M, selectIndex = launch.select) }
+        launch.tap?.let { runTap(it, launch.tapRadius ?: HitTest.DEFAULT_RADIUS_M, selectIndex = launch.select) }
         launch.obj?.let(::openObject)
         if (launch.about) showAbout()
         if (launch.counts) runCounts()

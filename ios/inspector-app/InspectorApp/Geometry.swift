@@ -28,9 +28,6 @@ struct LatLon: Hashable, Sendable, CustomStringConvertible {
 }
 
 enum Geo {
-    /// Edge length of the default area, in km (a 5×5 km city centre: a full import stays small).
-    static let areaSizeKm = 5.0
-
     private static let earthRadiusM = 6_371_000.0
     private static let metersPerDegree = earthRadiusM * Double.pi / 180
     private static let rad = Double.pi / 180

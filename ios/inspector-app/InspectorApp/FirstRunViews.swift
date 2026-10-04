@@ -57,19 +57,24 @@ struct ChooserView: View {
     }
 }
 
-/// The offer, with the one-line privacy note.
+/// The offer: the area centred on `center`, the radius choice
+/// (``AreaRadius/choicesKm``) and the one-line privacy note.
 struct OfferView: View {
-    let model: AppModel
+    @Bindable var model: AppModel
     let center: LatLon
     let source: LocationSource
 
     var body: some View {
-        let km = Int(Geo.areaSizeKm)
         VStack(alignment: .leading, spacing: 12) {
             Text("Download an offline area?").font(.title2.bold())
             Text("Area centre (\(center.description), \(source.label)).").font(.footnote).foregroundStyle(Palette.muted)
-            Text("About \(km) × \(km) km around \(center.description): every OpenStreetMap object (a full import) and a basemap, "
-                + "so you can inspect the data without a connection.")
+            Text("Radius").bold()
+            Picker("Radius", selection: $model.radiusKm) {
+                ForEach(AreaRadius.choicesKm, id: \.self) { Text(AreaRadius.label($0)).tag($0) }
+            }
+            .pickerStyle(.segmented)
+            Text("About \(AreaRadius.sideLabel(model.radiusKm)) around \(center.description) (radius \(AreaRadius.label(model.radiusKm))): "
+                + "every OpenStreetMap object (a full import) and a basemap, so you can inspect the data without a connection.")
             Text("Privacy: the area's bounds (≈ your location) are sent to SliceOSM and the Protomaps tile host.")
                 .font(.callout)
             Button("Download") { model.startDownload(center: center) }.buttonStyle(.borderedProminent)

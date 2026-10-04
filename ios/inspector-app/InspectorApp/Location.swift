@@ -60,20 +60,25 @@ enum DebugLocation {
 /// Launch arguments that stand in for taps in automated runs (Debug builds
 /// only, not sticky). The same options exist on Android as intent extras.
 ///
+///     -radius 5                          preselect this area radius on the offer, km
+///                                        (one of AreaRadius.choicesKm; same as the café app)
 ///     -auto_download YES                 accept the download offer
 ///     -query 'amenity=* !opening_hours' [-view_only YES]   run a query
-///     -tap 40.76080,-111.89100 [-radius 15]   tap there (candidates sheet)
+///     -tap 40.76080,-111.89100 [-tap_radius 15]   tap there (candidates sheet; hit radius in m)
 ///     -select 0                          then select the candidate at that index
 ///     -object way/123                    open the object navigator
 ///     -about YES                         open "About this area"
 ///     -counts YES                        count the acceptance queries (os_log category InspectorCounts)
 ///     -zoom 17                           camera zoom (centre: the tap, else the area centre)
 struct DebugLaunch: Sendable {
+    /// The download area's radius in km (``AreaRadius``); not the tap's hit radius.
+    var radiusKm: Double?
     var autoDownload = false
     var query: String?
     var viewOnly = false
     var tap: LatLon?
-    var radius: Double?
+    /// The debug tap's hit radius, in metres.
+    var tapRadius: Double?
     var select: Int?
     var object: OsmId?
     var about = false
@@ -83,11 +88,12 @@ struct DebugLaunch: Sendable {
     static func read(arguments: [String] = ProcessInfo.processInfo.arguments) -> DebugLaunch {
         var launch = DebugLaunch()
         #if DEBUG
+        launch.radiusKm = AreaRadius.choice(argument(arguments, "-radius").flatMap(Double.init))
         launch.autoDownload = flag(arguments, "-auto_download")
         launch.query = argument(arguments, "-query")
         launch.viewOnly = flag(arguments, "-view_only")
         launch.tap = argument(arguments, "-tap").flatMap(AppModel.parseLatLon)
-        launch.radius = argument(arguments, "-radius").flatMap(Double.init).flatMap { $0 > 0 ? $0 : nil }
+        launch.tapRadius = argument(arguments, "-tap_radius").flatMap(Double.init).flatMap { $0 > 0 ? $0 : nil }
         launch.select = argument(arguments, "-select").flatMap(Int.init).flatMap { $0 >= 0 ? $0 : nil }
         launch.object = argument(arguments, "-object").flatMap(Labels.parsePath)
         launch.about = flag(arguments, "-about")

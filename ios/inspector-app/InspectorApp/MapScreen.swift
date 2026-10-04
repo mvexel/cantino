@@ -404,7 +404,7 @@ struct DebugLaunchRunner {
                 model.runQuery()
             }
             if let tap = launch.tap {
-                await model.runTap(tap, radiusMeters: launch.radius ?? HitTest.defaultRadiusM, selectIndex: launch.select)
+                await model.runTap(tap, radiusMeters: launch.tapRadius ?? HitTest.defaultRadiusM, selectIndex: launch.select)
             }
             if let object = launch.object { openObject(object) }
             if launch.about { model.showAbout() }
