@@ -1,0 +1,620 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Inspector walkthrough - Cantino guide</title>
+<style>
+  :root { color-scheme: light dark; --fg: #1d1d1f; --muted: #5f6368; --bg: #fbfaf7; --code: #efede8; --link: #0b57d0; --line: #d9d6cf; }
+  @media (prefers-color-scheme: dark) { :root { --fg: #e8e6e3; --muted: #a8a49c; --bg: #161616; --code: #262624; --link: #8ab4f8; --line: #3a3a37; } }
+  body { margin: 0; background: var(--bg); color: var(--fg); font: 16px/1.55 system-ui, sans-serif; }
+  nav { max-width: 48rem; margin: 0 auto; padding: 1rem 16px 0; font-size: .9rem; color: var(--muted); }
+  main { max-width: 48rem; margin: 0 auto; padding: 1rem 16px 3rem; }
+  a { color: var(--link); }
+  img { max-width: 100%; height: auto; }
+  pre { background: var(--code); padding: .8rem 1rem; border-radius: 6px; overflow-x: auto; font-size: .88rem; }
+  code { background: var(--code); padding: .05em .3em; border-radius: 4px; font-size: .92em; }
+  pre code { background: none; padding: 0; }
+  pre.mermaid { background: none; text-align: center; }
+  table { border-collapse: collapse; display: block; overflow-x: auto; }
+  th, td { border: 1px solid var(--line); padding: .35rem .6rem; vertical-align: top; text-align: left; }
+  blockquote { margin-left: 0; padding-left: 1rem; border-left: 3px solid var(--line); color: var(--muted); }
+</style>
+</head>
+<body>
+<nav><a href="../">Cantino</a> / <a href="index.html">Guide</a> / <a href="../api/">API reference</a></nav>
+<main>
+<h1 id="inspector-walkthrough">Inspector walkthrough</h1>
+<p>Inspector is the data-exploration example for OSM developers and
+mappers: it shows what is in the OpenStreetMap data under your feet,
+with no network. Ask "every <code>amenity</code> without
+<code>opening_hours</code>" or "every <code>highway=crossing</code>
+without <code>crossing</code>", tap anywhere to see which objects are
+there, and follow ways, relations and nodes through their
+references.</p>
+<p>The Android module, <a
+href="https://github.com/mvexel/cantino/blob/main/android/inspector-app"><code>android/inspector-app</code></a>,
+now uses these mechanics for <a href="field-app.html">Cantino Field</a>,
+the accessibility audit MVP with an app-owned findings overlay and
+reviewed export. The iOS app, <a
+href="https://github.com/mvexel/cantino/blob/main/ios/inspector-app"><code>ios/inspector-app</code></a>,
+remains the pure Inspector. The query, tap, navigation, area and
+acceptance behavior documented below is shared; the Android-only field
+layer adds no SDK API.</p>
+<p>Both use plain platform UI and MapLibre Native (Android 13.6.1, iOS
+6.31.0). Generic app developers start with the <a
+href="cafe-app.html">café app</a>. Proposal and original Inspector
+decisions: <a
+href="https://github.com/mvexel/cantino/blob/main/docs/research/2026-10-04-second-demo-app-proposal.md">research
+note</a>.</p>
+<table>
+<thead>
+<tr>
+<th>Tap: mid-sidewalk</th>
+<th>Check: sidewalks without surface</th>
+<th>Relation members</th>
+<th>About this area</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><img
+src="../screenshots/2026-10-04-inspector-android-slc-tap-mid-sidewalk.png"
+alt="tap" /></td>
+<td><img
+src="../screenshots/2026-10-04-inspector-android-slc-check-sidewalks.png"
+alt="query" /></td>
+<td><img
+src="../screenshots/2026-10-04-inspector-ios-slc-object-relation.png"
+alt="relation" /></td>
+<td><img src="../screenshots/2026-10-04-inspector-android-slc-about.png"
+alt="about" /></td>
+</tr>
+</tbody>
+</table>
+<p>Paths for the shared Android mechanics are relative to
+<code>android/inspector-app/src/main/java/lol/osm/cantino/inspector/</code>;
+matching iOS files live in <code>ios/inspector-app/InspectorApp/</code>.
+Android field-only files are listed in the <a
+href="field-app.html#findings-overlay-and-exports">field app
+guide</a>.</p>
+<h2 id="1-download-the-area">1. Download the area</h2>
+<table>
+<thead>
+<tr>
+<th>What</th>
+<th>Code</th>
+<th>Cantino API</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Location, typed <code>lat,lon</code>, or the Salt Lake City / Zürich
+presets; debug override for automated runs</td>
+<td><code>MainActivity</code>, <code>Location.kt</code> (copied from the
+café app)</td>
+<td></td>
+</tr>
+<tr>
+<td>A square centred on the location; the user picks its radius on the
+offer screen (below)</td>
+<td><code>AreaRadius</code> (<code>CHOICES_KM</code>,
+<code>DEFAULT_KM</code>), <code>MainActivity.offerDownload</code></td>
+<td><code>Bbox.around</code></td>
+</tr>
+<tr>
+<td>A <strong>full import</strong> (no import profile: a filtered area
+would hide what Inspector exists to show)</td>
+<td><code>MainActivity.startDownload</code></td>
+<td><code>AreaManager.download(…, BasemapSource.Extract(planet, maxZoom = 15))</code></td>
+</tr>
+<tr>
+<td>One progress line (the café app shows the detailed screen)</td>
+<td><code>MainActivity.ProgressLine</code></td>
+<td><code>AreaState</code></td>
+</tr>
+<tr>
+<td>Refresh (same bbox) and "Download another area" (full replace; one
+area per app)</td>
+<td><code>MapScreen.showAreaMenu</code></td>
+<td><code>AreaMetadata.bbox</code></td>
+</tr>
+<tr>
+<td>Store holder, reopened after a refresh</td>
+<td><code>InspectorStore</code> (copied from
+<code>CafeStore</code>)</td>
+<td><code>AsyncOsmStore</code>, <code>AreaMetadata.workId</code></td>
+</tr>
+<tr>
+<td>Basemap build lookup</td>
+<td><code>ProtomapsBuilds</code> (copied unchanged)</td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<p>The radius choices are those of the café app, <strong>1, 2.5, 5 or 10
+km</strong>, and mean the same: half the side of the square (2.5 km is a
+5 × 5 km box; the app passes twice the radius to
+<code>Bbox.around</code>, which takes the side). Inspector preselects
+<strong>2.5 km</strong> (5 × 5 km) instead of the café app's 5 km
+because it keeps every object: a 5 × 5 km city centre is about 24 MB
+(Salt Lake City) to 45 MB (Zürich) of database (acceptance table below),
+and the file grows with the area, about four times per doubling of the
+radius, more where the mapping is dense. The offer shows the box size,
+not a megabyte estimate, since density varies too much for an honest
+one. Refresh downloads the published bbox as it is, whatever radius is
+selected now. Rationale and the café defaults: <a
+href="cafe-app.html#area-size-the-radius">café walkthrough</a>.</p>
+<h2 id="2-query-bar-and-checks">2. Query bar and checks</h2>
+<table>
+<thead>
+<tr>
+<th>What</th>
+<th>Code</th>
+<th>Cantino API</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>k=v</code>, <code>k=*</code>, <code>!k</code>,
+<code>k="value with spaces"</code>; terms ANDed; exact and
+case-sensitive</td>
+<td><code>QueryBar.parse</code> (8 tests)</td>
+<td><code>TagFilter.Equals</code> / <code>Exists</code> /
+<code>NotExists</code></td>
+</tr>
+<tr>
+<td>"This view only": the visible map bbox</td>
+<td><code>MapScreen.runQuery</code></td>
+<td><code>Query.bbox</code> (ways and relations are candidates)</td>
+</tr>
+<tr>
+<td>Pages of 500, "Load more"</td>
+<td><code>Queries.page</code>, <code>MapScreen.loadPage</code></td>
+<td>keyset <code>Query.after</code></td>
+</tr>
+<tr>
+<td>"Count all" per kind, pages of 10 000, no geometry</td>
+<td><code>Queries.count</code></td>
+<td></td>
+</tr>
+<tr>
+<td>Results drawn: nodes as dots, ways as lines broken at missing
+vertices; relations listed only</td>
+<td><code>Inspect.shapes</code></td>
+<td><code>wayCoordinates</code> (one call per way)</td>
+</tr>
+<tr>
+<td>Android <strong>Audit checks</strong>: entrances/facilities without
+wheelchair data, toilets, crossings, kerbs, steps, elevators and
+disabled parking; each query remains editable</td>
+<td><code>Checks.FIELD</code></td>
+<td></td>
+</tr>
+<tr>
+<td>Errors verbatim: the parser's message, or Cantino's category and
+message (a lone <code>!key</code> without "this view only" is Cantino's
+<code>InvalidArgument</code>; so is a view with more than 100 000
+candidates)</td>
+<td><code>MapScreen.verbatim</code></td>
+<td><code>CantinoException</code> / <code>CantinoError</code></td>
+</tr>
+</tbody>
+</table>
+<h2 id="3-tap-to-inspect">3. Tap to inspect</h2>
+<p>Cantino has no "what is here" query, so the app builds one:</p>
+<table>
+<thead>
+<tr>
+<th>Step</th>
+<th>Code</th>
+<th>Cantino API</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>A box of about 20 dp around the finger (3–60 m), one bbox query
+without tag filters, at most 200 candidates</td>
+<td><code>Inspect.tap</code></td>
+<td><code>Query(bbox, limit)</code></td>
+</tr>
+<tr>
+<td>Tagged node: <strong>hit</strong> within the radius</td>
+<td><code>HitTest.node</code></td>
+<td></td>
+</tr>
+<tr>
+<td>Way: distance to its nearest segment; <strong>hit</strong> within
+the radius. Untagged vertices are never returned by a bbox query, so the
+middle of a sidewalk finds the way through its line</td>
+<td><code>HitTest.way</code>, <code>Geo.distanceToLineMeters</code></td>
+<td><code>wayCoordinates</code></td>
+</tr>
+<tr>
+<td>Relation, or a large way tapped inside (a park): <strong>near
+(bbox)</strong>. There is no point-in-polygon test</td>
+<td><code>HitTest.relation</code></td>
+<td></td>
+</tr>
+<tr>
+<td>Order: hits, then near; nearest first; then node, way, relation and
+ID</td>
+<td><code>HitTest.ORDER</code> (7 geometry tests)</td>
+<td></td>
+</tr>
+<tr>
+<td>Selecting a row highlights its geometry, broken where vertices are
+outside the area</td>
+<td><code>Inspect.shape</code>, <code>Geo.segments</code></td>
+<td>null entries of <code>wayCoordinates</code></td>
+</tr>
+</tbody>
+</table>
+<h2 id="4-object-navigator">4. Object navigator</h2>
+<table>
+<thead>
+<tr>
+<th>What</th>
+<th>Code</th>
+<th>Cantino API</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Tags, metadata (or "not stored" and the location version for
+untagged nodes)</td>
+<td><code>ObjectActivity.render</code></td>
+<td><code>OsmObject.tags</code>, <code>ObjectMetadata</code>,
+<code>Node.locationVersion</code></td>
+</tr>
+<tr>
+<td>Way nodes in order, repeats kept, tagged vertices marked, each a
+link</td>
+<td><code>Inspect.detail</code></td>
+<td>batch <code>get</code></td>
+</tr>
+<tr>
+<td>Relation members with roles, each a link</td>
+<td><code>Inspect.detail</code></td>
+<td>batch <code>get</code></td>
+</tr>
+<tr>
+<td>Missing references: "47 of 78 members are not in this area"</td>
+<td><code>ObjectDetail.missingReferences</code></td>
+<td><code>get</code> returns null</td>
+</tr>
+<tr>
+<td>Ways using this node, best effort: ways whose bbox contains the node
+and whose node list has it (complete for ways in the extract; there is
+no node→way index)</td>
+<td><code>Inspect.parentWays</code></td>
+<td>bbox <code>Query</code></td>
+</tr>
+<tr>
+<td>"Show on map" (back to the map, highlighted, camera fitted)</td>
+<td><code>MainActivity.onNewIntent</code>,
+<code>MapScreen.select</code></td>
+<td></td>
+</tr>
+<tr>
+<td>openstreetmap.org link, marked as needing the network</td>
+<td><code>Labels.osmOrgUrl</code></td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<h2 id="5-about-this-area">5. About this area</h2>
+<p>Snapshot time and age, import time, bbox and size, the import profile
+(none), node/way/relation counts and database size from the import
+report, the basemap download facts from
+<code>AreaMetadata.basemap</code>, and the basemap file itself read with
+<code>PmtilesInfo.read</code> (spec version, zooms, tiles, entries,
+bounds). Code: <code>About.kt</code> / <code>About.swift</code>.</p>
+<h2 id="tests">Tests</h2>
+<p>The shared mechanics retain matching Android/iOS tests (<a
+href="platform-parity.html#inspector">parity</a>); Android adds
+field-overlay tests:</p>
+<table>
+<thead>
+<tr>
+<th>Android</th>
+<th>iOS</th>
+<th>Covers</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>QueryBarTest</code> (8, JVM)</td>
+<td><code>QueryBarTests</code></td>
+<td>syntax, quoting, errors and round trip; Android also parses every
+field preset</td>
+</tr>
+<tr>
+<td><code>GeometryTest</code> (7, JVM)</td>
+<td><code>GeometryTests</code></td>
+<td>segment distance, gaps, runs, hit/near, ordering, labels</td>
+</tr>
+<tr>
+<td><code>AreaRadiusTest</code> (5, JVM)</td>
+<td><code>AreaRadiusTests</code></td>
+<td>radius → bbox (half the side), choices and default, the
+<code>radius</code> launch option, labels, typed
+<code>lat,lon</code></td>
+</tr>
+<tr>
+<td><code>InspectTest</code> (7, instrumented)</td>
+<td><code>InspectTests</code></td>
+<td>one shared real-store fixture: taps, references, missing geometry,
+counts, errors and paging</td>
+</tr>
+<tr>
+<td><code>FindingsTest</code> (4, JVM)</td>
+<td>—</td>
+<td>proposed-tag validation, atomic persistence, provenance, geometry
+anchor, GeoJSON and CSV escaping</td>
+</tr>
+</tbody>
+</table>
+<h2 id="acceptance-2026-10-04">Acceptance, 2026-10-04</h2>
+<p>Android on the Pixel 8 emulator (Android 17, arm64), iOS on the
+iPhone 17 Pro simulator (iOS 26.2). Each area was downloaded live on
+both platforms at the same time, then queried after a cold launch. The
+two platforms imported the <strong>same snapshot into byte-identical
+databases</strong> (SHA-256 of the <code>.sqlite</code> files equal), so
+every count must match; they do.</p>
+<table>
+<thead>
+<tr>
+<th>Area (5×5 km)</th>
+<th>Snapshot</th>
+<th>Nodes / ways / relations</th>
+<th>Database</th>
+<th>Basemap</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Salt Lake City, centre 40.7608, -111.8910</td>
+<td>2026-10-04 21:12:59Z (Android), 21:25:46Z (iOS); same data</td>
+<td>259,731 / 43,418 / 491</td>
+<td>23.7 MB</td>
+<td>3.9 MB, 87 tiles</td>
+</tr>
+<tr>
+<td>Zürich, centre 47.3744, 8.5410</td>
+<td>2026-10-04 21:38:41Z (both)</td>
+<td>424,575 / 69,701 / 1,766</td>
+<td>45.3 MB</td>
+<td>5.6 MB, 85 tiles</td>
+</tr>
+</tbody>
+</table>
+<p>Counts over the whole area (the debug <code>counts</code> option logs
+and shows them):</p>
+<table>
+<thead>
+<tr>
+<th>Query</th>
+<th>SLC Android</th>
+<th>SLC iOS</th>
+<th>Zürich Android</th>
+<th>Zürich iOS</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>amenity=cafe</code></td>
+<td>85</td>
+<td>85</td>
+<td>301</td>
+<td>301</td>
+</tr>
+<tr>
+<td><code>amenity=restaurant</code></td>
+<td>283</td>
+<td>283</td>
+<td>840</td>
+<td>840</td>
+</tr>
+<tr>
+<td><code>amenity=bench</code></td>
+<td>708</td>
+<td>708</td>
+<td>3,945</td>
+<td>3,945</td>
+</tr>
+<tr>
+<td><code>amenity=drinking_water</code></td>
+<td>51</td>
+<td>51</td>
+<td>477</td>
+<td>477</td>
+</tr>
+<tr>
+<td><code>amenity=toilets</code></td>
+<td>23</td>
+<td>23</td>
+<td>196</td>
+<td>196</td>
+</tr>
+<tr>
+<td><code>amenity=bicycle_parking</code></td>
+<td>774</td>
+<td>774</td>
+<td>1,395</td>
+<td>1,395</td>
+</tr>
+<tr>
+<td><code>amenity=* !opening_hours</code></td>
+<td>4,566</td>
+<td>4,566</td>
+<td>17,734</td>
+<td>17,734</td>
+</tr>
+<tr>
+<td><code>highway=footway footway=sidewalk</code></td>
+<td>5,131</td>
+<td>5,131</td>
+<td>5,568</td>
+<td>5,568</td>
+</tr>
+<tr>
+<td><code>footway=crossing</code></td>
+<td>2,799</td>
+<td>2,799</td>
+<td>3,869</td>
+<td>3,869</td>
+</tr>
+<tr>
+<td><code>highway=crossing crossing=*</code></td>
+<td>4,825</td>
+<td>4,825</td>
+<td>3,849</td>
+<td>3,849</td>
+</tr>
+<tr>
+<td><code>highway=crossing !crossing</code></td>
+<td>564</td>
+<td>564</td>
+<td>240</td>
+<td>240</td>
+</tr>
+<tr>
+<td><code>barrier=kerb kerb=*</code></td>
+<td>4,871</td>
+<td>4,871</td>
+<td>3,965</td>
+<td>3,965</td>
+</tr>
+<tr>
+<td><code>highway=steps</code></td>
+<td>294</td>
+<td>294</td>
+<td>2,076</td>
+<td>2,076</td>
+</tr>
+<tr>
+<td><code>highway=pedestrian</code></td>
+<td>158</td>
+<td>158</td>
+<td>354</td>
+<td>354</td>
+</tr>
+</tbody>
+</table>
+<p>Taps (debug <code>tap</code>, <code>tap_radius</code> 5 m), first
+candidates, identical on both platforms including distances:</p>
+<table>
+<thead>
+<tr>
+<th>Tap</th>
+<th>SLC</th>
+<th>Zürich</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>On a crossing node</td>
+<td>40.7608264, -111.8909985: hit node 6224290843
+<code>highway=crossing</code> 0 m, hit way 675221034 (Main Street) 0 m,
+hit way 704609989 <code>highway=footway</code> 0 m</td>
+<td>47.3744835, 8.5387790: hit node 663075859
+<code>highway=crossing</code> 0 m, hit way 332455374 (Bahnhofstrasse) 0
+m, hit way 1050875571 <code>highway=footway</code> 0 m</td>
+</tr>
+<tr>
+<td>On a sidewalk</td>
+<td>40.76200, -111.90230: hit way 880823181
+(<code>footway=sidewalk</code>) 2.5 m</td>
+<td>47.37447, 8.53890: hit way 1051685528
+(<code>footway=sidewalk</code>) 2.3 m</td>
+</tr>
+<tr>
+<td>Inside a large park</td>
+<td>40.76150, -111.90110 (Pioneer Park): no hit; near way 172843732
+<code>leisure=park</code> 78 m</td>
+<td>47.38170, 8.53920: no hit; near way 4626910
+<code>leisure=park</code> 26 m</td>
+</tr>
+<tr>
+<td>Mid-sidewalk, no vertex near</td>
+<td>40.76174, -111.90233: hit way 880823181 0.17 m (its vertices are 100
+m away)</td>
+<td>47.37445, 8.53895: hit way 1051685528 0.14 m</td>
+</tr>
+</tbody>
+</table>
+<p>Offline: the emulator and simulator are shared with other runs, so
+neither was put in airplane mode. As for the <a
+href="cafe-app.html#ios">iOS café app</a>, after the downloads a cold
+launch that ran a query, a tap with selection and all counts left the
+app with no internet sockets: <code>lsof -a -i -p &lt;pid&gt;</code>
+empty on iOS, and no <code>/proc/net/{tcp,tcp6,udp,udp6}</code> entry
+owned by the app's UID on Android. The style references only
+<code>asset://</code> and the area's <code>pmtiles://file://</code>
+archive.</p>
+<table>
+<thead>
+<tr>
+<th>SLC, iOS: tap on a crossing</th>
+<th>SLC, iOS: counts</th>
+<th>Zürich, Android: crossings without <code>crossing</code></th>
+<th>Zürich, iOS: tap inside a park</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><img
+src="../screenshots/2026-10-04-inspector-ios-slc-tap-crossing.png"
+alt="crossing" /></td>
+<td><img src="../screenshots/2026-10-04-inspector-ios-slc-counts.png"
+alt="counts" /></td>
+<td><img
+src="../screenshots/2026-10-04-inspector-android-zurich-check-crossings.png"
+alt="check" /></td>
+<td><img
+src="../screenshots/2026-10-04-inspector-ios-zurich-tap-park.png"
+alt="park" /></td>
+</tr>
+</tbody>
+</table>
+<p>All screenshots:
+<code>docs/screenshots/2026-10-04-inspector-*.png</code>.</p>
+<h2 id="running-it">Running it</h2>
+<div class="sourceCode" id="cb1"><pre class="sourceCode sh"><code class="sourceCode bash"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="ex">scripts/basemap-assets.sh</span>                       <span class="co"># style, glyphs, sprites (both platforms copy them at build time)</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a><span class="ex">scripts/build-android.sh</span></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a><span class="bu">cd</span> android <span class="kw">&amp;&amp;</span> <span class="ex">mise</span> exec <span class="at">--</span> ./gradlew :inspector-app:installDebug</span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a><span class="co"># Debug builds only; never real GPS in automated runs. lat/lon is sticky (clear_debug_location).</span></span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a><span class="ex">adb</span> shell am start <span class="at">-n</span> lol.osm.cantino.inspector/.MainActivity <span class="at">--ef</span> lat 40.7608 <span class="at">--ef</span> lon <span class="at">-111.8910</span> <span class="at">--ez</span> auto_download true   <span class="co"># [--ef radius 5]</span></span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a><span class="ex">adb</span> shell <span class="st">&quot;am start -n lol.osm.cantino.inspector/.MainActivity --es query &#39;amenity=* !opening_hours&#39; --ez view_only true&quot;</span></span>
+<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a><span class="ex">adb</span> shell am start <span class="at">-S</span> <span class="at">-n</span> lol.osm.cantino.inspector/.MainActivity <span class="at">--es</span> tap 40.76174,-111.90233 <span class="at">--ef</span> tap_radius 5 <span class="at">--ei</span> select 0</span>
+<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a><span class="ex">adb</span> shell am start <span class="at">-S</span> <span class="at">-n</span> lol.osm.cantino.inspector/.MainActivity <span class="at">--es</span> object relation/907522</span>
+<span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a><span class="ex">adb</span> shell am start <span class="at">-S</span> <span class="at">-n</span> lol.osm.cantino.inspector/.MainActivity <span class="at">--ez</span> counts true   <span class="co"># logcat tag InspectorCounts</span></span></code></pre></div>
+<div class="sourceCode" id="cb2"><pre class="sourceCode sh"><code class="sourceCode bash"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="ex">scripts/basemap-assets.sh</span> <span class="kw">&amp;&amp;</span> <span class="ex">scripts/build-ios-inspector.sh</span> install   <span class="co"># SIMULATOR=… or SIMULATOR_ID=&lt;udid&gt;</span></span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a><span class="ex">xcrun</span> simctl launch booted lol.osm.cantino.inspector <span class="at">-lat</span> 40.7608 <span class="at">-lon</span> <span class="at">-111.8910</span> <span class="at">-auto_download</span> YES   <span class="co"># [-radius 5]</span></span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a><span class="ex">xcrun</span> simctl launch booted lol.osm.cantino.inspector <span class="at">-query</span> <span class="st">&#39;amenity=* !opening_hours&#39;</span> <span class="at">-view_only</span> YES</span>
+<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a><span class="ex">xcrun</span> simctl launch booted lol.osm.cantino.inspector <span class="at">-tap</span> 40.76174,-111.90233 <span class="at">-tap_radius</span> 5 <span class="at">-select</span> 0</span>
+<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a><span class="ex">xcrun</span> simctl launch booted lol.osm.cantino.inspector <span class="at">-object</span> relation/907522</span>
+<span id="cb2-6"><a href="#cb2-6" aria-hidden="true" tabindex="-1"></a><span class="ex">xcrun</span> simctl launch booted lol.osm.cantino.inspector <span class="at">-counts</span> YES                    <span class="co"># os_log category InspectorCounts</span></span></code></pre></div>
+<p><code>radius</code> is the download area's radius in km, as in the
+café app (one of the choices, otherwise ignored);
+<code>tap_radius</code> is the debug tap's hit radius in metres (it was
+called <code>radius</code> before the area radius existed). Other
+options on both: <code>zoom</code>, <code>about</code>. Tests:
+<code>./gradlew :inspector-app:testDebugUnitTest :inspector-app:connectedDebugAndroidTest</code>
+and <code>scripts/build-ios-inspector.sh test</code>.</p>
+<h2 id="known-limits">Known limits</h2>
+<ul>
+<li>A page of results is drawn as it loads; ways cost one
+<code>wayCoordinates</code> call each, so a page of 500 ways takes a
+moment. There is no "draw everything" layer and no name search (later,
+after measuring).</li>
+<li>Relations are never hit-tested and never drawn as results; a
+selected relation highlights at most 300 member ways.</li>
+<li>"Ways using this node" knows only the ways in the extract.</li>
+<li>"This view only" uses the whole map view, including the part under
+the results panel.</li>
+</ul>
+</main>
+</body>
+</html>

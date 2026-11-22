@@ -73,16 +73,23 @@ timeout); fallback: type "lat,lon" or pick a preset</td>
 <td></td>
 </tr>
 <tr>
-<td>10×10 km box around the fix</td>
-<td><code>Cafes.kt</code>: <code>Geo.squareAround</code>,
-<code>Geo.AREA_SIZE_KM</code> (a default, not a cap)</td>
-<td><code>Bbox</code></td>
+<td>A square centred on the fix; the user picks its radius (below)</td>
+<td><code>AreaRadius.kt</code>: <code>CHOICES_KM</code>,
+<code>DEFAULT_KM</code>, <code>AreaRadius.bbox</code></td>
+<td><code>Bbox.around</code></td>
 </tr>
 <tr>
-<td>Offer dialog with the privacy line (the bbox goes to SliceOSM and
-the tile host)</td>
+<td>Offer screen: the radius choice, what is kept (points of interest
+only) and the privacy line (the bbox goes to SliceOSM and the tile
+host)</td>
 <td><code>MainActivity.offerDownload</code></td>
 <td></td>
+</tr>
+<tr>
+<td>Keep only points of interest: one import profile for the app</td>
+<td><code>Cafes.kt</code>: <code>CafeProfile</code></td>
+<td><code>ImportProfile</code>, <code>KeepRule</code>,
+<code>AreaManager(context, AreaConfig(importOptions = ImportOptions(profile = …)))</code></td>
 </tr>
 <tr>
 <td>Find a basemap build (demo) and start the download</td>
@@ -110,12 +117,55 @@ subtype</td>
 </tr>
 </tbody>
 </table>
+<h3 id="area-size-the-radius">Area size: the radius</h3>
+<p>The area is a square centred on the device location (or the typed
+point, the preset, or the debug override). On the offer screen the user
+picks its <strong>radius: 1, 2.5, 5 or 10 km, 5 km preselected</strong>.
+Radius means <em>half the side of the square</em>: 5 km is a 10 × 10 km
+box reaching 5 km north, south, east and west of the centre (the corners
+are about 7 km away). The app passes twice the radius to
+<code>Bbox.around(lat, lon, widthKm)</code>, which takes the side.
+"Radius" means the same in the Inspector app and on both platforms.</p>
+<p>The default 10 × 10 km is a city centre's worth of cafés and, with
+the POI profile, about 5 MB (measured below for Salt Lake City); a
+bigger radius grows the download with the area (four times the area per
+doubling) and with how densely mapped the place is, so the offer shows
+the box size, not a megabyte estimate. The choices and the default are
+the two constants at the top of <code>AreaRadius.kt</code> /
+<code>AreaRadius.swift</code>: change them freely; Cantino has no size
+cap (<a href="downloading.html#area-size">Area size</a>).</p>
+<p>Retry re-downloads the last requested centre and radius. Refresh does
+not use the radius: it downloads the published area's
+<code>AreaMetadata.bbox</code> as it is (full replace), whatever the
+radius selection now is.</p>
 <p>The state is collected for the activity's whole life
 (<code>MainActivity.onCreate</code>), so a relaunch during a download
 shows its progress, and the first emitted state decides the screen:
 running → progress, published → map, otherwise → first run.</p>
-<p>Measured: Ready in 27.4 s, 75.6 MB database, 6.5 MB basemap (<a
+<h3 id="import-profile-points-of-interest-only">Import profile: points
+of interest only</h3>
+<p>The app keeps the OSM objects with any of the keys
+<code>amenity</code>, <code>shop</code>, <code>tourism</code>,
+<code>leisure</code>, <code>craft</code>, <code>office</code>,
+<code>healthcare</code> or <code>historic</code> (nodes, ways and
+relations), the POI profile from <a
+href="downloading.html#keep-only-what-you-need-import-profiles">Downloading</a>.
+The café app needs only <code>amenity=cafe</code> and what those objects
+reference; the basemap draws streets, buildings and water. The basemap
+is not affected by the profile. Kept ways keep all their nodes and kept
+relations all their members, so markers for ways and relations and the
+inspector's node and member lists work as with a full import. An object
+opened directly that is not in the file may be outside the area
+<em>or</em> filtered out; the inspector names both causes.</p>
+<p>Measured with the profile (2026-10-04, downtown Salt Lake City, live
+download): 5.1 MB database instead of 61 MB, 6.5 MB basemap, ready in
+about 9–10 s on the iOS simulator and the Android emulator, still 136
+cafés. Earlier, with a full import: Ready in 27.4 s, 75.6 MB database,
+6.5 MB basemap on a Pixel 8 (<a
 href="performance.html#area-download-1010-km">Performance</a>).</p>
+<p>The recorded import profile survives publication and appears in
+<code>AreaMetadata.report.profile</code>, so the map can describe the
+area as "points of interest only" after a relaunch.</p>
 <h2 id="2-restart-in-airplane-mode">2. Restart in airplane mode</h2>
 <p>Nothing to do in code: on launch, <code>publishedArea(AREA_ID)</code>
 is not null, so <code>MainActivity</code> goes straight to
@@ -165,6 +215,13 @@ Gradle task) with the area's PMTiles URL substituted</td>
 <td><code>CafeLoader.load</code></td>
 <td><code>Query(tags, bbox, after, limit)</code>,
 <code>TagFilter.Equals</code></td>
+</tr>
+<tr>
+<td>Status line: snapshot age and the area's recorded import
+profile</td>
+<td><code>MapScreen.applyFilters</code></td>
+<td><code>AreaMetadata.snapshotTimestamp</code>,
+<code>report.profile</code></td>
 </tr>
 <tr>
 <td>A map point for ways and relations (an anchor, not exact
@@ -252,6 +309,12 @@ missing</td>
 <td><code>DetailActivity</code></td>
 <td><code>Relation.members</code>, <code>get</code> returning null</td>
 </tr>
+<tr>
+<td>Object not in the file: "not in this area or filtered out" (both
+causes, the profile when recorded)</td>
+<td><code>RelationDetail.kt</code>: <code>notFoundText</code></td>
+<td><code>ImportReport.profile</code></td>
+</tr>
 </tbody>
 </table>
 <h2 id="running-it">Running it</h2>
@@ -259,7 +322,9 @@ missing</td>
 <span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a><span class="ex">scripts/build-android.sh</span></span>
 <span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a><span class="bu">cd</span> android <span class="kw">&amp;&amp;</span> <span class="ex">mise</span> exec <span class="at">--</span> ./gradlew :cafe-app:installDebug</span>
 <span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a><span class="co"># Automated runs: never send a real location; use the debug override (debuggable builds only)</span></span>
-<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a><span class="ex">adb</span> shell am start <span class="at">-S</span> <span class="at">-n</span> lol.osm.cantino.cafe/.MainActivity <span class="at">--ef</span> lat 40.7608 <span class="at">--ef</span> lon <span class="at">-111.8910</span></span></code></pre></div>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a><span class="ex">adb</span> shell am start <span class="at">-S</span> <span class="at">-n</span> lol.osm.cantino.cafe/.MainActivity <span class="at">--ef</span> lat 40.7608 <span class="at">--ef</span> lon <span class="at">-111.8910</span></span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a><span class="co"># Preselect a radius on the offer (km; one of the choices, otherwise ignored; not sticky)</span></span>
+<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a><span class="ex">adb</span> shell am start <span class="at">-S</span> <span class="at">-n</span> lol.osm.cantino.cafe/.MainActivity <span class="at">--ef</span> radius 2.5</span></code></pre></div>
 <p>Known limit: opening hours are evaluated in the phone's time zone.
 This is correct for the default flow because the area is downloaded
 around the user, but wrong when an area is used in another time zone;
@@ -272,7 +337,10 @@ feature for feature, on the Swift adapter. On the iPhone 18 Pro
 simulator (iOS 27, 2026-10-04, downtown Salt Lake City) a live download
 and a refresh each took about 11 s (61 MB database, 6.5 MB basemap); the
 map showed 136 cafés (45 / 27 / 64 outdoor seating yes / no / unknown,
-32 with unknown hours), as on Android.</p>
+32 with unknown hours), as on Android. With the POI import profile
+(<code>CafeProfile</code> in <code>Cafes.swift</code>, the same rules as
+on Android) the same download took 9.3 s and produced a 5.1 MB database,
+with the same 136 cafés and counts.</p>
 <table>
 <thead>
 <tr>
@@ -309,8 +377,12 @@ names its Android counterpart.</p>
 <tr>
 <td><code>MainActivity</code> (flow, progress, failure, refresh)</td>
 <td><code>AppModel.swift</code>, <code>FirstRunViews.swift</code></td>
-<td>The offer is a screen, not a dialog. Refresh downloads the published
-<code>AreaMetadata.bbox</code> itself</td>
+<td>The radius is a segmented picker (radio buttons on Android)</td>
+</tr>
+<tr>
+<td><code>AreaRadius.kt</code></td>
+<td><code>AreaRadius.swift</code></td>
+<td>Same choices, default and labels</td>
 </tr>
 <tr>
 <td><code>Location.kt</code> (<code>LocationManager</code>, debug
@@ -326,10 +398,11 @@ fix, 30 s)</td>
 select–open–read, since actors are reentrant</td>
 </tr>
 <tr>
-<td><code>Cafes.kt</code>, <code>RelationDetail.kt</code>,
-<code>OpeningHours.kt</code>, <code>ProtomapsBuilds.kt</code></td>
-<td><code>Cafes.swift</code>, <code>OpeningHours.swift</code>,
-<code>ProtomapsBuilds.swift</code></td>
+<td><code>Cafes.kt</code> (<code>CafeProfile</code>),
+<code>RelationDetail.kt</code>, <code>OpeningHours.kt</code>,
+<code>ProtomapsBuilds.kt</code></td>
+<td><code>Cafes.swift</code> (<code>CafeProfile</code>),
+<code>OpeningHours.swift</code>, <code>ProtomapsBuilds.swift</code></td>
 <td>Straight ports; relation markers use one batch <code>get</code></td>
 </tr>
 <tr>
@@ -346,10 +419,11 @@ select–open–read, since actors are reentrant</td>
 </tr>
 <tr>
 <td>JVM + instrumented tests</td>
-<td><code>CafeAppTests/</code> (24 Swift Testing tests, hosted on the
+<td><code>CafeAppTests/</code> (31 Swift Testing tests, hosted on the
 simulator)</td>
 <td>Opening hours (all Kotlin cases), Protomaps builds (URLProtocol
-stub), relation café, paging past 500, refresh race</td>
+stub), area radius, relation café (imported with the POI profile), POI
+profile applied, paging past 500, refresh race</td>
 </tr>
 </tbody>
 </table>
@@ -362,7 +436,7 @@ style references only <code>asset://</code> and the area's
 <code>pmtiles://file://</code> archive.</p>
 <div class="sourceCode" id="cb2"><pre class="sourceCode sh"><code class="sourceCode bash"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="ex">scripts/basemap-assets.sh</span> <span class="kw">&amp;&amp;</span> <span class="ex">scripts/build-ios-cafe.sh</span> install</span>
 <span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a><span class="co"># Debug builds only; never real GPS in automated runs. -lat/-lon is sticky (-clear_debug_location YES).</span></span>
-<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a><span class="ex">xcrun</span> simctl launch booted lol.osm.cantino.cafe <span class="at">-lat</span> 40.7608 <span class="at">-lon</span> <span class="at">-111.8910</span> <span class="at">-auto_download</span> YES</span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a><span class="ex">xcrun</span> simctl launch booted lol.osm.cantino.cafe <span class="at">-lat</span> 40.7608 <span class="at">-lon</span> <span class="at">-111.8910</span> <span class="at">-auto_download</span> YES   <span class="co"># [-radius 2.5]</span></span>
 <span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a><span class="co"># simctl cannot tap: these stand in for taps (DebugLaunch.swift)</span></span>
 <span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a><span class="ex">xcrun</span> simctl launch booted lol.osm.cantino.cafe <span class="at">-list</span> YES <span class="at">-outdoor</span> yes <span class="at">-now</span> open</span>
 <span id="cb2-6"><a href="#cb2-6" aria-hidden="true" tabindex="-1"></a><span class="ex">xcrun</span> simctl launch booted lol.osm.cantino.cafe <span class="at">-object</span> way/292007606</span>

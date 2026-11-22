@@ -66,13 +66,29 @@ its piece</td>
 <strong>and</strong> basemap are published, a refresh replaces both, and
 a refresh with <code>None</code> removes the old basemap. Size for 10×10
 km at z0–15: about 6.5 MB.</p>
+<h2 id="basemap-only-areas">Basemap-only areas</h2>
+<p>An app that only shows an offline map does not need the OSM data.
+Download just the basemap:</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode kotlin"><code class="sourceCode kotlin"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="kw">val</span> <span class="va">runId</span> <span class="op">=</span> areas<span class="op">.</span>downloadBasemap<span class="op">(</span><span class="st">&quot;city&quot;</span><span class="op">,</span> bbox<span class="op">,</span> BasemapSource<span class="op">.</span>Extract<span class="op">(</span>planetUrl<span class="op">,</span> maxZoom <span class="op">=</span> <span class="dv">15</span><span class="op">))</span></span></code></pre></div>
+<div class="sourceCode" id="cb2"><pre
+class="sourceCode swift"><code class="sourceCode swift"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="kw">let</span> <span class="va">runId</span> <span class="op">=</span> <span class="cf">try</span> areas<span class="op">.</span>downloadBasemap<span class="op">(</span>areaId<span class="op">:</span> <span class="st">&quot;city&quot;</span><span class="op">,</span> bbox<span class="op">:</span> bbox<span class="op">,</span></span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a>                                      basemap<span class="op">:</span> <span class="cf">try</span> <span class="op">.</span>extract<span class="op">(</span>planetUrl<span class="op">:</span> planetUrl<span class="op">,</span> maxZoom<span class="op">:</span> <span class="dv">15</span><span class="op">))</span></span></code></pre></div>
+<p>The run skips SliceOSM and the import (Submitting → Basemap → Ready);
+states, cancellation, resume and publication work as for
+<code>download</code>. The published area has a basemap and no data:
+<code>AreaInfo.dataFile</code> / <code>dataURL</code> and
+<code>AreaMetadata.report</code> are null. An area is one version,
+replaced as a whole: <code>downloadBasemap</code> on an area that had
+OSM data removes that data, and a later <code>download</code> brings it
+back. <code>BasemapSource.None</code> is rejected.</p>
 <h2 id="hosting-demo-vs-production">Hosting: demo vs production</h2>
 <p>The café example owns its demo discovery helper: <a
 href="https://github.com/mvexel/cantino/blob/main/android/cafe-app/src/main/java/lol/osm/cantino/cafe/ProtomapsBuilds.kt"><code>ProtomapsBuilds.kt</code></a>.
 Copy that file into your app for experimentation, then call:</p>
-<div class="sourceCode" id="cb1"><pre
-class="sourceCode kotlin"><code class="sourceCode kotlin"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="kw">val</span> <span class="va">planet</span> <span class="op">=</span> ProtomapsBuilds<span class="op">.</span>latestUrl<span class="op">()</span> <span class="co">// example helper, not an SDK API</span></span>
-<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a><span class="kw">val</span> <span class="va">runId</span> <span class="op">=</span> areas<span class="op">.</span>download<span class="op">(</span><span class="st">&quot;city&quot;</span><span class="op">,</span> bbox<span class="op">,</span> basemap <span class="op">=</span> BasemapSource<span class="op">.</span>Extract<span class="op">(</span>planet<span class="op">))</span></span></code></pre></div>
+<div class="sourceCode" id="cb3"><pre
+class="sourceCode kotlin"><code class="sourceCode kotlin"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="kw">val</span> <span class="va">planet</span> <span class="op">=</span> ProtomapsBuilds<span class="op">.</span>latestUrl<span class="op">()</span> <span class="co">// example helper, not an SDK API</span></span>
+<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a><span class="kw">val</span> <span class="va">runId</span> <span class="op">=</span> areas<span class="op">.</span>download<span class="op">(</span><span class="st">&quot;city&quot;</span><span class="op">,</span> bbox<span class="op">,</span> basemap <span class="op">=</span> BasemapSource<span class="op">.</span>Extract<span class="op">(</span>planet<span class="op">))</span></span></code></pre></div>
 <p>The <a
 href="https://github.com/mvexel/cantino/blob/main/README.md#quickstart">quickstart</a>
 includes a standalone version. Protomaps' daily builds expire after
@@ -99,17 +115,17 @@ non-retryable error rather than streaming the whole archive.</p>
 (<code>pmtiles://file:///data/…/&lt;areaId&gt;.pmtiles</code>; needs a
 MapLibre Native Android with PMTiles support; Cantino is tested with
 13.6.1):</p>
-<div class="sourceCode" id="cb2"><pre
-class="sourceCode kotlin"><code class="sourceCode kotlin"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="kw">val</span> <span class="va">area</span> <span class="op">=</span> areas<span class="op">.</span>publishedArea<span class="op">(</span><span class="st">&quot;city&quot;</span><span class="op">)</span> <span class="op">?:</span> <span class="kw">return</span>  <span class="co">// background thread</span></span>
-<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a><span class="kw">val</span> <span class="va">styleJson</span> <span class="op">=</span> assets<span class="op">.</span><span class="kw">open</span><span class="op">(</span><span class="st">&quot;style.json&quot;</span><span class="op">).</span>bufferedReader<span class="op">().</span>use <span class="op">{</span> it<span class="op">.</span>readText<span class="op">()</span> <span class="op">}</span></span>
-<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a>    <span class="op">.</span>replace<span class="op">(</span><span class="st">&quot;__PMTILES_URL__&quot;</span><span class="op">,</span> area<span class="op">.</span>pmtilesUrl<span class="op">!!)</span></span>
-<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a>mapView<span class="op">.</span>getMapAsync <span class="op">{</span> map <span class="op">-&gt;</span></span>
-<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a>    map<span class="op">.</span>setStyle<span class="op">(</span>Style<span class="op">.</span>Builder<span class="op">().</span>fromJson<span class="op">(</span>styleJson<span class="op">))</span></span>
-<span id="cb2-6"><a href="#cb2-6" aria-hidden="true" tabindex="-1"></a>    area<span class="op">.</span>metadata<span class="op">?.</span>bbox<span class="op">?.</span>let <span class="op">{</span> b <span class="op">-&gt;</span></span>
-<span id="cb2-7"><a href="#cb2-7" aria-hidden="true" tabindex="-1"></a>        <span class="co">// The basemap covers only the area: keep the camera over it.</span></span>
-<span id="cb2-8"><a href="#cb2-8" aria-hidden="true" tabindex="-1"></a>        map<span class="op">.</span>setLatLngBoundsForCameraTarget<span class="op">(</span>LatLngBounds<span class="op">.</span>from<span class="op">(</span>b<span class="op">.</span>north<span class="op">,</span> b<span class="op">.</span>east<span class="op">,</span> b<span class="op">.</span>south<span class="op">,</span> b<span class="op">.</span>west<span class="op">))</span></span>
-<span id="cb2-9"><a href="#cb2-9" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
-<span id="cb2-10"><a href="#cb2-10" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<div class="sourceCode" id="cb4"><pre
+class="sourceCode kotlin"><code class="sourceCode kotlin"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a><span class="kw">val</span> <span class="va">area</span> <span class="op">=</span> areas<span class="op">.</span>publishedArea<span class="op">(</span><span class="st">&quot;city&quot;</span><span class="op">)</span> <span class="op">?:</span> <span class="kw">return</span>  <span class="co">// background thread</span></span>
+<span id="cb4-2"><a href="#cb4-2" aria-hidden="true" tabindex="-1"></a><span class="kw">val</span> <span class="va">styleJson</span> <span class="op">=</span> assets<span class="op">.</span><span class="kw">open</span><span class="op">(</span><span class="st">&quot;style.json&quot;</span><span class="op">).</span>bufferedReader<span class="op">().</span>use <span class="op">{</span> it<span class="op">.</span>readText<span class="op">()</span> <span class="op">}</span></span>
+<span id="cb4-3"><a href="#cb4-3" aria-hidden="true" tabindex="-1"></a>    <span class="op">.</span>replace<span class="op">(</span><span class="st">&quot;__PMTILES_URL__&quot;</span><span class="op">,</span> area<span class="op">.</span>pmtilesUrl<span class="op">!!)</span></span>
+<span id="cb4-4"><a href="#cb4-4" aria-hidden="true" tabindex="-1"></a>mapView<span class="op">.</span>getMapAsync <span class="op">{</span> map <span class="op">-&gt;</span></span>
+<span id="cb4-5"><a href="#cb4-5" aria-hidden="true" tabindex="-1"></a>    map<span class="op">.</span>setStyle<span class="op">(</span>Style<span class="op">.</span>Builder<span class="op">().</span>fromJson<span class="op">(</span>styleJson<span class="op">))</span></span>
+<span id="cb4-6"><a href="#cb4-6" aria-hidden="true" tabindex="-1"></a>    area<span class="op">.</span>metadata<span class="op">?.</span>bbox<span class="op">?.</span>let <span class="op">{</span> b <span class="op">-&gt;</span></span>
+<span id="cb4-7"><a href="#cb4-7" aria-hidden="true" tabindex="-1"></a>        <span class="co">// The basemap covers only the area: keep the camera over it.</span></span>
+<span id="cb4-8"><a href="#cb4-8" aria-hidden="true" tabindex="-1"></a>        map<span class="op">.</span>setLatLngBoundsForCameraTarget<span class="op">(</span>LatLngBounds<span class="op">.</span>from<span class="op">(</span>b<span class="op">.</span>north<span class="op">,</span> b<span class="op">.</span>east<span class="op">,</span> b<span class="op">.</span>south<span class="op">,</span> b<span class="op">.</span>west<span class="op">))</span></span>
+<span id="cb4-9"><a href="#cb4-9" aria-hidden="true" tabindex="-1"></a>    <span class="op">}</span></span>
+<span id="cb4-10"><a href="#cb4-10" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
 <p>Add your own data as GeoJSON sources on top (the café app builds one
 from a <code>Query</code>; see <a
 href="https://github.com/mvexel/cantino/blob/main/android/cafe-app/src/main/java/lol/osm/cantino/cafe/MapScreen.kt"><code>MapScreen.kt</code></a>).</p>
@@ -158,9 +174,9 @@ above.</p>
 <p>Without glyphs, keep to layers without text (the quickstart's
 three-layer style). Without the style, MapLibre has nothing to draw.</p>
 <h2 id="checking-a-pmtiles-file">Checking a PMTiles file</h2>
-<div class="sourceCode" id="cb3"><pre
-class="sourceCode kotlin"><code class="sourceCode kotlin"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="kw">val</span> <span class="va">info</span> <span class="op">=</span> PmtilesInfo<span class="op">.</span>read<span class="op">(</span>file<span class="op">)</span> <span class="co">// CantinoException.InvalidFile if not PMTiles v3, .Io if unreadable</span></span>
-<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a>Log<span class="op">.</span>i<span class="op">(</span>TAG<span class="op">,</span> <span class="st">&quot;z</span><span class="ss">${</span>info<span class="op">.</span>minZoom<span class="ss">}</span><span class="st">-</span><span class="ss">${</span>info<span class="op">.</span>maxZoom<span class="ss">}</span><span class="st">, </span><span class="ss">${</span>info<span class="op">.</span>addressedTiles<span class="ss">}</span><span class="st"> tiles, bounds </span><span class="ss">${</span>info<span class="op">.</span>bounds<span class="ss">}</span><span class="st">&quot;</span><span class="op">)</span></span></code></pre></div>
+<div class="sourceCode" id="cb5"><pre
+class="sourceCode kotlin"><code class="sourceCode kotlin"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a><span class="kw">val</span> <span class="va">info</span> <span class="op">=</span> PmtilesInfo<span class="op">.</span>read<span class="op">(</span>file<span class="op">)</span> <span class="co">// CantinoException.InvalidFile if not PMTiles v3, .Io if unreadable</span></span>
+<span id="cb5-2"><a href="#cb5-2" aria-hidden="true" tabindex="-1"></a>Log<span class="op">.</span>i<span class="op">(</span>TAG<span class="op">,</span> <span class="st">&quot;z</span><span class="ss">${</span>info<span class="op">.</span>minZoom<span class="ss">}</span><span class="st">-</span><span class="ss">${</span>info<span class="op">.</span>maxZoom<span class="ss">}</span><span class="st">, </span><span class="ss">${</span>info<span class="op">.</span>addressedTiles<span class="ss">}</span><span class="st"> tiles, bounds </span><span class="ss">${</span>info<span class="op">.</span>bounds<span class="ss">}</span><span class="st">&quot;</span><span class="op">)</span></span></code></pre></div>
 <p>Useful for basemaps your app ships or downloads itself, and to fit
 the camera to <code>info.bounds</code>.
 <code>AreaMetadata.basemap</code> already records the same facts for

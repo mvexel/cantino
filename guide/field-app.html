@@ -1,0 +1,136 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Android field app - Cantino guide</title>
+<style>
+  :root { color-scheme: light dark; --fg: #1d1d1f; --muted: #5f6368; --bg: #fbfaf7; --code: #efede8; --link: #0b57d0; --line: #d9d6cf; }
+  @media (prefers-color-scheme: dark) { :root { --fg: #e8e6e3; --muted: #a8a49c; --bg: #161616; --code: #262624; --link: #8ab4f8; --line: #3a3a37; } }
+  body { margin: 0; background: var(--bg); color: var(--fg); font: 16px/1.55 system-ui, sans-serif; }
+  nav { max-width: 48rem; margin: 0 auto; padding: 1rem 16px 0; font-size: .9rem; color: var(--muted); }
+  main { max-width: 48rem; margin: 0 auto; padding: 1rem 16px 3rem; }
+  a { color: var(--link); }
+  img { max-width: 100%; height: auto; }
+  pre { background: var(--code); padding: .8rem 1rem; border-radius: 6px; overflow-x: auto; font-size: .88rem; }
+  code { background: var(--code); padding: .05em .3em; border-radius: 4px; font-size: .92em; }
+  pre code { background: none; padding: 0; }
+  pre.mermaid { background: none; text-align: center; }
+  table { border-collapse: collapse; display: block; overflow-x: auto; }
+  th, td { border: 1px solid var(--line); padding: .35rem .6rem; vertical-align: top; text-align: left; }
+  blockquote { margin-left: 0; padding-left: 1rem; border-left: 3px solid var(--line); color: var(--muted); }
+</style>
+</head>
+<body>
+<nav><a href="../">Cantino</a> / <a href="index.html">Guide</a> / <a href="../api/">API reference</a></nav>
+<main>
+<h1 id="android-field-app">Android field app</h1>
+<p>Cantino Field is the minimum accessibility-audit app used to validate
+Cantino outside its SDK tests. It downloads one bounded district, works
+offline after the download, exposes source OSM objects and records
+observations without modifying the immutable Cantino area.</p>
+<p>The implementation extends <a
+href="https://github.com/mvexel/cantino/blob/main/android/inspector-app"><code>android/inspector-app</code></a>
+and keeps its application ID, <code>lol.osm.cantino.inspector</code>.
+The installed label is <strong>Cantino Field</strong>. The existing iOS
+Inspector remains a data-inspection reference; the findings workflow is
+an Android product experiment, not a new SDK capability.</p>
+<h2 id="field-workflow">Field workflow</h2>
+<ol type="1">
+<li>Choose the device location or enter <code>lat,lon</code>, select a 1
+/ 2.5 / 5 / 10 km radius, then download the full OSM extract and PMTiles
+basemap.</li>
+<li>Work offline. Run an accessibility check or tap the map, select an
+object, then choose <strong>Inspect / record</strong>.</li>
+<li>Review raw tags, object metadata and the area's snapshot time.
+Record proposed <code>key=value</code> tags, a note and evidence such as
+a measurement, sign or photo reference.</li>
+<li>Keep incomplete observations as drafts. Mark a finding <strong>Ready
+for review</strong> only after checking it.</li>
+<li>Open <strong>Findings</strong> and save reviewed findings as GeoJSON
+or CSV through Android's document picker.</li>
+<li>Send the file to a review queue such as MapRoulette, or inspect each
+object in iD/JOSM before uploading a normal OSM changeset.</li>
+</ol>
+<p>There is deliberately no OSM login, direct upload or unattended edit
+path.</p>
+<h2 id="accessibility-checks">Accessibility checks</h2>
+<p><strong>Audit checks</strong> supplies editable missing-data queries
+for:</p>
+<ul>
+<li>entrances, shops and public facilities without
+<code>wheelchair</code>;</li>
+<li>toilets without <code>toilets:wheelchair</code>;</li>
+<li>crossings without <code>tactile_paving</code> or
+<code>crossing</code>;</li>
+<li>kerbs without <code>kerb</code>;</li>
+<li>steps without <code>ramp</code>, <code>handrail</code> or
+<code>step_count</code>;</li>
+<li>elevators without <code>wheelchair</code>;</li>
+<li>parking without <code>capacity:disabled</code>.</li>
+</ul>
+<p>Queries use the Inspector syntax (<code>k=v</code>, <code>k=*</code>,
+<code>!k</code>, ANDed). Results are candidates; selecting an object and
+inspecting it is part of the workflow.</p>
+<h2 id="findings-overlay-and-exports">Findings overlay and exports</h2>
+<p><code>FindingsRepository</code> stores
+<code>files/field-findings.json</code>, separate from the Cantino area.
+An atomic replacement preserves one current finding per OSM object. Each
+record contains:</p>
+<ul>
+<li>OSM kind and ID;</li>
+<li>the base version and complete base tag set;</li>
+<li>area snapshot time and observation time;</li>
+<li>an anchor point derived from available object geometry;</li>
+<li>proposed tags, note, evidence and draft/reviewed state.</li>
+</ul>
+<p>Area refresh and replacement do not delete findings. That is
+intentional: base version, tags and snapshot time remain attached to the
+observation for a later stale-data check. The app never opens the
+Cantino SQLite file for writes.</p>
+<p>Exports contain reviewed findings only. GeoJSON keeps base and
+proposed tags as structured properties; CSV uses one row per finding and
+RFC 4180 quoting. Both include the OSM object URL. Saving a file is a
+handoff, not an OSM upload. See <a href="editing-apps.html">Field
+findings and editing apps</a> for the review boundary.</p>
+<p>Key files:</p>
+<ul>
+<li><code>MapScreen.kt</code>: offline map, accessibility checks and
+Findings entry point.</li>
+<li><code>ObjectActivity.kt</code>: raw object inspection and finding
+form.</li>
+<li><code>Findings.kt</code>: model, file repository, provenance and
+GeoJSON/CSV codecs.</li>
+<li><code>FindingsActivity.kt</code>: review state, deletion and
+document export.</li>
+<li><code>FindingsTest.kt</code>: parsing, persistence, provenance,
+geometry anchor and export escaping.</li>
+</ul>
+<h2 id="build-and-run">Build and run</h2>
+<div class="sourceCode" id="cb1"><pre class="sourceCode sh"><code class="sourceCode bash"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="ex">scripts/basemap-assets.sh</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a><span class="ex">scripts/build-android.sh</span></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a><span class="bu">cd</span> android</span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a><span class="ex">mise</span> exec <span class="at">--</span> ./gradlew :inspector-app:testDebugUnitTest :inspector-app:assembleDebug</span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a><span class="ex">mise</span> exec <span class="at">--</span> ./gradlew :inspector-app:installDebug</span></code></pre></div>
+<p>Debug launch at a known location:</p>
+<div class="sourceCode" id="cb2"><pre class="sourceCode sh"><code class="sourceCode bash"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="ex">adb</span> shell am start <span class="at">-n</span> lol.osm.cantino.inspector/.MainActivity <span class="dt">\</span></span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a>  <span class="at">--ef</span> lat 40.7608 <span class="at">--ef</span> lon <span class="at">-111.8910</span></span></code></pre></div>
+<p>After the first download, relaunch with networking disabled and run a
+check, inspect an object, save a draft, mark it reviewed and export both
+formats.</p>
+<h2 id="mvp-limits">MVP limits</h2>
+<ul>
+<li>One offline area and one finding per OSM object.</li>
+<li>Evidence is text or an external photo reference; the app does not
+capture or package media.</li>
+<li>No campaign assignment, multi-user synchronization or MapRoulette
+API client; GeoJSON/CSV is the integration boundary.</li>
+<li>No live OSM version check. A reviewer must compare
+<code>base_version</code> with the current object before applying
+proposed tags.</li>
+<li>No geometry edits, new objects, deletions, OAuth or changeset
+upload.</li>
+</ul>
+</main>
+</body>
+</html>

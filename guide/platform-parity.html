@@ -32,10 +32,10 @@ once. Parity is checked two ways:</p>
 <ol type="1">
 <li><strong>The parity corpus</strong> (<a
 href="https://github.com/mvexel/cantino/blob/main/tests/parity/README.md"><code>tests/parity</code></a>):
-243 calls whose canonical output every runner must reproduce byte for
+244 calls whose canonical output every runner must reproduce byte for
 byte. Rust runs all of them through the C ABI; Kotlin
 (<code>ParityTest</code>, instrumented) and Swift
-(<code>ParityTests</code>) run the 219 that a typed API can
+(<code>ParityTests</code>) run the 220 that a typed API can
 express.</li>
 <li><strong>The same behavioural tests on both platforms</strong>,
 listed below. A Swift test has the Kotlin test's name unless noted.</li>
@@ -100,6 +100,19 @@ URLProtocol)</td>
 <td></td>
 </tr>
 <tr>
+<td><code>AreaManagerTest</code>:
+<code>basemapOnlyPublishesNoDataAndMakesNoSliceRequests</code>,
+<code>basemapOnlyReplacesDataAndADownloadBringsItBack</code>,
+<code>downloadBasemapNeedsASource</code></td>
+<td>same names</td>
+<td>basemap-only areas</td>
+</tr>
+<tr>
+<td><code>AreaManagerTest.importProfileIsRecordedInThePublishedArea</code></td>
+<td>same name</td>
+<td>the profile reads back from the published area</td>
+</tr>
+<tr>
 <td><code>ProcessDeathTest</code> +
 <code>scripts/kill-test-android.sh</code></td>
 <td><code>aRunKilledWhileDownloadingIsResumedWithItsJob</code>,
@@ -156,6 +169,13 @@ tests, <code>manifestCheckFindsTheOptInForegroundEntries</code></td>
 <td></td>
 </tr>
 <tr>
+<td><code>AreaRadiusTest</code> (6, JVM)</td>
+<td><code>AreaRadiusTests</code></td>
+<td>radius → bbox, choices and default, <code>radius</code> launch
+option, labels; typed <code>lat,lon</code> (iOS: in
+<code>CafeTests</code>)</td>
+</tr>
+<tr>
 <td><code>RelationCafeTest</code>, <code>CafeStoreTest</code></td>
 <td><code>CafeTests</code> (+ paging, filters, location input, debug
 location)</td>
@@ -163,15 +183,64 @@ location)</td>
 </tr>
 </tbody>
 </table>
+<h2 id="inspector">Inspector</h2>
+<table>
+<thead>
+<tr>
+<th>Android</th>
+<th>iOS</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>QueryBarTest</code> (8, JVM)</td>
+<td><code>QueryBarTests</code></td>
+<td>shared parser cases and error texts; Android also parses field
+presets</td>
+</tr>
+<tr>
+<td><code>GeometryTest</code> (7, JVM)</td>
+<td><code>GeometryTests</code></td>
+<td>same cases</td>
+</tr>
+<tr>
+<td><code>AreaRadiusTest</code> (5, JVM)</td>
+<td><code>AreaRadiusTests</code></td>
+<td>same cases; iOS also reads <code>-radius</code> /
+<code>-tap_radius</code></td>
+</tr>
+<tr>
+<td><code>InspectTest</code> (7, instrumented)</td>
+<td><code>InspectTests</code></td>
+<td>same fixture file
+(<code>android/inspector-app/src/androidTest/assets/inspector.osm</code>,
+read in place on iOS)</td>
+</tr>
+<tr>
+<td><code>FindingsTest</code> (4, JVM)</td>
+<td>—</td>
+<td>Android product pilot only: app-owned findings and reviewed
+export</td>
+</tr>
+</tbody>
+</table>
+<p>The <a href="inspector-app.html#acceptance-2026-10-04">Inspector
+acceptance</a> compares 14 query counts and four taps in Salt Lake City
+and Zürich; both platforms imported byte-identical databases and
+returned identical results. The Android <a href="field-app.html">field
+workflow</a> is app-owned product validation, not an SDK parity
+requirement.</p>
 <h2 id="running-both">Running both</h2>
 <div class="sourceCode" id="cb1"><pre class="sourceCode sh"><code class="sourceCode bash"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="ex">scripts/check.sh</span>                                   <span class="co"># Rust, C ABI smoke, Rust parity runner</span></span>
 <span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a><span class="va">SIMULATOR</span><span class="op">=</span><span class="st">&quot;iPhone 18 Pro&quot;</span> <span class="ex">scripts/swift-test.sh</span>    <span class="co"># Swift SDK on the simulator (omit SIMULATOR: macOS)</span></span>
 <span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a><span class="va">SIMULATOR</span><span class="op">=</span><span class="st">&quot;iPhone 18 Pro&quot;</span> <span class="ex">scripts/build-ios-cafe.sh</span> test</span>
-<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a><span class="ex">scripts/build-android.sh</span></span>
-<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a><span class="bu">cd</span> android <span class="kw">&amp;&amp;</span> <span class="va">ANDROID_SERIAL</span><span class="op">=&lt;</span>device<span class="op">&gt;</span> mise <span class="bu">exec</span> <span class="at">--</span> ./gradlew <span class="dt">\</span></span>
-<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a>    :cantino:testDebugUnitTest :cafe-app:testDebugUnitTest <span class="dt">\</span></span>
-<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a>    :cantino:connectedDebugAndroidTest :cafe-app:connectedDebugAndroidTest</span>
-<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a><span class="va">ANDROID_SERIAL</span><span class="op">=&lt;</span>device<span class="op">&gt;</span> scripts/kill-test-android.sh   <span class="co"># from the repository root</span></span></code></pre></div>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a><span class="va">SIMULATOR</span><span class="op">=</span><span class="st">&quot;iPhone 18 Pro&quot;</span> <span class="ex">scripts/build-ios-inspector.sh</span> test</span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a><span class="ex">scripts/build-android.sh</span></span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a><span class="bu">cd</span> android <span class="kw">&amp;&amp;</span> <span class="va">ANDROID_SERIAL</span><span class="op">=&lt;</span>device<span class="op">&gt;</span> mise <span class="bu">exec</span> <span class="at">--</span> ./gradlew <span class="dt">\</span></span>
+<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a>    :cantino:testDebugUnitTest :cafe-app:testDebugUnitTest :inspector-app:testDebugUnitTest <span class="dt">\</span></span>
+<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a>    :cantino:connectedDebugAndroidTest :cafe-app:connectedDebugAndroidTest :inspector-app:connectedDebugAndroidTest</span>
+<span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a><span class="va">ANDROID_SERIAL</span><span class="op">=&lt;</span>device<span class="op">&gt;</span> scripts/kill-test-android.sh   <span class="co"># from the repository root</span></span></code></pre></div>
 <h2 id="known-differences">Known differences</h2>
 <p>Listed with reasons in the <a
 href="https://github.com/mvexel/cantino/blob/main/swift/README.md#deviations-from-the-kotlin-api">Swift
@@ -185,6 +254,9 @@ app's process and resume the next time the app creates an
 day; on iOS they live in memory, so after a restart a finished run reads
 as idle with the published area.</li>
 <li><strong>Foreground mode</strong> exists on Android only.</li>
+<li><strong>Field findings</strong> currently exist only in the Android
+Inspector module. They are app code over the same immutable SDK
+contract; no Kotlin-only SDK API was added.</li>
 </ul>
 </main>
 </body>

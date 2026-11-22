@@ -29,22 +29,92 @@
 van Exel</a>. The code is Apache-2.0; <a href="building.html">builds are
 documented</a>. Bugs and requests belong in <a
 href="https://github.com/mvexel/cantino/issues">GitHub issues</a>.</p>
-<p>There are no external consumers yet. API, ABI and file formats may
-change without compatibility layers. Re-import development data after a
-format change.</p>
-<p>0.3.0 simplified the SDK; 0.4.0 brings iOS to parity with Android
-(Swift adapter, xcframework, area downloads, the café demo), checked by
-the <a href="platform-parity.html">parity tests</a>. No new features
-until 0.4.0 is released. The examples and guide stay supported
-throughout.</p>
-<p>Next: basemap-only acquisition (a basemap without the OSM data), in
-both adapters. Cantino's direction is composable capabilities for apps
-that work with OSM data offline (<a
-href="https://github.com/mvexel/cantino/blob/main/docs/research/2026-10-04-modular-sdk-assessment.md">assessment</a>).
-Editing is outside the current implementation and upload is not planned;
-routing, overlapping areas, incremental refresh and on-device vector
-tile generation are out of scope. Dated research notes are ideas, not a
-backlog.</p>
+<h2 id="mission-and-position">Mission and position</h2>
+<p>Cantino is the raw-data layer for offline, domain-specific mobile
+apps. It provides a bounded, immutable OSM snapshot, semantic queries,
+managed acquisition and an optional basemap. It complements a renderer
+such as MapLibre; it does not compete with complete navigation apps or
+established OSM editors.</p>
+<p>The product thesis is narrow: a specialized app should not have to
+build PBF import, mobile indexes, retries and crash-safe publication
+merely to inspect source OSM objects offline. The thesis is technically
+demonstrated by the café and Inspector examples, but not yet validated
+by an external consumer.</p>
+<p>There are no compatibility promises before that validation. API, ABI
+and file formats may change without shims; re-import development data
+after a format change.</p>
+<h2 id="040-parity-bar--passed">0.4.0 parity bar — passed</h2>
+<p>The 2026-10-03 feature freeze required:</p>
+<ol type="1">
+<li>Android and iOS to pass the shared parity corpus and their platform
+suites on the intended device/simulator matrix.</li>
+<li>The iOS café demo to complete the same first-run download, map/query
+flow, cold airplane-mode launch and interrupted-download recovery as
+Android.</li>
+<li>The public examples and guide to describe the behavior verified on
+both platforms.</li>
+</ol>
+<p>Version 0.4.0 passed that bar. The recorded run covers Android, the
+iOS simulator, native macOS tests and the café acceptance flow on a
+physical iPhone; see <a href="platform-parity.html">Android and iOS
+parity</a>. The feature freeze is lifted. SDK capabilities remain
+parity-first; product-validation apps may iterate on one platform
+without changing the shared contract.</p>
+<h2 id="product-validation-pilot--app-ready">Product validation pilot —
+app ready</h2>
+<p>The <a href="field-app.html">Android field app</a> now implements the
+first validation workflow from the Inspector mechanics:</p>
+<ul>
+<li>one district downloaded for fully offline use;</li>
+<li>accessibility missing-data checks plus raw object and version
+inspection;</li>
+<li>observations, proposed tags, notes, evidence and review state in a
+separate app-owned findings file;</li>
+<li>reviewed GeoJSON and CSV export for MapRoulette, iD or JOSM;</li>
+<li>no direct or unattended upload from the Cantino snapshot.</li>
+</ul>
+<p>The implementation proves the local workflow, not the product thesis.
+External validation still requires a real organization or mapping group,
+at least 100 inspected entrances, crossings, kerbs, steps, ramps, lifts,
+toilets or parking features, a full airplane-mode session and a reviewed
+contribution back to OSM. Findings that remain in a private export still
+serve an agency audit, but do not validate an OSM contribution
+workflow.</p>
+<p>See <a href="editing-apps.html">Field findings and editing apps</a>
+for the integration boundary and provenance rules.</p>
+<h2 id="development-rules">Development rules</h2>
+<ul>
+<li>Add a capability only for a demonstrated consumer problem. Do not
+infer a module roadmap from internal seams.</li>
+<li>Keep one artifact per platform until measured size or adoption
+justifies packaging variants.</li>
+<li>Prefer app-owned domain logic over tag interpretation in the
+core.</li>
+<li>Treat the public SliceOSM instance as best-effort. A production
+consumer must arrange capacity with OpenStreetMap US or self-host, and
+must control its basemap source.</li>
+<li>Keep examples executable and supported; they are contract consumers,
+not screenshots.</li>
+</ul>
+<h2 id="product-boundaries">Product boundaries</h2>
+<p>Cantino does not provide rendering, routing, geocoding, exact
+geometry, overlapping-area reconciliation, incremental refresh or
+country-scale storage. Editing, OAuth, upload, conflict presentation and
+automated-edit policy remain app/editor responsibilities. Upload is not
+planned as a Cantino capability.</p>
+<p>Dated research notes are evidence and design history, not commitments
+or a backlog.</p>
+<h2 id="path-to-a-stable-release">Path to a stable release</h2>
+<p>A stable release needs more than green internal tests:</p>
+<ol type="1">
+<li>Keep the cross-platform parity bar green as the API changes.</li>
+<li>One external app completing a real offline workflow.</li>
+<li>A production plan for extract and basemap capacity.</li>
+<li>Feedback that the query and object model cover the consumer without
+application-specific core features.</li>
+<li>An explicit compatibility policy based on that consumer
+experience.</li>
+</ol>
 </main>
 </body>
 </html>

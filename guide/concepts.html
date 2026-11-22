@@ -102,9 +102,11 @@ with every refresh) and reopen when it differs. The café app's <a
 href="https://github.com/mvexel/cantino/blob/main/android/cafe-app/src/main/java/lol/osm/cantino/cafe/CafeStore.kt"><code>CafeStore</code></a>
 does exactly that.</p>
 <h2 id="capabilities">Capabilities</h2>
-<p>Cantino aims to provide composable capabilities for apps that work
-with OSM data offline. Today they ship together, one library per
-platform; each is a separate layer in the code:</p>
+<p>Cantino provides composable raw-data capabilities for offline,
+domain-specific mobile apps. It is the semantic data layer beside a
+renderer, not a complete map or navigation stack. Today the capabilities
+ship together, one library per platform; each is a separate layer in the
+code:</p>
 <table>
 <thead>
 <tr>
@@ -146,21 +148,23 @@ platform; each is a separate layer in the code:</p>
 </tr>
 </tbody>
 </table>
-<p>Acquisition and basemap code does not depend on the store, so these
-layers can later become separate build options without a rewrite.
-Editing is outside the current implementation: an editor keeps its own
-edit layer and uses a snapshot as base data (<a
-href="editing-apps.html">Editing apps</a>).</p>
+<p>Acquisition and basemap code does not depend on the store, preserving
+the implementation seams without multiplying public artifacts. Field
+findings and edits remain app-owned: use the immutable snapshot as base
+data and hand reviewed changes to an established OSM editor or task
+queue (<a href="editing-apps.html">Field findings and editing
+apps</a>).</p>
 <h2 id="what-cantino-is-not">What Cantino is not</h2>
 <ul>
 <li>Not a renderer: draw the basemap with MapLibre Native and your own
 data on top (GeoJSON sources, for example).</li>
-<li>Not an editor (yet): the current implementation is read-only.</li>
+<li>Not an editor, synchronization layer or uploader: the core stays
+read-only.</li>
 <li>Not exact geometry: bbox queries return <strong>candidates</strong>
 (see <a href="querying.html">Querying</a>).</li>
 <li>Not an interpreter of tags: <code>opening_hours</code>,
-<code>outdoor_seating</code> and the like are raw strings; their meaning
-is your app's business.</li>
+<code>wheelchair</code> and the like are raw strings; their meaning is
+your app's business.</li>
 </ul>
 </main>
 </body>
