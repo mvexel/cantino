@@ -75,7 +75,7 @@ class MapScreen(
     private val viewOnly = CheckBox(activity)
     private val status = activity.text("Loading the offline area…", 12f, color = Colors.MUTED)
     private val panelTitle = activity.text("", 14f, bold = true)
-    private val inspectButton = activity.button("Inspect") { selected?.let(::openObject) }
+    private val inspectButton = activity.button("Inspect / record") { selected?.let(::openObject) }
     private val list = ListView(activity)
     private val loadMore = activity.button("Load more") { loadPage() }
     private val countAll = activity.button("Count all") { countAll() }
@@ -108,7 +108,7 @@ class MapScreen(
         MapLibre.getInstance(activity)
         mapView = MapView(activity)
         input.apply {
-            hint = "amenity=cafe  shop=*  !opening_hours"
+            hint = "entrance=*  !wheelchair"
             setSingleLine()
             textSize = 15f
             typeface = android.graphics.Typeface.MONOSPACE
@@ -143,11 +143,19 @@ class MapScreen(
             input.apply { layoutParams = weighted() },
             activity.button("Run") { runQuery() },
         ).apply { gravity = Gravity.CENTER_VERTICAL }
-        val tools = activity.horizontal(
-            viewOnly.apply { layoutParams = weighted() },
-            activity.button("Checks") { showChecks() },
-            activity.button("Area") { showAreaMenu() },
-        ).apply { gravity = Gravity.CENTER_VERTICAL }
+        val tools = activity.vertical(
+            0,
+            activity.horizontal(
+                viewOnly.apply { layoutParams = weighted() },
+                activity.button("Audit checks") { showChecks() },
+            ).apply { gravity = Gravity.CENTER_VERTICAL },
+            activity.horizontal(
+                activity.button("Findings") {
+                    activity.startActivity(Intent(activity, FindingsActivity::class.java))
+                }.apply { layoutParams = weighted() },
+                activity.button("Area") { showAreaMenu() }.apply { layoutParams = weighted() },
+            ),
+        )
         val content = FrameLayout(activity).apply {
             addView(mapView, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
             addView(panel, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, panelHeight, Gravity.BOTTOM))
@@ -179,7 +187,7 @@ class MapScreen(
 
     private fun idleStatus(): String {
         val snapshot = area?.metadata?.snapshotTimestamp?.let(::formatInstant) ?: "unknown"
-        return "Offline · OSM data as of $snapshot · tap the map to inspect"
+        return "Offline field audit · OSM data as of $snapshot · tap an object to record a finding"
     }
 
     private fun setupMap(area: AreaInfo) {
@@ -342,10 +350,10 @@ class MapScreen(
     }
 
     private fun showChecks() {
-        val checks = Checks.ALL
+        val checks = Checks.FIELD
         AlertDialog.Builder(activity)
-            .setTitle("Checks")
-            .setItems(checks.map { "${it.title}\n${it.query}" }.toTypedArray()) { _, which ->
+            .setTitle("Accessibility audit checks")
+            .setItems(checks.map { "${it.title}\n${it.query}\n${it.why}" }.toTypedArray()) { _, which ->
                 input.setText(checks[which].query)
                 runQuery()
             }

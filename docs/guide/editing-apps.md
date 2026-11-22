@@ -46,6 +46,13 @@ enough provenance to review it later:
 The app may add photos, forms and private workflow state. Those are not OSM
 object tags and need their own storage, privacy and licensing decisions.
 
+The [Android field app](field-app.md) is the executable reference for this
+boundary. `FindingsRepository` keeps the base version, full base tags,
+snapshot time, observation time, proposed patch, note, evidence, review state
+and a map anchor in `files/field-findings.json`. It uses an atomic file
+replacement, survives area refresh, and exports only reviewed findings as
+GeoJSON or CSV. It has no OAuth or upload code.
+
 ## Recommended OSM handoff
 
 The first contribution workflow should be review-first:

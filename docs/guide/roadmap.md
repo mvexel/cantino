@@ -35,30 +35,30 @@ The 2026-10-03 feature freeze required:
 Version 0.4.0 passed that bar. The recorded run covers Android, the iOS
 simulator, native macOS tests and the café acceptance flow on a physical
 iPhone; see [Android and iOS parity](platform-parity.md). The feature freeze
-is lifted. New capabilities remain parity-first: implementation and
-behavioral tests land on both platforms.
+is lifted. SDK capabilities remain parity-first; product-validation apps may
+iterate on one platform without changing the shared contract.
 
-## First product validation after the freeze
+## Product validation pilot — app ready
 
-The first external validation should be a field-audit workflow built from the
-Inspector mechanics, not another general-purpose map:
+The [Android field app](field-app.md) now implements the first validation
+workflow from the Inspector mechanics:
 
-- Download one district and work completely offline.
-- Query domain tags and missing tags; inspect source objects and versions.
-- Store observations, notes and evidence in an app-owned findings database.
-- On reconnect, export or synchronize reviewed findings to a task queue such
-  as MapRoulette, then apply them through iD or JOSM as normal OSM changesets.
-- Do not upload unattended edits from the Cantino snapshot.
+- one district downloaded for fully offline use;
+- accessibility missing-data checks plus raw object and version inspection;
+- observations, proposed tags, notes, evidence and review state in a separate
+  app-owned findings file;
+- reviewed GeoJSON and CSV export for MapRoulette, iD or JOSM;
+- no direct or unattended upload from the Cantino snapshot.
 
-Accessibility is a strong first domain because entrances, crossings, kerbs,
-steps, ramps, lifts, toilets and parking use source tags that generic map
-schemas often omit. The pilot should involve a real organization or mapping
-group, at least 100 inspected features, a full airplane-mode session and a
-reviewed contribution back to OSM. Findings that remain in a private export
-still serve an agency audit, but do not validate an OSM contribution workflow.
+The implementation proves the local workflow, not the product thesis.
+External validation still requires a real organization or mapping group, at
+least 100 inspected entrances, crossings, kerbs, steps, ramps, lifts, toilets
+or parking features, a full airplane-mode session and a reviewed contribution
+back to OSM. Findings that remain in a private export still serve an agency
+audit, but do not validate an OSM contribution workflow.
 
 See [Field findings and editing apps](editing-apps.md) for the integration
-boundary.
+boundary and provenance rules.
 
 ## Development rules
 

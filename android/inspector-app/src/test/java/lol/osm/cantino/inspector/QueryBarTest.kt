@@ -70,11 +70,12 @@ class QueryBarTest {
 
     @Test
     fun checksAndAcceptanceQueriesParse() {
-        (Checks.ALL.map { it.query } + Checks.ACCEPTANCE).forEach { query ->
+        (Checks.FIELD.map { it.query } + Checks.ALL.map { it.query } + Checks.ACCEPTANCE).forEach { query ->
             val filters = QueryBar.parse(query)
             // Every preset has a filter that can drive the query over the whole area.
             assertTrue(query, filters.any { it !is TagFilter.NotExists })
         }
+        assertEquals(12, Checks.FIELD.size)
         assertEquals(14, Checks.ACCEPTANCE.size)
     }
 }

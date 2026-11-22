@@ -1,9 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Inspector example app.
-     INTERNET and ACCESS_NETWORK_STATE come from the framework library (area
-     downloads); ACCESS_NETWORK_STATE is also required by MapLibre. Location is
-     used once, on first run, to centre the offline area (LocationManager, no
-     Play Services). Wi-Fi state (declared by MapLibre) is unused and removed. -->
+<!-- Cantino Field: the Android Inspector plus an app-owned accessibility
+     findings and review/export workflow. INTERNET and ACCESS_NETWORK_STATE
+     come from the framework library (area downloads); ACCESS_NETWORK_STATE is
+     also required by MapLibre. Location is used once, on first run, to centre
+     the offline area (LocationManager, no Play Services). Wi-Fi state
+     (declared by MapLibre) is unused and removed. -->
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
 
@@ -20,7 +21,7 @@
     </queries>
 
     <application
-        android:label="Inspector"
+        android:label="Cantino Field"
         android:allowBackup="false"
         android:theme="@android:style/Theme.DeviceDefault.Light.NoActionBar">
         <activity
@@ -35,6 +36,9 @@
         </activity>
         <activity
             android:name=".ObjectActivity"
+            android:exported="false" />
+        <activity
+            android:name=".FindingsActivity"
             android:exported="false" />
     </application>
 </manifest>

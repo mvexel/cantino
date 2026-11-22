@@ -3,7 +3,7 @@
 ## Project Overview
 Cantino is the raw OSM data layer for offline, domain-specific mobile apps: a Rust core over a read-only SQLite snapshot store, with thin Kotlin (Android AAR) and Swift (iOS xcframework + SwiftPM) adapters at parity (0.4.0). It imports a SliceOSM PBF/OSM XML extract, then offers lookup by ID, tag queries, bbox candidate queries and dependency reporting. Optional PMTiles acquisition supplies a basemap beside, not inside, the semantic store.
 
-- **Parity rule** (freeze lifted in 0.4.0): a feature lands on both platforms, with tests on both (`docs/guide/platform-parity.md`). No compatibility shims; API, ABI and file formats may change freely.
+- **Parity rule** (freeze lifted in 0.4.0): SDK capabilities land on both platforms with tests (`docs/guide/platform-parity.md`). Explicit product-validation apps may iterate on one platform without adding platform-only SDK API. No compatibility shims; API, ABI and file formats may change freely.
 - **Out of scope**: routing, overlapping areas, `.osc` refresh, vector tile generation, café policy in core. Edits/upload need a scope change (CLAUDE.md). Spatial results are *candidates*; never advertise exact intersection.
 - Outward steps (push, tag, publish) are done by Martijn; prepare and print the commands only.
 - Never use "OpenStreetMap" as part of the product name. `work/` and `spike/` are parked; ignore. `build/` is generated.
@@ -27,7 +27,7 @@ area.sqlite → store.rs Store (read-only) → mobile_api.rs (C ABI) ─┬→ a
 ## Key Directories
 - `src/`: Rust core (see above). `include/cantino.h`: hand-written C header.
 - `tests/`: Rust integration tests; `tests/fixtures/`: shared fixtures (Rust, Python smoke, Android assets).
-- `android/`: Gradle project. Modules `:cantino` (AAR, `lol.osm.cantino`), `:cafe-app` (reference app), `:inspector-app` (query/inspect example), `:sample-app` (PMTiles demo).
+- `android/`: Gradle project. Modules `:cantino` (AAR, `lol.osm.cantino`), `:cafe-app` (reference app), `:inspector-app` (Cantino Field: query/inspect plus app-owned findings/export), `:sample-app` (PMTiles demo).
 - `swift/`: SwiftPM package `Cantino` (store API, `AreaManager`, models). Apple platforms link `swift/Artifacts/CCantino.xcframework`; Linux links `target/swift/`.
 - `ios/cafe-app`, `ios/inspector-app`: SwiftUI Xcode projects using `../../swift` and MapLibre Native.
 - `tests/parity/`: shared ABI parity corpus (`calls.json`/`expected.json`) run by `tests/parity.rs`, Swift `ParityTests`, Kotlin `ParityTest` (instrumented).
@@ -46,6 +46,7 @@ cargo test --lib <name>                   # single unit test
 scripts/build-android.sh [arm64-v8a x86_64]  # -> target/android/<ABI>/libcantino.so; rerun after ANY Rust change
 cd android && mise exec -- ./gradlew :cantino:testDebugUnitTest :cafe-app:testDebugUnitTest
 ANDROID_SERIAL=<dev> mise exec -- ./gradlew :cantino:connectedDebugAndroidTest :cafe-app:connectedDebugAndroidTest
+cd android && mise exec -- ./gradlew :inspector-app:testDebugUnitTest :inspector-app:assembleDebug
 mise exec -- ./gradlew :cantino:assembleRelease           # AAR
 mise exec -- ./gradlew :cantino:dokkaGeneratePublicationHtml
 scripts/basemap-assets.sh             # required once before building sample/café apps (curl, git, node/npm)
@@ -70,6 +71,7 @@ Gradle never builds Rust. It only packages `target/android` as jniLibs.
 - `src/lib.rs` (Error, re-exports), `src/schema.rs`, `src/import.rs`, `src/store.rs`, `src/mobile_api.rs`, `src/mobile_basemap.rs`, `src/mobile_area.rs`, `src/area_storage.rs`, `src/android.rs`
 - `include/cantino.h`, `scripts/check.sh`, `Cargo.toml` (single source of the version), `rust-toolchain.toml`, `mise.toml` (Temurin JDK 25)
 - `android/cantino/build.gradle.kts`, `android/cantino/consumer-rules.pro`, `android/settings.gradle.kts`
+- `android/inspector-app/src/main/java/lol/osm/cantino/inspector/{Findings.kt,FindingsActivity.kt,ObjectActivity.kt}`; `docs/guide/field-app.md`
 - `swift/Package.swift`, `swift/README.md` (Kotlin deviations), `docs/guide/platform-parity.md`
 - `CHANGELOG.md`, `HANDOFF.md`, `docs/guide/building.md` (authoritative build doc)
 
@@ -84,7 +86,7 @@ Gradle never builds Rust. It only packages `target/android` as jniLibs.
 ## Testing & QA
 - Rust: plain `cargo test` with `tempfile`. Integration tests are in `tests/{core,errors,geometry,profile,basemap}.rs`, each with its own helper returning `(TempDir, Store)` (keep the `TempDir` alive). Unit tests are `#[cfg(test)]` modules in `src/`. Error tests assert `ErrorKind` (bad query/ID/bbox → `InvalidArguments`). Paths use `env!("CARGO_MANIFEST_DIR")`.
 - Fixtures: `snapshot.osm[.pbf]`, `profile.osm[.pbf]`, `cafe-relation.osm`, `basemap/slc-nw-z12-15.pmtiles`. They are shared by Rust, the Python smoke test and Android assets (flattened, so use `"snapshot.osm"` not a path). **Changing a fixture breaks all three**, because they assert the same counts.
-- Android JVM tests (JUnit 4) are in `cantino/src/test`, `cafe-app/src/test`. Instrumented tests (`AndroidJUnit4`, mockwebserver3) are in `src/androidTest`. Run them on an arm64 phone and an x86_64 emulator, after `scripts/build-android.sh`.
+- Android JVM tests (JUnit 4) are in `cantino/src/test`, `cafe-app/src/test` and `inspector-app/src/test`. Instrumented tests (`AndroidJUnit4`, mockwebserver3) are in `src/androidTest`. Run them on an arm64 phone and an x86_64 emulator, after `scripts/build-android.sh`.
   - Single test: `--tests 'lol.osm.cantino.OsmStoreTest.method'` for unit tests, or `-Pandroid.testInstrumentationRunnerArguments.class=lol.osm.cantino.OsmStoreTest` for connected tests.
   - Opt-in (skipped by default): `-Pandroid.testInstrumentationRunnerArguments.live=true` (plus `planetUrl=`), `CityBenchmark` (`pbf=<path>`), and `ProcessDeathTest` (only via `scripts/kill-test-android.sh`).
 - Swift: Swift Testing suites in `swift/Tests/CantinoTests` (incl. `ParityTests`); iOS app unit tests via `scripts/build-ios-*.sh test`.

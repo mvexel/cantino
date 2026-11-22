@@ -1,27 +1,31 @@
 # Inspector walkthrough
 
-Inspector is the example for OSM developers and mappers: it shows what is in
-the OpenStreetMap data under your feet, with no network. Ask "every `amenity`
-without `opening_hours`" or "every `highway=crossing` without `crossing`",
-tap anywhere to see which objects are there, and follow a way to its nodes,
-a relation to its members or a node to the ways that use it. Generic app
-developers start with the [café app](cafe-app.md) instead; Inspector reuses
-its plumbing and does not repeat its lifecycle walkthrough.
+Inspector is the data-exploration example for OSM developers and mappers: it
+shows what is in the OpenStreetMap data under your feet, with no network. Ask
+"every `amenity` without `opening_hours`" or "every `highway=crossing`
+without `crossing`", tap anywhere to see which objects are there, and follow
+ways, relations and nodes through their references.
 
-[`android/inspector-app`](../../android/inspector-app) (plain Android views,
-MapLibre Native 13.6.1) and [`ios/inspector-app`](../../ios/inspector-app)
-(SwiftUI, MapLibre Native 6.31.0, iOS 17+) are the same app, feature for
-feature. It needs no SDK API beyond what the café app uses: `AreaManager`,
-`query`, batch `get`, `wayCoordinates` and `PmtilesInfo`. Proposal and
-decisions: [research note](../research/2026-10-04-second-demo-app-proposal.md).
+The Android module, [`android/inspector-app`](../../android/inspector-app), now
+uses these mechanics for [Cantino Field](field-app.md), the accessibility
+audit MVP with an app-owned findings overlay and reviewed export. The iOS app,
+[`ios/inspector-app`](../../ios/inspector-app), remains the pure Inspector.
+The query, tap, navigation, area and acceptance behavior documented below is
+shared; the Android-only field layer adds no SDK API.
+
+Both use plain platform UI and MapLibre Native (Android 13.6.1, iOS 6.31.0).
+Generic app developers start with the [café app](cafe-app.md). Proposal and
+original Inspector decisions:
+[research note](../research/2026-10-04-second-demo-app-proposal.md).
 
 | Tap: mid-sidewalk | Check: sidewalks without surface | Relation members | About this area |
 | --- | --- | --- | --- |
 | ![tap](../screenshots/2026-10-04-inspector-android-slc-tap-mid-sidewalk.png) | ![query](../screenshots/2026-10-04-inspector-android-slc-check-sidewalks.png) | ![relation](../screenshots/2026-10-04-inspector-ios-slc-object-relation.png) | ![about](../screenshots/2026-10-04-inspector-android-slc-about.png) |
 
-Paths below are relative to `android/inspector-app/src/main/java/lol/osm/cantino/inspector/`;
-each iOS file in `ios/inspector-app/InspectorApp/` has the same name with `.swift`
-(Android activities map to `AppModel`, `MapScreen` and `ObjectView`).
+Paths for the shared Android mechanics are relative to
+`android/inspector-app/src/main/java/lol/osm/cantino/inspector/`; matching iOS
+files live in `ios/inspector-app/InspectorApp/`. Android field-only files are
+listed in the [field app guide](field-app.md#findings-overlay-and-exports).
 
 ## 1. Download the area
 
@@ -56,7 +60,7 @@ café defaults: [café walkthrough](cafe-app.md#area-size-the-radius).
 | Pages of 500, "Load more" | `Queries.page`, `MapScreen.loadPage` | keyset `Query.after` |
 | "Count all" per kind, pages of 10 000, no geometry | `Queries.count` | |
 | Results drawn: nodes as dots, ways as lines broken at missing vertices; relations listed only | `Inspect.shapes` | `wayCoordinates` (one call per way) |
-| Checks menu: amenities without `opening_hours`, crossings without `crossing`, sidewalks without `surface`, kerbs without `kerb`, steps without `handrail`, benches without `backrest` | `Checks.ALL` | |
+| Android **Audit checks**: entrances/facilities without wheelchair data, toilets, crossings, kerbs, steps, elevators and disabled parking; each query remains editable | `Checks.FIELD` | |
 | Errors verbatim: the parser's message, or Cantino's category and message (a lone `!key` without "this view only" is Cantino's `InvalidArgument`; so is a view with more than 100 000 candidates) | `MapScreen.verbatim` | `CantinoException` / `CantinoError` |
 
 ## 3. Tap to inspect
@@ -94,14 +98,16 @@ bounds). Code: `About.kt` / `About.swift`.
 
 ## Tests
 
-The same names on both platforms ([parity](platform-parity.md#inspector)):
+The shared mechanics retain matching Android/iOS tests
+([parity](platform-parity.md#inspector)); Android adds field-overlay tests:
 
 | Android | iOS | Covers |
 | --- | --- | --- |
-| `QueryBarTest` (8, JVM) | `QueryBarTests` | syntax, quoting, errors, round trip, every preset parses |
+| `QueryBarTest` (8, JVM) | `QueryBarTests` | syntax, quoting, errors and round trip; Android also parses every field preset |
 | `GeometryTest` (7, JVM) | `GeometryTests` | segment distance, gaps, runs, hit/near, ordering, labels |
 | `AreaRadiusTest` (5, JVM) | `AreaRadiusTests` | radius → bbox (half the side), choices and default, the `radius` launch option, labels, typed `lat,lon` |
-| `InspectTest` (7, instrumented) | `InspectTests` | on a real store imported from one shared fixture ([`inspector.osm`](../../android/inspector-app/src/androidTest/assets/inspector.osm)): taps on a crossing, mid-sidewalk and inside a park; ways using a node; missing references and broken geometry; check counts and the lone-`!key` error; paging |
+| `InspectTest` (7, instrumented) | `InspectTests` | one shared real-store fixture: taps, references, missing geometry, counts, errors and paging |
+| `FindingsTest` (4, JVM) | — | proposed-tag validation, atomic persistence, provenance, geometry anchor, GeoJSON and CSV escaping |
 
 ## Acceptance, 2026-10-04
 

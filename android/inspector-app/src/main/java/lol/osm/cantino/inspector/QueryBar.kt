@@ -87,6 +87,22 @@ object QueryBar {
 data class Check(val title: String, val query: String, val why: String)
 
 object Checks {
+    /** Accessibility-focused missing-data checks for the Android field workflow. */
+    val FIELD = listOf(
+        Check("Entrances without wheelchair access", "entrance=* !wheelchair", "Record whether the entrance is step-free or inaccessible."),
+        Check("Shops without wheelchair access", "shop=* !wheelchair", "Record whether a customer using a wheelchair can enter."),
+        Check("Public facilities without wheelchair access", "amenity=* !wheelchair", "Record wheelchair access for a public or customer-facing facility."),
+        Check("Toilets without wheelchair access", "amenity=toilets !toilets:wheelchair", "Record whether the toilet itself is accessible."),
+        Check("Crossings without tactile paving", "highway=crossing !tactile_paving", "Record tactile paving at the crossing."),
+        Check("Crossings without crossing type", "highway=crossing !crossing", "Record whether the crossing is marked, signalled or unmarked."),
+        Check("Kerbs without kerb type", "barrier=kerb !kerb", "Record whether the kerb is lowered, flush or raised."),
+        Check("Steps without a ramp", "highway=steps !ramp", "Record a ramp value after inspecting the full flight."),
+        Check("Steps without a handrail", "highway=steps !handrail", "Record handrail availability."),
+        Check("Steps without a step count", "highway=steps !step_count", "Count the steps when that can be done safely."),
+        Check("Elevators without wheelchair access", "highway=elevator !wheelchair", "Record whether the elevator accommodates a wheelchair."),
+        Check("Parking without disabled capacity", "amenity=parking !capacity:disabled", "Record the number of designated disabled spaces."),
+    )
+
     /** The query bar's presets (the "Checks" menu). Each is a plain query the user can edit. */
     val ALL = listOf(
         Check("Amenities without opening_hours", "amenity=* !opening_hours", "Shops, cafés and services whose hours are not mapped."),

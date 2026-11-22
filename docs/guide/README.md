@@ -16,6 +16,7 @@ you need.
 | [C ABI](c-abi.md) | `include/cantino.h` for iOS and other bindings |
 | [Café app walkthrough](cafe-app.md) | The reference app, step by step, mapped to code (Android and iOS) |
 | [Inspector walkthrough](inspector-app.md) | The example for OSM developers and mappers: query bar, checks, tap-to-inspect, object navigator (Android and iOS) |
+| [Android field app](field-app.md) | Offline accessibility audit: checks, app-owned findings, review state and GeoJSON/CSV export |
 | [Android and iOS parity](platform-parity.md) | Which tests run on both platforms, known differences |
 | [SliceOSM in production](sliceosm.md) | What the service is, terms, limits, data lag, self-hosting via `sliceBaseUrl` |
 | [Opening hours](opening-hours.md) | Pairing raw `opening_hours` strings with an evaluator library; time zones |

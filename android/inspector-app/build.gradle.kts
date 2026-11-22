@@ -1,8 +1,7 @@
-// Inspector: the example for OSM developers and mappers. Downloads a full
-// import (OSM data via SliceOSM + PMTiles basemap extract), then shows what is
-// in the data offline: a tag query bar with validator-style checks,
-// tap-anywhere inspection and an object navigator. Structure and plumbing
-// follow the café app (android/cafe-app); see docs/guide/inspector-app.md.
+// Cantino Field: an offline accessibility audit app built on the Inspector's
+// query, tap and object-navigation mechanics. It keeps findings in an
+// app-owned overlay and exports reviewed GeoJSON/CSV; it never edits the
+// Cantino area or uploads to OSM. See docs/guide/field-app.md.
 plugins {
     id("com.android.application")
 }
@@ -15,8 +14,8 @@ android {
         minSdk = 26
         targetSdk = 36
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
-        versionCode = 1
-        versionName = "0.1.0"
+        versionCode = 2
+        versionName = "0.2.0"
         // Same ABIs the framework AAR ships: phones and x86_64 emulators.
         ndk { abiFilters += listOf("arm64-v8a", "x86_64") }
     }
@@ -48,6 +47,7 @@ dependencies {
     implementation("org.maplibre.gl:android-sdk:13.6.1")
 
     testImplementation("junit:junit:4.13.2")
+    testImplementation("org.json:json:20240303")
     androidTestImplementation("androidx.test:runner:1.7.0")
     androidTestImplementation("androidx.test.ext:junit:1.3.0")
     androidTestImplementation("junit:junit:4.13.2")

@@ -51,14 +51,17 @@ download and resume) passed on a physical iPhone 15 Pro Max (iOS 27).
 
 | Android | iOS | Notes |
 | --- | --- | --- |
-| `QueryBarTest` (8, JVM) | `QueryBarTests` | same cases and error texts |
+| `QueryBarTest` (8, JVM) | `QueryBarTests` | shared parser cases and error texts; Android also parses field presets |
 | `GeometryTest` (7, JVM) | `GeometryTests` | same cases |
 | `AreaRadiusTest` (5, JVM) | `AreaRadiusTests` | same cases; iOS also reads `-radius` / `-tap_radius` |
 | `InspectTest` (7, instrumented) | `InspectTests` | same fixture file (`android/inspector-app/src/androidTest/assets/inspector.osm`, read in place on iOS) |
+| `FindingsTest` (4, JVM) | — | Android product pilot only: app-owned findings and reviewed export |
 
 The [Inspector acceptance](inspector-app.md#acceptance-2026-10-04) compares 14
 query counts and four taps in Salt Lake City and Zürich; both platforms
-imported byte-identical databases and returned identical results.
+imported byte-identical databases and returned identical results. The Android
+[field workflow](field-app.md) is app-owned product validation, not an SDK
+parity requirement.
 
 ## Running both
 
@@ -86,3 +89,6 @@ The ones that change behaviour:
   live in memory, so after a restart a finished run reads as idle with the
   published area.
 - **Foreground mode** exists on Android only.
+- **Field findings** currently exist only in the Android Inspector module.
+  They are app code over the same immutable SDK contract; no Kotlin-only SDK
+  API was added.

@@ -27,19 +27,17 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 /**
- * Entry point and area flow, trimmed from android/cafe-app MainActivity.kt
- * (the café app demonstrates the download lifecycle in detail; Inspector
- * shows one progress line):
+ * Entry point and area flow, trimmed from android/cafe-app MainActivity.kt:
  *
  *   location (or debug override, or typed "lat,lon")
  *     → offer, with a radius choice ([AreaRadius]: 1, 2.5 (default), 5 or 10 km)
  *     → AreaManager.download(…, BasemapSource.Extract(latest Protomaps build, z15))
- *       a full import (no import profile: Inspector exists to show everything)
- *     → Ready → map ([MapScreen]).
+ *       a full import: field checks need arbitrary source tags
+ *     → Ready → offline map, inspection, findings and reviewed export.
  *
- * A published area goes straight to the map, fully offline. "Refresh" and
- * "Download another area" on the map re-run the download (full replace;
- * one area per app).
+ * A published area goes straight to the map, fully offline. Findings are in
+ * the app's separate file and survive area refreshes. "Refresh" and
+ * "Download another area" replace the one immutable base snapshot.
  */
 class MainActivity : Activity() {
     private val scope = MainScope()
@@ -90,7 +88,7 @@ class MainActivity : Activity() {
         if (DeviceLocation.hasPermission(this)) {
             locate()
         } else {
-            showMessage("Inspector", "To download an offline area around you, the app needs your location once.")
+            showMessage("Cantino Field", "To download an offline audit area around you, the app needs your location once.")
             requestPermissions(DeviceLocation.PERMISSIONS, REQUEST_LOCATION)
         }
     }
@@ -145,7 +143,7 @@ class MainActivity : Activity() {
         val body = text("")
         fun describe() {
             body.text = "About ${AreaRadius.sideLabel(radiusKm)} around $center (radius ${AreaRadius.label(radiusKm)}): " +
-                "every OpenStreetMap object (a full import) and a basemap, so you can inspect the data without a connection."
+                "every OpenStreetMap object and a basemap, for a fully offline accessibility field audit."
         }
         describe()
         setScreen(
@@ -153,7 +151,7 @@ class MainActivity : Activity() {
                 addView(
                     vertical(
                         children = arrayOf(
-                            text("Download an offline area?", 22f, bold = true),
+                            text("Download an offline audit area?", 22f, bold = true),
                             text("Area centre ($center, ${source.label}).", 13f, color = Colors.MUTED),
                             text("Radius", bold = true),
                             radiusChoice { describe() },
@@ -207,7 +205,7 @@ class MainActivity : Activity() {
             areas.download(
                 InspectorStore.AREA_ID,
                 area,
-                name = "inspector %.4f,%.4f".format(java.util.Locale.ROOT, center.lat, center.lon),
+                name = "field audit %.4f,%.4f".format(java.util.Locale.ROOT, center.lat, center.lon),
                 basemap = BasemapSource.Extract(planet, maxZoom = BASEMAP_MAX_ZOOM),
             )
         }

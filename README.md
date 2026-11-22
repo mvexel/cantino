@@ -42,8 +42,10 @@ mode: offline basemap, cafés from a tag + bbox query, and the raw object.*
 
 The best fit is a domain-specific app: a field reference or audit tool, an OSM
 inspector, or a specialized POI guide whose workflow depends on source tags
-that a generic map does not expose. The
-[Inspector example](docs/guide/inspector-app.md) demonstrates the underlying
+that a generic map does not expose. [Cantino Field](docs/guide/field-app.md)
+is the first Android product-validation app: an offline accessibility audit
+with app-owned findings and reviewed GeoJSON/CSV handoff. The
+[Inspector walkthrough](docs/guide/inspector-app.md) covers its underlying
 query and object-navigation mechanics.
 
 ## Capabilities
@@ -54,7 +56,7 @@ query and object-navigation mechanics.
 | Area acquisition (download, import, refresh, crash-safe publication) | Available, Android and iOS |
 | Basemap acquisition (PMTiles file or on-device extract), with an area | Available, Android and iOS |
 | Basemap-only acquisition (a map without the OSM data) | Available, Android and iOS (`downloadBasemap`) |
-| App-owned field findings or edit overlay | Build in the app; Cantino supplies immutable base objects and versions |
+| App-owned field findings overlay | Available in the Android field app; intentionally app code, not an SDK API |
 | Upload to the OSM API | Not part of Cantino; hand reviewed findings to an established editor or task queue |
 
 The capabilities ship together as one library per platform; they are separate
@@ -112,10 +114,12 @@ download, offline relaunch and interrupted-download recovery flow. The
 intentional platform differences are recorded in
 [Android and iOS parity](docs/guide/platform-parity.md).
 
-New capabilities remain parity-first: they land on Android and iOS with tests
-on both. Cantino still has no external consumers, so API, ABI and file formats
-may change without compatibility layers; adopting it today means budgeting
-for integration changes and re-importing development data.
+SDK capabilities remain parity-first: they land on Android and iOS with tests
+on both. Product-validation apps may iterate on one platform without changing
+the shared SDK contract; the Android field app is the current example.
+Cantino still has no external consumers, so API, ABI and file formats may
+change without compatibility layers; adopting it today means budgeting for
+integration changes and re-importing development data.
 
 ## Install
 

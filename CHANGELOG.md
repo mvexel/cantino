@@ -4,6 +4,12 @@ Cantino is under heavy development. API, ABI and file
 formats may change without compatibility layers. See the [guide](docs/guide/README.md).
 
 ## Unreleased
+- **Cantino Field for Android** (`android/inspector-app`): the Inspector now
+  delivers the accessibility-audit MVP. It adds 12 missing-data checks, an
+  app-owned findings overlay with base tags/version, snapshot and observation
+  times, notes, evidence and draft/reviewed state, plus reviewed-only GeoJSON
+  and CSV export through Android's document picker. It never mutates the area
+  or uploads to OSM. [Workflow](docs/guide/field-app.md).
 
 - Documentation: position Cantino as the raw OSM snapshot layer for offline,
   domain-specific mobile apps; record the completed 0.4.0 parity bar and the
