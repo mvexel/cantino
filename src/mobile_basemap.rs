@@ -26,8 +26,9 @@
 //! handing each response over (as bytes, or as a file it streamed the
 //! response into, which keeps large tile ranges out of the JVM heap).
 //!
-//! Errors and panics become status -1 plus an owned error string, as in
-//! `mobile_api`. Feeding a wrong id or a response of the wrong length is
+//! Errors and panics become a negative status (`-kind.code()`, see
+//! `ErrorKind`) plus an owned error string, as in `mobile_api`. Feeding a
+//! wrong id or a response of the wrong length is
 //! rejected without changing state (the adapter may re-fetch); any other
 //! plan error is fatal for that plan (free it and start over).
 use crate::basemap::format::{HEADER_LEN, Header};
