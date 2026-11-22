@@ -5,6 +5,11 @@ formats may change without compatibility layers. See the [guide](docs/guide/READ
 
 ## Unreleased
 
+- Documentation: position Cantino as the raw OSM snapshot layer for offline,
+  domain-specific mobile apps; record the completed 0.4.0 parity bar and the
+  external-validation plan; document an app-owned field-findings overlay and
+  review-first handoff to MapRoulette, iD or JOSM.
+
 - Example apps (café and Inspector, Android and iOS): the download area is a
   square centred on the device location whose **radius** (half the side;
   1 / 2.5 / 5 / 10 km) the user picks on the offer screen, which is now a

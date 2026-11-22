@@ -1,11 +1,14 @@
 # Cantino handoff
 
-Updated 2026-10-04. Scope and next steps are in [CLAUDE.md](CLAUDE.md). There are no external consumers. API, ABI and file formats
-may change freely; preserve runtime recovery and the working examples.
-Simplification is complete in 0.3.0; iOS reached parity on `ios/main`
-(2026-10-04, see [parity](docs/guide/platform-parity.md)). Mission, module
-direction and the next feature (basemap-only acquisition) are in CLAUDE.md
-and [the modular-SDK assessment](docs/research/2026-10-04-modular-sdk-assessment.md).
+Updated 2026-11-22. Scope and product position are in
+[CLAUDE.md](CLAUDE.md) and the [roadmap](docs/guide/roadmap.md). There are no
+external consumers. API, ABI and file formats may change freely; preserve
+runtime recovery, parity and the working examples. Version 0.4.0 passed the
+Android/iOS parity bar and lifted the 2026-10-03 feature freeze
+([evidence](docs/guide/platform-parity.md)). Basemap-only acquisition now
+ships on both platforms. The next phase is external validation of the
+raw-snapshot SDK with a domain-specific offline workflow, not speculative
+core features.
 
 ## Architecture
 

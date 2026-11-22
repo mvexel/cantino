@@ -1,24 +1,26 @@
 # Cantino
 
-Cantino — an offline OpenStreetMap SDK. (In 1502 Alberto Cantino smuggled a
-copy of Portugal's secret master map out of Lisbon: a copy of the master map
-you carry away.) "OpenStreetMap" is only used descriptively, never as part of
+Cantino — raw OpenStreetMap snapshots for offline, domain-specific mobile
+apps. In 1502 Alberto Cantino smuggled a copy of Portugal's secret master map
+out of Lisbon: a copy of the master map you carry away. "OpenStreetMap" is
+only used descriptively, never as part of
 the product name (OSMF trademark policy). Formerly `osm-framework`.
 
-Headless native SDK that gives Android and iOS apps offline access to raw
-OpenStreetMap data for an app-defined area. Shared Rust core over a
-SQLite store (replacing OSMExpress); thin Kotlin and Swift adapters.
-Background, evidence and build instructions: `HANDOFF.md`.
+Headless native data SDK that gives Android and iOS apps offline access to raw
+OpenStreetMap objects for one bounded area. A shared Rust core stores immutable
+snapshots in SQLite; thin Kotlin and Swift adapters provide managed acquisition
+and queries. An optional PMTiles companion supplies a basemap for a renderer
+such as MapLibre. Background, evidence and build instructions: `HANDOFF.md`.
 
-Mission (Martijn, 2026-10-04): composable, supported capabilities for apps
-that work with OSM data offline: map display, feature querying, and apps
-that edit. The current implementation is snapshots, queries, area
-acquisition and optional basemaps, shipped as one artifact per platform.
-Modules are build-time options inside this repo (Cargo features, Gradle
-modules, SwiftPM products), never dynamic plugins, and are split out only
-on a measured need. A module is added only when it removes substantial
-repeated work across apps and has a consumer. Rationale and phases:
-`docs/research/2026-10-04-modular-sdk-assessment.md`.
+Mission (Martijn, 2026-11-22): be the semantic data layer for offline,
+domain-specific mobile apps—not a complete map, navigation engine or editor.
+The current implementation is snapshots, queries, area acquisition and
+optional basemaps, shipped as one artifact per platform. App-owned field
+findings can be handed to established OSM editors or a review queue; editing,
+OAuth and upload are not Cantino capabilities. A capability is added only
+when it removes substantial repeated work for a demonstrated consumer and
+lands on both platforms. Product position and validation plan:
+`docs/guide/roadmap.md`.
 
 ## Status
 

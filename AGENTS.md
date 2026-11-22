@@ -1,7 +1,7 @@
 # Repository Guidelines
 
 ## Project Overview
-Cantino is an offline OpenStreetMap SDK: a Rust core over a read-only SQLite store, with thin Kotlin (Android AAR) and Swift (iOS xcframework + SwiftPM) adapters at parity (0.4.0). It imports a SliceOSM PBF/OSM XML extract into a SQLite area file, then offers lookup by ID, tag queries, bbox candidate queries and dependency reporting. It also does PMTiles basemap extraction (sans-IO).
+Cantino is the raw OSM data layer for offline, domain-specific mobile apps: a Rust core over a read-only SQLite snapshot store, with thin Kotlin (Android AAR) and Swift (iOS xcframework + SwiftPM) adapters at parity (0.4.0). It imports a SliceOSM PBF/OSM XML extract, then offers lookup by ID, tag queries, bbox candidate queries and dependency reporting. Optional PMTiles acquisition supplies a basemap beside, not inside, the semantic store.
 
 - **Parity rule** (freeze lifted in 0.4.0): a feature lands on both platforms, with tests on both (`docs/guide/platform-parity.md`). No compatibility shims; API, ABI and file formats may change freely.
 - **Out of scope**: routing, overlapping areas, `.osc` refresh, vector tile generation, café policy in core. Edits/upload need a scope change (CLAUDE.md). Spatial results are *candidates*; never advertise exact intersection.

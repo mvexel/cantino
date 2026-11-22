@@ -63,9 +63,10 @@ does exactly that.
 
 ## Capabilities
 
-Cantino aims to provide composable capabilities for apps that work with OSM
-data offline. Today they ship together, one library per platform; each is a
-separate layer in the code:
+Cantino provides composable raw-data capabilities for offline,
+domain-specific mobile apps. It is the semantic data layer beside a renderer,
+not a complete map or navigation stack. Today the capabilities ship together,
+one library per platform; each is a separate layer in the code:
 
 | Capability | Core (Rust) | C ABI | Android / iOS |
 | --- | --- | --- | --- |
@@ -74,16 +75,18 @@ separate layer in the code:
 | Basemap acquisition | `basemap` | `cantino_basemap_*` | `BasemapSource`, `PmtilesInfo` |
 | Rendering | — | — | your app, with MapLibre Native and the basemap |
 
-Acquisition and basemap code does not depend on the store, so these layers
-can later become separate build options without a rewrite. Editing is
-outside the current implementation: an editor keeps its own edit layer and
-uses a snapshot as base data ([Editing apps](editing-apps.md)).
+Acquisition and basemap code does not depend on the store, preserving the
+implementation seams without multiplying public artifacts. Field findings
+and edits remain app-owned: use the immutable snapshot as base data and hand
+reviewed changes to an established OSM editor or task queue
+([Field findings and editing apps](editing-apps.md)).
 
 ## What Cantino is not
 
 - Not a renderer: draw the basemap with MapLibre Native and your own data on
   top (GeoJSON sources, for example).
-- Not an editor (yet): the current implementation is read-only.
-- Not exact geometry: bbox queries return **candidates** (see [Querying](querying.md)).
-- Not an interpreter of tags: `opening_hours`, `outdoor_seating` and the like
-  are raw strings; their meaning is your app's business.
+- Not an editor, synchronization layer or uploader: the core stays read-only.
+- Not exact geometry: bbox queries return **candidates** (see
+  [Querying](querying.md)).
+- Not an interpreter of tags: `opening_hours`, `wheelchair` and the like are
+  raw strings; their meaning is your app's business.

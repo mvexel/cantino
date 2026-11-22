@@ -75,7 +75,7 @@ Cantino records the server's own timestamp as `AreaMetadata.snapshotTimestamp`
 (the `Timestamp` of the job status). Show that as the data's age, not the
 download time. The data then ages until the app refreshes (full replace; no
 incremental updates in 0.x). See [Concepts](concepts.md#snapshot) and
-[Editing apps](editing-apps.md).
+[Field findings and editing apps](editing-apps.md).
 
 ## Self-hosting
 

@@ -1,8 +1,9 @@
 # Cantino guide
 
-Cantino for Android and iOS. Start with the [quickstart](../../README.md#quickstart)
-(Android) or the [Swift adapter](../../swift/README.md) (iOS), then read the
-page you need.
+Cantino is the raw OSM data layer for offline, domain-specific Android and iOS
+apps. Start with the [quickstart](../../README.md#quickstart) or one of the
+reference apps, then read the page for the capability or production concern
+you need.
 
 | Page | Read it for |
 | --- | --- |
@@ -18,8 +19,8 @@ page you need.
 | [Android and iOS parity](platform-parity.md) | Which tests run on both platforms, known differences |
 | [SliceOSM in production](sliceosm.md) | What the service is, terms, limits, data lag, self-hosting via `sliceBaseUrl` |
 | [Opening hours](opening-hours.md) | Pairing raw `opening_hours` strings with an evaluator library; time zones |
-| [Editing apps](editing-apps.md) | What Cantino gives an editor today: versions, snapshot freshness, detecting stale data |
-| [Maintenance and roadmap](roadmap.md) | Maintainer, versioning, 0.2, what is next, path to 1.0 |
+| [Field findings and editing apps](editing-apps.md) | App-owned observations, reviewed handoff to OSM, versions and stale-data checks |
+| [Maintenance and roadmap](roadmap.md) | Positioning, release bar, first external validation and path to stability |
 
 Guide (HTML): <https://mvexel.github.io/cantino/guide/>.
 API reference: <https://mvexel.github.io/cantino/api/>

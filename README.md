@@ -1,23 +1,23 @@
 # Cantino
 
-**Cantino — an offline OpenStreetMap data SDK for Android and iOS apps.**
+**Cantino — raw OpenStreetMap snapshots for offline, domain-specific Android
+and iOS apps.**
 
-Cantino aims to give mobile developers composable, supported building blocks
-for apps that work with OpenStreetMap data offline: showing an offline map,
-finding and inspecting features, and, eventually, apps that edit. Today it
-provides the read side.
+Cantino gives a mobile app an immutable snapshot of raw OpenStreetMap data for
+one bounded area. Use it when the app needs arbitrary tags, ordered way nodes,
+relation members or object metadata offline—not just the rendering-oriented
+features present in vector tiles, and not a network query to a remote service.
 
-Cantino gives your app an immutable snapshot of raw OpenStreetMap data for
-an area you choose. Download it once online, then look up objects by ID and
-query their tags and bounding boxes without a network connection. A shared
-Rust core stores the snapshot in a local SQLite file.
+The shared Rust core imports the snapshot into a local SQLite file and answers
+ID, tag and bounding-box queries. The managed download flow fetches an extract
+from [SliceOSM](https://slice.openstreetmap.us/), imports it, and publishes it
+with crash recovery; apps may instead import a local OSM PBF or XML file. An
+optional, separate [PMTiles](https://docs.protomaps.com/pmtiles/) basemap can
+be rendered with [MapLibre Native](https://maplibre.org/).
 
-The managed download flow fetches an extract from
-[SliceOSM](https://slice.openstreetmap.us/), imports it, and publishes it with
-crash recovery. You can also import a local OSM PBF or XML snapshot. An
-optional, separate [PMTiles](https://docs.protomaps.com/pmtiles/) basemap
-covers the same bounding box and can be rendered with
-[MapLibre Native](https://maplibre.org/).
+Cantino is a data component, not a general offline map or navigation engine.
+The app owns its workflow, tag interpretation, rendering and any findings or
+edits.
 
 *In 1502 Alberto Cantino smuggled a copy of Portugal's secret master map out
 of Lisbon: a copy of the master map you carry away.*
@@ -30,6 +30,22 @@ of Lisbon: a copy of the master map you carry away.*
 *The café reference app ([`android/cafe-app`](android/cafe-app)) in airplane
 mode: offline basemap, cafés from a tag + bbox query, and the raw object.*
 
+## Where it fits
+
+| Need | Use |
+| --- | --- |
+| Render an offline map | MapLibre Native with PMTiles or another tile source |
+| Query raw OSM objects and uncommon tags offline in a bounded area | Cantino |
+| Build a complete navigation app | A routing, geocoding and map engine such as OsmAnd or CoMaps |
+| Run large or live semantic queries | Overpass or an app-specific backend |
+| Edit OSM directly | An established editor such as Every Door, StreetComplete, Vespucci, iD or JOSM |
+
+The best fit is a domain-specific app: a field reference or audit tool, an OSM
+inspector, or a specialized POI guide whose workflow depends on source tags
+that a generic map does not expose. The
+[Inspector example](docs/guide/inspector-app.md) demonstrates the underlying
+query and object-navigation mechanics.
+
 ## Capabilities
 
 | Capability | Status |
@@ -38,20 +54,15 @@ mode: offline basemap, cafés from a tag + bbox query, and the raw object.*
 | Area acquisition (download, import, refresh, crash-safe publication) | Available, Android and iOS |
 | Basemap acquisition (PMTiles file or on-device extract), with an area | Available, Android and iOS |
 | Basemap-only acquisition (a map without the OSM data) | Available, Android and iOS (`downloadBasemap`) |
-| Editing (local edit layer over a snapshot) | Outside the current implementation; see [Editing apps](docs/guide/editing-apps.md) |
-| Upload to the OSM API | Not planned |
+| App-owned field findings or edit overlay | Build in the app; Cantino supplies immutable base objects and versions |
+| Upload to the OSM API | Not part of Cantino; hand reviewed findings to an established editor or task queue |
 
-The capabilities ship together as one library per platform; they are
-separate layers in the code (see [Concepts](docs/guide/concepts.md#capabilities))
-and may become separate build options when an app needs that.
+The capabilities ship together as one library per platform; they are separate
+layers in the code (see
+[Concepts](docs/guide/concepts.md#capabilities)). Separate artifacts would add
+four-platform surface without helping a current consumer.
 
-## What Cantino is
-
-Cantino is a **local raw-data component** for apps that need to inspect or
-query OSM objects offline in a bounded area: a field reference app, a POI
-explorer, or a raw-data feature alongside an existing map engine. Your app
-owns the user interface, interpretation of tags, and any editing or
-navigation behavior.
+## What Cantino provides
 
 - **A read-only snapshot store:** raw tags, ordered way nodes, relation
   members and roles, and object metadata. Untagged-node metadata is optional.
@@ -68,49 +79,43 @@ navigation behavior.
   this part entirely. The raw data and basemap have independent sources and
   may represent different OSM snapshot times.
 
-## What Cantino is not
+## What Cantino does not provide
 
-These describe the current implementation, not a list of promised future
-features.
+These are product boundaries, not a backlog.
 
-- **An OSM editing or synchronization framework (outside the current
-  implementation).** There is no mutable object graph, pending-edits layer,
-  undo, upload, or conflict resolution. An editor owns those systems and
-  uses the snapshot as base data; see
-  [Editing apps](docs/guide/editing-apps.md).
+- **OSM editing, synchronization or upload.** There is no mutable object
+  graph, pending-edits layer, OAuth, upload or conflict resolution. A field
+  app keeps findings in its own database and can hand reviewed changes to
+  MapRoulette, iD or JOSM; see
+  [Field findings and editing apps](docs/guide/editing-apps.md).
 - **A complete offline map or navigation engine.** Cantino does not render
-  maps, generate vector tiles, route, geocode, or provide address search.
-  It is not a replacement for the specialized engines in apps such as
-  OsmAnd or CoMaps.
+  maps, generate vector tiles, route, geocode or provide address search.
 - **A complete OSM graph or exact geometry engine.** Extracts can omit nodes
   and relation members beyond their boundary. Bounding-box queries return
   candidates, not exact intersections; missing geometry can also cause
-  objects to be missed. Reference reporting does not establish that all
-  parent ways or relations are present. Multipolygon assembly is outside
-  the scope.
+  objects to be missed. Multipolygon assembly is outside the scope.
 - **A country-scale or continuously updated data platform.** The supported
   use case is one bounded area per app. Overlapping-area reconciliation,
-  incremental updates, and country-scale operation are outside the scope.
+  incremental updates and country-scale operation are outside the scope.
 - **A hosted-service guarantee.** Initial downloads and refreshes need a
   network connection. Production apps must plan their extract and basemap
-  hosting, capacity, and privacy requirements; see
+  hosting, capacity and privacy requirements; see
   [SliceOSM in production](docs/guide/sliceosm.md) and
   [Basemap hosting](docs/guide/basemaps.md#hosting-demo-vs-production).
 
 ## Platform and release status
 
-Android provides the complete reference flow through WorkManager and the
-café app (`arm64-v8a`, `x86_64`; minSdk 26). On iOS (15+), the Swift package
-provides the same store API and area downloads (URLSession, in the app's
-process; an interrupted download resumes at the next launch), tested on the
-simulator and against the same cross-platform test corpus as Android. The
-iOS café demo is being built. See the [Swift adapter](swift/README.md) and
-[roadmap](docs/guide/roadmap.md). New features are paused until iOS and
-Android are at parity and the iOS café demo works.
+Version 0.4.0 established Android/iOS parity: the adapters wrap the same core,
+run the same behavioral corpus, and both café apps passed the first-run
+download, offline relaunch and interrupted-download recovery flow. The
+2026-10-03 feature freeze is therefore lifted. Current verification and the
+intentional platform differences are recorded in
+[Android and iOS parity](docs/guide/platform-parity.md).
 
-Cantino is in development and has no external consumers yet. API, ABI, and
-file formats may change without backward compatibility; adopting it today
-means budgeting for integration changes and re-importing development data.
+New capabilities remain parity-first: they land on Android and iOS with tests
+on both. Cantino still has no external consumers, so API, ABI and file formats
+may change without compatibility layers; adopting it today means budgeting
+for integration changes and re-importing development data.
 
 ## Install
 
@@ -274,11 +279,11 @@ store on its own thread, paging through large results, and the privacy note
 ## Documentation
 
 - **[Guide](docs/guide/README.md)**: concepts, downloading areas, basemaps,
-  querying, performance, building from source, the C ABI, and a walkthrough
-  of the café app. Also on the site: <https://mvexel.github.io/cantino/guide/>.
-  Production topics: [SliceOSM in production](docs/guide/sliceosm.md),
+  querying, performance, building from source, the C ABI, and walkthroughs of
+  the café and Inspector apps. Production topics:
+  [SliceOSM in production](docs/guide/sliceosm.md),
   [opening hours](docs/guide/opening-hours.md),
-  [editing apps](docs/guide/editing-apps.md) and the
+  [field findings and editing apps](docs/guide/editing-apps.md), and the
   [roadmap and maintenance](docs/guide/roadmap.md).
 - **[API reference](https://mvexel.github.io/cantino/api/)** (Dokka; generate
   locally with `cd android && ./gradlew :cantino:dokkaGeneratePublicationHtml`).

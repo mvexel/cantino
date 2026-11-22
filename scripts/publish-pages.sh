@@ -22,7 +22,7 @@
 #   --skip-native    reuse target/android/*/libcantino.so instead of rebuilding
 #                    them with scripts/build-android.sh
 #   --guide-only     only render the guide into <out>/guide (needs just pandoc);
-#                    no native build, Gradle or landing page
+#                    with --worktree, sync only guide and screenshots there
 #
 # Needs: the Android toolchain in docs/guide/building.md (Rust 1.99 + Android targets,
 # NDK r29, Android SDK, mise for the JDK) and pandoc 3 (renders the guide).
@@ -75,6 +75,15 @@ if [ "$guide_only" = 1 ]; then
     rm -rf "$out/guide" "$out/screenshots"
     render_guide
     echo "Guide written to $out/guide"
+    if [ -n "$worktree" ]; then
+        [ -e "$worktree/.git" ] || {
+            echo "--guide-only requires an existing gh-pages worktree: $worktree" >&2
+            exit 2
+        }
+        rm -rf "$worktree/guide" "$worktree/screenshots"
+        cp -a "$out/guide" "$out/screenshots" "$worktree/"
+        echo "Guide synced to gh-pages worktree (nothing committed): $worktree"
+    fi
     exit 0
 fi
 command -v pandoc >/dev/null 2>&1 || { echo "pandoc is required to render the guide" >&2; exit 2; }
@@ -122,7 +131,7 @@ cat > "$out/index.html" <<EOF
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Cantino</title>
-<meta name="description" content="Cantino, an offline OpenStreetMap SDK for Android.">
+<meta name="description" content="Cantino provides raw OpenStreetMap snapshots for offline, domain-specific Android and iOS apps.">
 <style>
   :root { color-scheme: light dark; --fg: #1d1d1f; --muted: #5f6368; --bg: #fbfaf7; --code: #efede8; --link: #0b57d0; }
   @media (prefers-color-scheme: dark) { :root { --fg: #e8e6e3; --muted: #a8a49c; --bg: #161616; --code: #262624; --link: #8ab4f8; } }
@@ -139,15 +148,17 @@ cat > "$out/index.html" <<EOF
 <body>
 <main>
 <h1>Cantino</h1>
-<p class="tag">An offline OpenStreetMap SDK for Android. Version $version.</p>
-<p>Download OpenStreetMap data and an optional PMTiles basemap for an area your app
-chooses, keep them on the device, and query them with no network. In 1502 Alberto
-Cantino smuggled a copy of Portugal's secret master map out of Lisbon; this is a copy
-of the master map you carry away.</p>
+<p class="tag">Raw OSM snapshots for offline, domain-specific Android and iOS apps. Version $version.</p>
+<p>Download an immutable snapshot of raw OpenStreetMap objects for one bounded
+area, query it without a network, and optionally pair it with a PMTiles
+basemap. Cantino is the semantic data layer beside your renderer, not a
+general map, navigation engine or editor.</p>
 <ul>
   <li><a href="https://github.com/mvexel/cantino">Source, README and quickstart</a></li>
   <li><a href="guide/">Guide</a>
-      (<a href="guide/sliceosm.html">SliceOSM</a>, <a href="guide/roadmap.html">roadmap</a>)</li>
+      (<a href="guide/editing-apps.html">field findings</a>,
+       <a href="guide/sliceosm.html">SliceOSM</a>,
+       <a href="guide/roadmap.html">roadmap</a>)</li>
   <li><a href="api/">API reference</a></li>
   <li><a href="maven/lol/osm/cantino/">Maven repository</a>
       (<a href="https://github.com/mvexel/cantino/blob/main/CHANGELOG.md">changelog</a>)</li>

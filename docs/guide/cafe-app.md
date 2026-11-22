@@ -73,10 +73,9 @@ Earlier, with a full import: Ready in 27.4 s, 75.6 MB database, 6.5 MB
 basemap on a Pixel 8
 ([Performance](performance.md#area-download-1010-km)).
 
-Known limit: `AreaMetadata.report.profile` currently reads back as null for a
-published area on both platforms (the core's sidecar parser drops it), so the
-map's status line cannot show the profile yet; it shows it ("points of
-interest only") once the report carries it.
+The recorded import profile survives publication and appears in
+`AreaMetadata.report.profile`, so the map can describe the area as
+"points of interest only" after a relaunch.
 
 ## 2. Restart in airplane mode
 
